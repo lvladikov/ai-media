@@ -15,8 +15,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
-    - 💻 **CPU### Performance Tracking
-To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `--npt`). 
+    - 💻 **CPU Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `--npt`). 
     - [See details](#performance-tracking).
 
 ## Prerequisites
