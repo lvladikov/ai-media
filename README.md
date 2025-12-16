@@ -7,7 +7,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🎨 **Image Generation** - Text-to-Image using models like generic Flux/SDXL (via `diffusers`)
 - 🎬 **Video Generation** - Supports **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic Muxing with FFmpeg).
 - 🎵 **Audio Generation** - Supports **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
-- 🔍 **AI Upscaling** - Upscale images and videos using Stable Diffusion models (x2 Latent, x4 Standard). Supports custom factors and chained workflows.
+- 📈 **AI Upscaling** - Upscale images and videos using Stable Diffusion models (x2 Latent, x4 Standard). Supports custom factors and chained workflows.
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
