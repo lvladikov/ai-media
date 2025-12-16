@@ -29,7 +29,14 @@ import os
 import re
 import sys
 import signal
+import shutil
+import time
+import psutil  # For resource checking
 from pathlib import Path
+from datetime import datetime
+
+# Suppress warnings
+warnings.filterwarnings("ignore")
 
 # Suppress verbose logging from transformers/diffusers
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -52,6 +59,8 @@ IMAGE_MODELS = {
     "flux-dev": "black-forest-labs/FLUX.1-dev",        # Higher quality, slower
     "sdxl": "stabilityai/sdxl-turbo",                  # Fast, good quality (DEFAULT)
     "sd-1.5": "runwayml/stable-diffusion-v1-5",        # Classic, lightweight
+    "upscaler": "stabilityai/stable-diffusion-x4-upscaler", # 4x Upscaling
+    "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",     # 2x Latent Upscaling
     "default": "stabilityai/sdxl-turbo"
 }
 
@@ -73,13 +82,23 @@ VIDEO_MODELS = {
 
 # Resolution Presets
 RESOLUTIONS = {
+    "480p": (854, 480),
+    "576p": (1024, 576),
     "720p": (1280, 720),
+    "900p": (1600, 900),
     "1080p": (1920, 1080),
+    "1440p": (2560, 1440),
     "2k": (2048, 1080), # approx
+    "3k": (3072, 1728),
     "2160p": (3840, 2160),
     "4k": (3840, 2160),
+    "5k": (5120, 2880),
+    "6k": (6144, 3456),
+    "7k": (7168, 4032),
     "4320p": (7680, 4320),
     "8k": (7680, 4320),
+    "9k": (9216, 5184),
+    "10k": (10240, 5760),
     "hd": (1280, 720),
     "fhd": (1920, 1080),
     "uhd": (3840, 2160),
@@ -106,6 +125,8 @@ MODEL_REQUIREMENTS = {
     "cerspense/zeroscope_v2_576w": {"vram": 8, "ram": 12, "max_resolution": (576, 320)},
     "THUDM/CogVideoX-5b": {"vram": 24, "ram": 32, "max_resolution": (1920, 1080)},
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
+    "stabilityai/stable-diffusion-x4-upscaler": {"vram": 8, "ram": 16, "max_resolution": (4096, 4096)},
+    "stabilityai/sd-x2-latent-upscaler": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
 }
 
 
@@ -116,7 +137,6 @@ def get_system_resources():
     vram_total = 0
     
     try:
-        import psutil
         mem = psutil.virtual_memory()
         ram_available = mem.available / (1024**3)  # GB
     except ImportError:
@@ -131,7 +151,6 @@ def get_system_resources():
         elif torch.backends.mps.is_available():
             # MPS uses unified memory - estimate as 75% of RAM for GPU tasks
             try:
-                import psutil
                 vram_available = psutil.virtual_memory().available / (1024**3) * 0.75
             except:
                 vram_available = 8  # Conservative default
@@ -180,6 +199,18 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     for w in warnings:
         print(f"   • {w}")
     print(f"\n   Model: {model_id}")
+    
+    # Check for VAE Tiling condition (Resolution > 1536x1536)
+    if width and height:
+        total_pixels = width * height
+        if total_pixels > 3072 * 3072: # ~9.4MP
+             print(f"\n   ⚠️  CRITICAL WARNING: Resolution {width}x{height} is extremely high.")
+             print(f"      Standard generation will likely fail with 'Invalid buffer size'.")
+             print(f"      Recommended: Generate at 2K/4K and use an external upscaler.")
+             print(f"      💡 Or try: -s 720p --upscale -uf 4x (to get 5K)\n")
+        elif total_pixels > 1536 * 1536:
+            print(f"\n   ℹ️  Note: VAE Tiling will be enabled to reduce memory usage.\n")
+        
     print(f"   This job may cause slowdowns, swapping, or crashes.\n")
     
     if force:
@@ -231,9 +262,10 @@ def parse_size(value):
     """
     Parse size string or object into (width, height).
     Accepts:
-      - "720p", "4k", "HD"
+      - "480p", "720p", "1080p", "1440p"
+      - "1k", "2k", "3k", "4k", "5k", ... "10k"
       - "1280x720"
-      - "{h: 720, w: 1280}", "{width: 1920, height: 1080}"
+      - "w: 1280, h: 720" (Braces {} are optional)
     """
     if not value:
         return RESOLUTIONS[DEFAULT_IMAGE_SIZE]
@@ -485,6 +517,18 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             # Fix black images on MPS: VAE produces NaN in float16, use float32
             if hasattr(pipe, 'vae'):
                 pipe.vae = pipe.vae.to(torch.float32)
+
+        # High-Resolution Memory Optimization (VAE Tiling)
+        # 4K images (3840x2160 = ~8.3MP) cause massive VRAM spikes during decoding without tiling
+        # Trigger tiling if pixels > 1536x1536 (~2.3MP)
+        total_pixels = width * height
+        if total_pixels > 1536 * 1536:
+            print(f"ℹ️  High resolution detected ({width}x{height}).")
+            print(f"   ✓ Enabling VAE Tiling (Memory Optimization)\n")
+            if hasattr(pipe, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
+                pipe.vae.enable_tiling()
+            else:
+                pipe.enable_vae_tiling()
         
         print(f"🎨 Generating {width}x{height} image... (This may take a moment)")
         # Suppress RuntimeWarning from diffusers image_processor during NSFW filtering
@@ -521,6 +565,53 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             print(f"❌ Access Denied (401). Test model '{model_id}' is gated.")
             print("   👉 Solution 1: Run 'huggingface-cli login' with your token.")
             print("   👉 Solution 2: Use an open model like '--image-model sd-1.5'.")
+        elif "divisible by 8" in err_str:
+            print(f"❌ Resolution Error: {e}")
+            
+            # Smart Correction
+            new_w = round(width / 8) * 8
+            new_h = round(height / 8) * 8
+            
+            print(f"\n💡 Tip: Dimensions must be multiples of 8.")
+            print(f"   Closest valid size: {new_w}x{new_h}")
+            
+            try:
+                choice = input(f"   🔄 Retry with {new_w}x{new_h}? [y/N]: ").lower().strip()
+                if choice in ['y', 'yes']:
+                    print("") # Spacer
+                    return generate_image(prompt, output_path, new_w, new_h, model_name=model_name, unsafe=unsafe)
+            except KeyboardInterrupt:
+                pass
+            print("")
+        elif "Invalid buffer size" in err_str:
+            print(f"\n❌ Hardware Limitation Reached (Single Buffer Limit)")
+            print(f"   Error: {e}")
+            print(f"\n   Explanation:")
+            print(f"   • Native {width}x{height} generation requires calculating a massive Attention Matrix.")
+            print(f"   • This exceeded the maximum allowed size for a single tensor (usually ~4GB on MPS/Metal).")
+            print(f"   • This is a hardware/driver limit, not a VRAM limit.")
+            print(f"\n   💡 Solution: Use a lower resolution (e.g. 4k or 2k).")
+            print(f"      (Native 5K generation requires 'MultiDiffusion' tiling which is not currently supported.)\n")
+            
+            # Auto-Upscale Fallback for 5K requests
+            # If target was roughly 5K (5120x2880), offering 1280x720 (720p) -> x4 Upscale = 5120x2880
+            # 1280 * 4 = 5120
+            
+            try:
+                print(f"   ✨ Alternative: Generate at 1280x720 and Auto-Upscale x4?")
+                print(f"      This produces a 5120x2880 (5K) image using the Upscaler model.")
+                choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
+                if choice in ['y', 'yes']:
+                    print("\n📉 Switching to base resolution: 1280x720...")
+                    # 1. Generate Base Image
+                    success = generate_image(prompt, output_path, 1280, 720, model_name=model_name, unsafe=unsafe)
+                    if success:
+                        # 2. Upscale Result
+                        print("")
+                        return upscale_image_file(output_path, output_path, strength=0.0, factor=4.0) # Overwrite
+            except KeyboardInterrupt:
+                pass
+            print("")
         else:
             print(f"❌ Generation failed: {e}")
         return False
@@ -922,17 +1013,440 @@ class ResourceMonitor:
         avg_ram = sum(self.ram_readings) / len(self.ram_readings)
         return avg_cpu, avg_ram
 
+# --- Upscaling Logic ---
+
+# --- Upscaling Logic ---
+
+def check_resources_and_confirm(w, h, f, dev):
+    """
+    Checks if the target upscale resolution is safe for the current system resources.
+    Returns True if safe/confirmed, False if user aborts.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return True # Cannot check without psutil
+        
+    target_w = int(w * f)
+    target_h = int(h * f)
+    target_pixels = target_w * target_h
+    megapixels = target_pixels / 1_000_000
+    
+    # Estimate RAM (Very rough heuristic for Float32 Latent Pipeline)
+    # Empirical Rule of Thumb: 1MP output needs ~1GB RAM on CPU for safe execution.
+    estimated_ram_gb = (megapixels * 0.8) if dev == "cpu" else (megapixels * 0.4) 
+    
+    vm = psutil.virtual_memory()
+    available_gb = vm.available / (1024**3)
+    
+    is_huge = megapixels > 25  # > 5K/6K image
+    is_tight = estimated_ram_gb > (available_gb * 0.9)
+    
+    if is_huge or is_tight:
+        print("\n⚠️  RESOURCE WARNING: High-Resolution Upscale Detected")
+        print(f"   Input:  {w}x{h}")
+        print(f"   Target: {target_w}x{target_h} ({megapixels:.1f} MP)")
+        print(f"   Device: {dev.upper()}")
+        print(f"   Est. RAM Required: ~{estimated_ram_gb:.1f} GB")
+        print(f"   Available RAM:      {available_gb:.1f} GB")
+        
+        if is_tight:
+             print("   🔴 WARNING: This may cause massive swapping or system freeze.")
+        elif is_huge:
+             print("   🟠 WARNING: This resolution is extremely high (Billboard size).")
+        
+        if os.environ.get("AI_MEDIA_FORCE", "0") == "1":
+             print("   (Proceeding due to Force flag)")
+             return True
+             
+        confirm = input("\n   Do you want to proceed? [y/N]: ").strip().lower()
+        return confirm == 'y'
+    return True
+
+def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
+    """Upscale an image using Stable Diffusion x4 Upscaler.
+       Supports multi-pass for factors > 4x (e.g. 8x = 4x -> 4x -> resize)."""
+    
+    
+    # Select Model based on factor
+    # <= 2.0x -> use x2 Latent Upscaler (Fast, Faithful)
+    # > 2.0x  -> use x4 Upscaler (Detailed)
+    use_x2_model = (factor <= 2.0)
+    model_id = IMAGE_MODELS['upscaler_x2'] if use_x2_model else IMAGE_MODELS['upscaler']
+    
+    print(f"🚀 Upscaling Image: {image_path}")
+    print(f"   Model: {model_id}")
+    print(f"   Target Factor: {factor}x")
+    
+    # Pre-flight check: Avoid wasting processing time if output exists
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            print(f"\n⚠️  Output file already exists: {output_path}")
+            confirm = input("   Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted to prevent overwrite.")
+                return False
+        else:
+            print(f"   ⚠️  Overwriting existing file (--force).")
+    
+    if factor > 4.0:
+        print(f"   ℹ️  Factor > 4x detected. This will require multiple AI passes.")
+    
+    try:
+        from diffusers import StableDiffusionUpscalePipeline, StableDiffusionLatentUpscalePipeline
+        from PIL import Image
+        import torch
+
+        device, dtype = get_optimal_device_and_dtype()
+        
+        # MPS GLOBAL FIX: Force CPU for ALL Upscaling (x2 and x4)
+        # Reason 1 (x2): "View size not compatible" (Tensor Stride errors)
+        # Reason 2 (x4): "MPSNDArrayMatrixMultiplication ... too large for kernel" (Driver Limit)
+        # Only CPU can handle these massive tensors safely.
+        if device.type == "mps":
+            print("   ⚠️  MPS Compatibility: Switching to CPU for Upscaling (Avoids Kernel Crashes).")
+            device = torch.device("cpu")
+            dtype = torch.float32  # BFloat16 causes hangs on Apple Silicon CPU
+        
+        # Load Image
+        try:
+            image = Image.open(image_path).convert("RGB")
+            orig_w, orig_h = image.size
+        except Exception as e:
+            print(f"❌ Error loading source image: {e}")
+            return False
+
+        # --- RESOURCE SAFETY CHECK ---
+        if not check_resources_and_confirm(orig_w, orig_h, factor, device.type):
+             print("❌ Upload aborted by user.")
+             return False
+
+        # Load Pipeline
+        print(f"🔗 Loading Upscale Model ({'x2 Latent' if use_x2_model else 'x4 Std'})...")
+        
+        if use_x2_model:
+            pipe = StableDiffusionLatentUpscalePipeline.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+            )
+        else:
+            pipe = StableDiffusionUpscalePipeline.from_pretrained(
+                model_id, 
+                torch_dtype=dtype,
+                variant="fp16" if dtype == torch.float16 else None
+            )
+            
+        # Memory Optimizations
+        # 1. Use CPU Offload (or just move to device if already CPU)
+        if device.type != "cpu":
+             pipe.enable_model_cpu_offload() 
+        else:
+             pipe.to(device)
+        
+        # Note: No MPS specific tiling/slicing needed here because we forced CPU above.
+        # But we still enable VAE Tiling if available to save System RAM.
+        if hasattr(pipe, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
+             print("   ✓ Enabling VAE Tiling (Memory Optimization)")
+             pipe.vae.enable_tiling()
+        
+        # Recursive Upscaling Loop
+        current_image = image
+        current_scale = 1.0
+        pass_idx = 1
+        
+        # Decide base step scale
+        step_scale = 2.0 if use_x2_model else 4.0
+        
+        while current_scale < factor:
+            print("")
+            print("="*60)
+            print(f"🎨 Pass {pass_idx}: Upscaling {step_scale}x (Internal Base)...")
+            print("="*60)
+            print("")
+            
+            # --- DIMENSION ALIGNMENT FIX ---
+            # x2 latent upscaler requires dimensions divisible by 64 (latent space)
+            # x4 upscaler requires dimensions divisible by 8 (standard SD requirement)
+            alignment = 64 if use_x2_model else 8
+            img_w, img_h = current_image.size
+            pad_w = (alignment - (img_w % alignment)) % alignment
+            pad_h = (alignment - (img_h % alignment)) % alignment
+            
+            if pad_w > 0 or pad_h > 0:
+                padded_w, padded_h = img_w + pad_w, img_h + pad_h
+                final_w, final_h = int(img_w * step_scale), int(img_h * step_scale)
+                print(f"   ℹ️  Temporarily padding {img_w}x{img_h} → {padded_w}x{padded_h} ({alignment}px alignment required)")
+                print(f"       Will crop back to {final_w}x{final_h} after upscaling.")
+                
+                # Create padded image (reflect padding for seamless edges)
+                padded_image = Image.new("RGB", (padded_w, padded_h))
+                padded_image.paste(current_image, (0, 0))
+                # Mirror-fill the padding area for better edge blending
+                if pad_w > 0:
+                    right_edge = current_image.crop((img_w - pad_w, 0, img_w, img_h))
+                    padded_image.paste(right_edge.transpose(Image.FLIP_LEFT_RIGHT), (img_w, 0))
+                if pad_h > 0:
+                    bottom_edge = current_image.crop((0, img_h - pad_h, img_w, img_h))
+                    padded_image.paste(bottom_edge.transpose(Image.FLIP_TOP_BOTTOM), (0, img_h))
+            else:
+                padded_image = current_image
+            
+            # x2 model works better with fewer steps usually? default is fine.
+            upscaled_result = pipe(
+                prompt="High quality, detailed, sharp, 8k", 
+                image=padded_image, 
+                num_inference_steps=20,
+            ).images[0]
+            
+            # Crop back to target dimensions (remove padding effect)
+            target_w_pass = int(img_w * step_scale)
+            target_h_pass = int(img_h * step_scale)
+            if upscaled_result.size != (target_w_pass, target_h_pass):
+                current_image = upscaled_result.crop((0, 0, target_w_pass, target_h_pass))
+            else:
+                current_image = upscaled_result
+            
+            current_scale *= step_scale
+            pass_idx += 1
+        
+        # Final Resize to exact factor
+        target_w = int(orig_w * factor)
+        target_h = int(orig_h * factor)
+        
+        if current_image.size != (target_w, target_h):
+            print(f"   ↘️  Resizing final result to exact {factor}x ({target_w}x{target_h})...")
+            current_image = current_image.resize((target_w, target_h), Image.LANCZOS)
+        
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        current_image.save(output_path)
+        print(f"✅ Upscaled image saved to {output_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Upscaling failed: {e}")
+        return False
+
+def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
+    """Upscale video by extracting frames, upscaling them (recursively if needed), and stitching back."""
+    print(f"🚀 Upscaling Video: {video_path}")
+    print(f"   Factor: {factor}x")
+    
+    # Pre-flight check: Avoid wasting processing time if output exists
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            print(f"\n⚠️  Output file already exists: {output_path}")
+            confirm = input("   Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted to prevent overwrite.")
+                return False
+        else:
+            print(f"   ⚠️  Overwriting existing file (--force).")
+    
+    if factor > 4.0:
+        print(f"   ℹ️  Factor > 4x detected. This will require multiple AI passes per frame.")
+    
+    try:
+        import cv2
+        import shutil
+        import subprocess
+        
+        # --- RESOURCE SAFETY CHECK (Get dims from video metadata first) ---
+        cap_chk = cv2.VideoCapture(str(video_path))
+        if cap_chk.isOpened():
+             v_w = int(cap_chk.get(cv2.CAP_PROP_FRAME_WIDTH))
+             v_h = int(cap_chk.get(cv2.CAP_PROP_FRAME_HEIGHT))
+             cap_chk.release()
+             
+             # Reuse global checker
+             # Note: For video, we might want to check device type, but we haven't loaded torch/device yet.
+             # We can assume 'mps' if on Mac for the check warning purposes, or just check CPU RAM first.
+             # Let's peek device quick
+             import torch
+             d_type = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
+             
+             if not check_resources_and_confirm(v_w, v_h, factor, d_type):
+                  print("❌ Upload aborted by user.")
+                  return False
+        else:
+             print("⚠️  Could not read video metadata for resource check.")
+             
+        # 1. Create temp directory
+        temp_dir = Path("temp_upscale_frames")
+        if temp_dir.exists(): shutil.rmtree(temp_dir)
+        temp_dir.mkdir()
+        
+        # 2. Extract Frames
+        print("🎞️  Extracting frames...")
+        cam = cv2.VideoCapture(str(video_path))
+        fps = cam.get(cv2.CAP_PROP_FPS)
+        frame_count = 0
+        
+        while True:
+            ret, frame = cam.read()
+            if not ret: break
+            
+            frame_path = temp_dir / f"frame_{frame_count:05d}.png"
+            cv2.imwrite(str(frame_path), frame)
+            frame_count += 1
+            
+        cam.release()
+        print(f"   Extracted {frame_count} frames.")
+        
+        # 3. Load Pipeline
+        from diffusers import StableDiffusionUpscalePipeline, StableDiffusionLatentUpscalePipeline
+        import torch
+        from PIL import Image
+        
+        device, dtype = get_optimal_device_and_dtype()
+        
+        # MPS GLOBAL FIX: Force CPU for Video Upscaling too
+        if device.type == "mps":
+            print("   ⚠️  MPS Compatibility: Switching to CPU for Upscaling.")
+            device = torch.device("cpu")
+            dtype = torch.float32  # BFloat16 causes hangs on Apple Silicon CPU
+
+        # Select Model based on factor
+        use_x2_model = (factor <= 2.0)
+        model_id = IMAGE_MODELS['upscaler_x2'] if use_x2_model else IMAGE_MODELS['upscaler']
+        step_scale = 2.0 if use_x2_model else 4.0
+
+        print(f"🔗 Loading Upscale Model ({'x2 Latent' if use_x2_model else 'x4 Std'})...")
+        
+        if use_x2_model:
+            pipe = StableDiffusionLatentUpscalePipeline.from_pretrained(
+                model_id, 
+                torch_dtype=dtype, 
+            )
+        else:
+            pipe = StableDiffusionUpscalePipeline.from_pretrained(
+                model_id, 
+                torch_dtype=dtype, 
+                variant="fp16" if dtype == torch.float16 else None
+            )
+            
+        # Memory Optimizations
+        if device.type != "cpu":
+             pipe.enable_model_cpu_offload() 
+        else:
+             pipe.to(device)
+         
+        # Enable tiling on CPU to survive high-res
+        if hasattr(pipe, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
+            pipe.vae.enable_tiling()
+        
+        # 4. Process Frames
+        print("🎨 Upscaling frames...")
+        for i in range(frame_count):
+            input_f = temp_dir / f"frame_{i:05d}.png"
+            output_f = temp_dir / f"upscaled_{i:05d}.png"
+            
+            img = Image.open(input_f).convert("RGB")
+            orig_w, orig_h = img.size
+            
+            # Recursive Loop per frame
+            current_img = img
+            current_scale = 1.0
+            
+            while current_scale < factor:
+                # --- DIMENSION ALIGNMENT FIX ---
+                # x2 latent upscaler: 64px, x4 upscaler: 8px
+                alignment = 64 if use_x2_model else 8
+                frame_w, frame_h = current_img.size
+                pad_w = (alignment - (frame_w % alignment)) % alignment
+                pad_h = (alignment - (frame_h % alignment)) % alignment
+                
+                if pad_w > 0 or pad_h > 0:
+                    padded_w, padded_h = frame_w + pad_w, frame_h + pad_h
+                    padded_img = Image.new("RGB", (padded_w, padded_h))
+                    padded_img.paste(current_img, (0, 0))
+                    if pad_w > 0:
+                        right_edge = current_img.crop((frame_w - pad_w, 0, frame_w, frame_h))
+                        padded_img.paste(right_edge.transpose(Image.FLIP_LEFT_RIGHT), (frame_w, 0))
+                    if pad_h > 0:
+                        bottom_edge = current_img.crop((0, frame_h - pad_h, frame_w, frame_h))
+                        padded_img.paste(bottom_edge.transpose(Image.FLIP_TOP_BOTTOM), (0, frame_h))
+                else:
+                    padded_img = current_img
+                
+                upscaled_result = pipe(prompt="High quality", image=padded_img, num_inference_steps=15).images[0]
+                
+                # Crop back to target dimensions
+                target_w_pass = int(frame_w * step_scale)
+                target_h_pass = int(frame_h * step_scale)
+                if upscaled_result.size != (target_w_pass, target_h_pass):
+                    current_img = upscaled_result.crop((0, 0, target_w_pass, target_h_pass))
+                else:
+                    current_img = upscaled_result
+                    
+                current_scale *= step_scale
+            
+            # Final Resize
+            target_w = int(orig_w * factor)
+            target_h = int(orig_h * factor)
+            if current_img.size != (target_w, target_h):
+                current_img = current_img.resize((target_w, target_h), Image.LANCZOS)
+
+            current_img.save(output_f)
+            
+            print(f"   Frame {i+1}/{frame_count} done.", end='\r')
+            
+        print(f"\n✅ All frames upscaled.")
+
+        # 5. Stitch
+        print("🔗 stitching video...")
+        
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-framerate", str(fps),
+            "-i", str(temp_dir / "upscaled_%05d.png"),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            output_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        shutil.rmtree(temp_dir)
+        print(f"✅ Upscaled video saved to {output_path}")
+        return True
+
+    except ImportError:
+        print("❌ Missing dependencies (opencv-python, etc).")
+        return False
+    except Exception as e:
+        print(f"❌ Video upscaling failed: {e}")
+        return False
+
+def parse_upscale_factor(val):
+    """Parse upscale factor string (e.g., '2x', '4', '1.5') -> float."""
+    if not val: return 2.0 # Default
+    val = val.lower().strip().replace('x', '')
+    try:
+        f = float(val)
+        if f <= 0: raise ValueError
+        return f
+    except:
+        print(f"⚠️  Invalid upscale factor '{val}'. Using default 2.0x.")
+        return 2.0
+
 # --- Main Logic ---
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Image, Video, or Audio from text prompts or input images.",
+        description="Generate Image, Video, or Audio from text prompts. Upscale existing images and videos with AI.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 Examples:
   -- Image Generation --
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
+  
+  -- Upscaling --
+  python ai-media.py --upscale-image input.jpg -o upscaled.png
+  python ai-media.py --upscale-image input.jpg -uf 4x (Native 4x gen)
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -973,10 +1487,10 @@ Supported Models:
     
     # Common
     common_group = parser.add_argument_group("Common Parameters")
-    common_group.add_argument("-p", "--prompt", required=True, help="Text prompt description")
+    common_group.add_argument("-p", "--prompt", required=False, help="Text prompt description (Required for generation modes)")
     common_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")
     common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
-    common_group.add_argument("--force", action="store_true", help="Overwrite existing files without prompting.")
+    common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
     common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3).")
     
     # Shared -s
@@ -1010,12 +1524,52 @@ Supported Models:
     audio_group.add_argument("-b", "--bit-depth", type=int, default=DEFAULT_AUDIO_BITDEPTH, help="Bit depth (16, 24). Default: 16")
 
     audio_group.add_argument("-r", "--bit-rate", help="Bitrate (e.g. '320k').")
+
+    # Upscaling Parameters
+    upscale_group = parser.add_argument_group("Upscaling Parameters")
+    upscale_group.add_argument("--upscale-image", help="Path to input image for 4x AI Upscaling")
+    upscale_group.add_argument("--upscale-video", help="Path to input video for 4x AI Upscaling")
+    upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
+    upscale_group.add_argument("-uf", "--upscale-factor", help="Upscale factor (e.g. '2x', '4'). Default: 2x")
+    upscale_group.add_argument("--upscale", action="store_true", help="Enable 4x AI Upscaling for the generated content (Stage 2).")
+    upscale_group.add_argument("-uof", "--upscaled-output-file", help="Custom filename for the upscaled output (e.g. 'highres.png').")
     
     args = parser.parse_args()
     
-    # Validation
+    # Prompt Validation (Required unless upscaling)
+    if not (args.upscale_image or args.upscale_video) and not args.prompt:
+        parser.error(" The -p/--prompt argument is required unless running in Upscale Mode.\n                            (e.g. python ai-media.py -i -p \"cat\")")
+    
+    # --- Logic Routing ---
+    
+    uf = parse_upscale_factor(args.upscale_factor)
+    
+    # Propagate Force Flag globally
+    if args.force:
+        os.environ["AI_MEDIA_FORCE"] = "1"
+        
+    # Handle -uof alias for standalone mode (treat as output)
+    if args.upscaled_output_file and not args.output:
+        args.output = args.upscaled_output_file
+    
+    # 1. Upscaling (High Priority Standalone)
+    if args.upscale_image:
+        if not args.output:
+             name, ext = os.path.splitext(args.upscale_image)
+             args.output = f"{name}_upscaled_{uf}x.png"
+        upscale_image_file(args.upscale_image, args.output, args.upscale_strength, factor=uf)
+        return
+
+    if args.upscale_video:
+        if not args.output:
+             name, ext = os.path.splitext(args.upscale_video)
+             args.output = f"{name}_upscaled_{uf}x.mp4"
+        upscale_video_file(args.upscale_video, args.output, args.upscale_strength, factor=uf)
+        return
+
+    # 2. Validation for Generation
     if not any([args.generate_image, args.generate_video, args.generate_audio]):
-        parser.error("You must specify a generation mode: -i, -v, or -a")
+        parser.error("You must specify a generation mode: -i, -v, -a (or --upscale-image/--upscale-video)")
     
     # Auto-generate output filename from prompt if not provided
     if not args.output:
@@ -1079,14 +1633,45 @@ Supported Models:
     duration_sec = parse_duration(args.length)
     
     start_time = time.time()
-    success = False
     
-    if args.generate_image:
-        # Resolve model ID for consistent tracking (in case defaults change)
-        model_key = IMAGE_MODELS.get(args.image_model.lower(), args.image_model)
+    try:
+        success = False
+        if args.generate_image:
+            # Resolve model ID for consistent tracking (in case defaults change)
+            model_key = IMAGE_MODELS.get(args.image_model.lower(), args.image_model)
         if args.image_model.lower() == "default": model_key = IMAGE_MODELS["default"]
         w, h = parse_size(final_size)
         
+        # --- Proactive Optimization for High-Res (4K+) ---
+        # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
+        total_pixels = w * h
+        if total_pixels > 6_000_000 and not args.upscale:
+            # Calculate Safe 3K Base
+            long_edge = max(w, h)
+            scale = 3072 / long_edge
+            safe_w = int(w * scale)
+            safe_h = int(h * scale)
+            
+            # Make sure safe dimensions are divisible by 8
+            safe_w = (safe_w // 8) * 8
+            safe_h = (safe_h // 8) * 8
+            
+            calc_factor = 1 / scale
+            
+            print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
+            print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
+            try:
+                choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
+                if choice not in ['n', 'no']:
+                    print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
+                    w = safe_w
+                    h = safe_h
+                    args.upscale = True
+                    uf = calc_factor # Setup factor for Stage 2
+                    args.force = True # Prevent double-confirmation (we just asked)
+            except KeyboardInterrupt:
+                pass
+
         # Resource check before starting
         check_resources_and_warn(model_key, width=w, height=h, force=args.force)
         
@@ -1103,6 +1688,14 @@ Supported Models:
         mon_ctx = ResourceMonitor() if tracker else None
         
         if mon_ctx: mon_ctx.__enter__()
+        
+        if args.upscale:
+             print("")
+             print("="*60)
+             print(f"👉 Step 1 - Generate at {w}x{h}")
+             print("="*60)
+             print("")
+             
         success = generate_image(args.prompt, args.output, w, h, model_name=args.image_model, unsafe=args.unsafe)
         if mon_ctx: mon_ctx.__exit__(None, None, None)
         
@@ -1113,73 +1706,142 @@ Supported Models:
             print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
             tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram)
         
-    elif args.generate_video:
-        # Resolve model ID for consistent tracking
-        model_key = VIDEO_MODELS.get(args.video_model.lower(), args.video_model)
-        if args.video_model.lower() == "default": model_key = VIDEO_MODELS["default"]
-        w, h = parse_size(final_size)
-        
-        # Resource check before starting
-        check_resources_and_warn(model_key, width=w, height=h, duration=duration_sec, force=args.force)
-        
-        if tracker:
-            est_time, est_cpu, est_ram = tracker.estimate_linear("video", model_key, device, duration_sec, w, h)
-            if est_time:
-                print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
-            else:
-                print(f"⏱️  Estimated Resources: (Calibrating... first run)")
-            print("") # Spacer
-        
-        mon_ctx = ResourceMonitor() if tracker else None
-        if mon_ctx: mon_ctx.__enter__()
-        success = generate_video(
-            args.prompt, 
-            args.output, 
-            duration_sec, 
-            w, 
-            h, 
-            model_name=args.video_model,
-            image_input=args.image_input,
-            audio_prompt=args.audio_prompt
-        )
-        if mon_ctx: mon_ctx.__exit__(None, None, None)
+        elif args.generate_video:
+            # Resolve model ID for consistent tracking
+            model_key = VIDEO_MODELS.get(args.video_model.lower(), args.video_model)
+            if args.video_model.lower() == "default": model_key = VIDEO_MODELS["default"]
+            w, h = parse_size(final_size)
+            
+            # --- Proactive Optimization for High-Res (4K+) ---
+            # User Feedback: 3K is fine, 4K is slow.
+            # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
+            total_pixels = w * h
+            if total_pixels > 6_000_000 and not args.upscale:
+                # Calculate Safe 3K Base
+                # Target max dimension 3072 covers "3K" nicely.
+                long_edge = max(w, h)
+                scale = 3072 / long_edge
+                safe_w = int(w * scale)
+                safe_h = int(h * scale)
+                
+                # Make sure safe dimensions are divisible by 8 (Architecture requirement)
+                safe_w = (safe_w // 8) * 8
+                safe_h = (safe_h // 8) * 8
+                
+                calc_factor = 1 / scale
+                
+                print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
+                print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
+                try:
+                    choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
+                    if choice not in ['n', 'no']:
+                        print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
+                        w = safe_w
+                        h = safe_h
+                        args.upscale = True
+                        uf = calc_factor # Setup factor for Stage 2
+                        args.force = True # Prevent double-confirmation
+                except KeyboardInterrupt:
+                    pass
 
-        if success and tracker:
-            elapsed = time.time() - start_time
-            avg_cpu, avg_ram = mon_ctx.get_averages()
-            print("")  # Spacer
-            print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-            tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram)
-        
-    elif args.generate_audio:
-        # Resolve model ID for consistent tracking
-        model_key = AUDIO_MODELS.get(args.audio_model.lower(), args.audio_model)
-        if args.audio_model.lower() == "default": model_key = AUDIO_MODELS["default"]
-        hz = parse_sampling_rate(args.sampling)
-        
-        # Resource check before starting
-        check_resources_and_warn(model_key, duration=duration_sec, force=args.force)
-        
-        if tracker:
-            est_time, est_cpu, est_ram = tracker.estimate_linear("audio", model_key, device, duration_sec)
-            if est_time:
-                print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+            # Resource check before starting
+            check_resources_and_warn(model_key, width=w, height=h, duration=duration_sec, force=args.force)
+                
+            if tracker:
+                est_time, est_cpu, est_ram = tracker.estimate_linear("video", model_key, device, duration_sec, w, h)
+                if est_time:
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                else:
+                    print(f"⏱️  Estimated Resources: (Calibrating... first run)")
                 print("") # Spacer
-            else:
-                print(f"⏱️  Estimated Resources: (Calibrating... first run)")
-                print("") # Spacer
+            
+            mon_ctx = ResourceMonitor() if tracker else None
+            if mon_ctx: mon_ctx.__enter__()
+            
+            if args.upscale:
+                 print("")
+                 print("="*60)
+                 print(f"👉 Step 1 - Generate at {w}x{h}")
+                 print("="*60)
+                 print("")
+                 
+            success = generate_video(
+                args.prompt, 
+                args.output, 
+                duration_sec, 
+                w, 
+                h, 
+                model_name=args.video_model,
+                image_input=args.image_input,
+                audio_prompt=args.audio_prompt
+            )
+            if mon_ctx: mon_ctx.__exit__(None, None, None)
+
+            if success and tracker:
+                elapsed = time.time() - start_time
+                avg_cpu, avg_ram = mon_ctx.get_averages()
+                print("")  # Spacer
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
+                tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram)
         
-        mon_ctx = ResourceMonitor() if tracker else None
-        if mon_ctx: mon_ctx.__enter__()
-        success = generate_audio(args.prompt, args.output, duration_sec, hz, model_name=args.audio_model, image_input=args.image_input)
-        if mon_ctx: mon_ctx.__exit__(None, None, None)
-        
-        if success and tracker:
-            elapsed = time.time() - start_time
-            avg_cpu, avg_ram = mon_ctx.get_averages()
-            print("")  # Spacer
-            print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-            tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram)
+        elif args.generate_audio:
+            # Resolve model ID for consistent tracking
+            model_key = AUDIO_MODELS.get(args.audio_model.lower(), args.audio_model)
+            if args.audio_model.lower() == "default": model_key = AUDIO_MODELS["default"]
+            hz = parse_sampling_rate(args.sampling)
+            
+            # Resource check before starting
+            check_resources_and_warn(model_key, duration=duration_sec, force=args.force)
+            
+            if tracker:
+                est_time, est_cpu, est_ram = tracker.estimate_linear("audio", model_key, device, duration_sec)
+                if est_time:
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                    print("") # Spacer
+                else:
+                    print(f"⏱️  Estimated Resources: (Calibrating... first run)")
+                    print("") # Spacer
+            
+            mon_ctx = ResourceMonitor() if tracker else None
+            if mon_ctx: mon_ctx.__enter__()
+            success = generate_audio(args.prompt, args.output, duration_sec, hz, model_name=args.audio_model, image_input=args.image_input)
+            if mon_ctx: mon_ctx.__exit__(None, None, None)
+            
+            if success and tracker:
+                elapsed = time.time() - start_time
+                avg_cpu, avg_ram = mon_ctx.get_averages()
+                print("")  # Spacer
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
+                tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram)
+
+        # --- Stage 2: Upscaling (Chained) ---
+        if success and args.upscale:
+            print("")
+            print("="*60)
+            print(f"👉 Step 2 - Upscale {uf}x")
+            print("="*60)
+            print("")
+            
+            # Auto-detect mode. Overwrites the file with high-res version?
+            # Or maybe appends _upscaled? 
+            # User requested "taking the upscale factor as stage 2". Usually implies result replacement or refinement.
+            # Let's overwrite for seamlessness, OR assume the user wants the high-res file.
+            # Actually, let's create a NEW file to be safe: _upscaled.
+            
+            name, ext = os.path.splitext(args.output)
+            upscale_out = args.upscaled_output_file or f"{name}_upscaled_{uf}x{ext}"
+            
+            if args.generate_image:
+                upscale_image_file(args.output, upscale_out, args.upscale_strength, factor=uf)
+            elif args.generate_video:
+                upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
+    
+    except KeyboardInterrupt:
+        print("\n🛑 Operation cancelled by user.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

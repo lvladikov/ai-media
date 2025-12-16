@@ -1,12 +1,13 @@
 # AI-Media
 
-Generate images, videos, and audio files locally using state-of-the-art open source AI models. This tool wraps libraries like `diffusers` and `transformers` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing images and videos with AI. This tool wraps libraries like `diffusers` and `transformers` into a simple, unified command-line interface.
 
 ## Features
 
 - 🎨 **Image Generation** - Text-to-Image using models like generic Flux/SDXL (via `diffusers`)
 - 🎬 **Video Generation** - Supports **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic Muxing with FFmpeg).
 - 🎵 **Audio Generation** - Supports **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
+- 🔍 **AI Upscaling** - Upscale images and videos using Stable Diffusion models (x2 Latent, x4 Standard). Supports custom factors and chained workflows.
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -15,30 +16,7 @@ Generate images, videos, and audio files locally using state-of-the-art open sou
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
     - 💻 **CPU### Performance Tracking
-To improve estimation accuracy, the script creates a `performance.json` file in its directory. 
-
-**What is stored?**
-- **Model Key**: E.g., `flux|mps|1280x720`
-- **Average Time**: Run time rolling average (updated every run).
-- **Average Rate**: For audio/video (seconds of generation per second of content).
-
-**Example `performance.json`:**
-```json
-{
-  "image": {
-    "flux|mps|1280x720": {
-      "average_time": 4.5
-    }
-  },
-  "audio": {
-    "musicgen-small|cpu": {
-      "average_rate": 2.1
-    }
-  }
-}
-```
-
-This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `--npt`). 
+To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `--npt`). 
     - [See details](#performance-tracking).
 
 ## Prerequisites
@@ -102,7 +80,61 @@ huggingface-cli login
 
 The script `ai-media.py` is the main entry point.
 
-### Modes
+### AI Upscaling (Standalone)
+You can directly upscale existing images or videos without generating new ones.
+
+```bash
+# Upscale an image to 4K (assuming input is 1920x1080) with 2x factor
+python ai-media.py --upscale-image "my-image.jpg" -uf 2.0
+
+# Upscale a video
+python ai-media.py --upscale-video "my-video.mp4" -uf 2.0
+```
+
+| Argument | Description | Default |
+| :--- | :--- | :--- |
+| `--upscale-image` | Path to the image file you want to upscale. | `None` |
+| `--upscale-video` | Path to the video file you want to upscale. | `None` |
+| `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
+| `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
+| `-us`, `--upscale-strength` | *Experimental*: Noise strength. | `0.0` |
+
+> [!NOTE]
+> **Resource Safety Check:** Before starting, the script calculates the target resolution (e.g., 8K = 33MP) and estimated RAM usage. If it detects a risk of massive swapping or system freeze ("Billboard Sizing"), it will warn you and ask for confirmation. Use `--force` to bypass this.
+
+> [!IMPORTANT]
+> **MacOS Users:** Upscaling is enforced to run on **CPU** (Float32) on Apple Silicon. This is due to two known PyTorch MPS limitations:
+> 1. **Kernel Size Limit:** High-resolution tensors (4K+) exceed the MPS driver's maximum dimensions, causing crashes.
+> 2. **BFloat16 Incomplete:** CPU BFloat16 (for RAM savings) causes hangs due to unoptimized code paths.
+>
+> **Result:** CPU + Float32 uses ~80GB RAM for 12K output and is slow, but is the only stable option.
+> **Outlook:** Apple's **Metal4** (macOS 16, expected 2026) promises native tensor support that should resolve these issues.
+
+> [!TIP]
+> **Overwrite Protection:** If the output file already exists, you'll be prompted before processing starts. Use `--force` to skip this check.
+
+---
+### AI Upscaling (Chained)
+You can auto-upscale immediately after generation using `--upscale` (Stage 2).
+This preserves your original generation and creates a separate upscaled file.
+
+```bash
+# Generate Image -> Auto-Upscale to 4K (2x)
+python ai-media.py -i -p "Cyberpunk city" -o "city.png" --upscale
+
+# Outputs:
+# 1. city.png (Original 100%)
+# 2. city_upscaled_2.0x.png (High-Res 200%)
+
+# Custom Upscale Filename (-uof)
+python ai-media.py -i -p "Cyberpunk city" --upscale -uof "city_poster.png"
+
+# Video Upscaling
+python ai-media.py -v -p "Robot dance" --upscale -uf 2.0
+```
+
+---
+### Generation Modes
 
 - `-i, --generate-image`: Generate an image
 - `-v, --generate-video`: Generate a video
@@ -158,6 +190,34 @@ python ai-media.py -a -p "Rainforest ambience" -l 1m -o rain.wav -m 48000 -b 24 
 python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp3
 ```
 
+**AI Upscaling**
+```bash
+# Standalone Image Upscale (input.jpg -> output_upscaled.png)
+python ai-media.py --upscale-image input.jpg
+
+# Custom Upscale Factor (e.g., 2x, 8x)
+# Note: Factors > 4x use multi-pass upscaling (slower but necessary)
+python ai-media.py --upscale-image input.jpg -uf 8x
+
+# Upscale Video (Frame-by-Frame, slow but high quality)
+python ai-media.py --upscale-video clip.mp4
+
+# Chained Generation (Generate -> Upscale)
+# Generates a 720p image, then immediately upscales it to 5K (4x)
+python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
+
+# High-Resolution Optimization (>4K)
+# Native 4K/5K generation can be slow/unstable. To get 4K result faster:
+# 1. Generate at optimized 3K (e.g. 2688x1536)
+# 2. Auto-Upscale to recover resolution
+# The script will PROACTIVELY suggest this if you request >6MP (4K+).
+python ai-media.py -i -p "Detail test" -s 4k
+# Follow the interactive prompt:
+# 💡 Recommendation: Generate at optimized 3K... + Auto-Upscale...
+# 🔄 Switch to optimized workflow? [Y/n]: Y
+```
+
+
 **Smart Format Handling**
 ```bash
 # Implicit Format (Inferred from filename)
@@ -175,7 +235,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | `-p, --prompt` | Text description of content to generate. |
 | `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
 | `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
-| `--force` | Overwrite existing files without prompting. |
+| `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
 | `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
 | `-ii, --image-input` | Source image path for **Image-to-Video** generation. |
@@ -203,6 +263,8 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 > [!NOTE]
 > **Apple Silicon/MPS:** SDXL Turbo uses float32 precision on Mac to avoid black images (float16 produces NaN values in VAE). This doubles memory usage compared to NVIDIA/CUDA.
+>
+> **High Resolution (4K+):** For resolutions larger than 1536x1536 (e.g., 4K), the script automatically enables **VAE Tiling**. This processes the image in chunks to prevent "Out of Memory" errors, though generation will be slightly slower.
 
 ### Audio Models (`--audio-model`)
 
@@ -222,11 +284,31 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | **CogVideoX** | `cogvideox` | ~15GB | ~24GB | High fidelity. **Supports Image-to-Video**. 🔒 **Gated**. |
 | **Stable Video Diffusion** | `svd` | ~4GB | ~8GB | **I2V Only**. Industry standard for animating images. |
 
+### Upscaling Models (Auto-selected based on factor)
+
+| Model | Code | Download | VRAM | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **SD x2 Latent** | `upscaler_x2` | ~4GB | ~8GB | **Factors ≤ 2x**. Fast, preserves original style. |
+| **SD x4 Upscaler** | `upscaler` | ~8GB | ~16GB | **Factors > 2x**. High detail, sharpens textures. |
+
+### AI Upscaling Architecture
+
+The script uses a **Dual-Model Approach** to balance speed and quality:
+
+1.  **Small Boosts (≤ 2.0x)**: Uses the **Latent Upscaler (`sd-x2-latent-upscaler`)**.
+    *   **Why?** It works in "latent space" (like the generator), making it fast and excellent at preserving the original image's style and composition without hallucinating weird details.
+    *   *Perfect for: Sharpening 720p to 1080p, or 3K to 4K.*
+
+2.  **Large Boosts (> 2.0x)**: Uses the **Super-Resolution Upscaler (`stable-diffusion-x4-upscaler`)**.
+    *   **Why?** It generates brand new texture details that didn't exist before.
+    *   **Supersampling**: If you ask for 3x (e.g. 720p -> 4K), the model internally generates a **4x** image (Supersampling) and then carefully downscales it to your exact target. This results in cleaner edges than generating at the lower resolution directly
+
+
 ## Supported Resolutions & Times
 
 ### Resolution Parsing (`-s` or `--size`)
 The tool supports natural language and object-style inputs:
-- **Presets**: `720p`, `1080p`, `4k`, `8k`, `HD`
+- **Presets**: `480p`, `576p`, `720p`, `900p`, `1080p`, `1440p`, `1k` ... `10k`, `HD`, `FHD`, `UHD`
 - **Dimensions**: `1280x720`, `1024x1024`
 - **Objects**: `{w: 800, h: 600}`, `{width: 1920, height: 1080}`
 
@@ -288,7 +370,7 @@ You'll be prompted if:
 ### 🔧 Options
 - **y**: Proceed despite the warning
 - **N** (default): Cancel and adjust parameters
-- **--force**: Use this flag to skip all resource warnings
+- **--force**: Skip all confirmation prompts (overwrites existing files and ignores resource warnings).
 
 ## Safety Checker
 
@@ -318,6 +400,51 @@ python ai-media.py -i -p "Haunted house at night" -o haunted.jpg --unsafe
 > [!CAUTION]
 > Using `--unsafe` disables all content filtering. You are responsible for ensuring your prompts and outputs comply with applicable laws and ethical guidelines.
 
+## Troubleshooting
+
+### ❌ Python Not Found / Module Errors
+**Error**: `python: command not found` or `ModuleNotFoundError: No module named 'diffusers'`
+**Cause**: The virtual environment is not activated in your current terminal session.
+**Solution**:
+- Activate the virtual environment for **every new terminal session**:
+```bash
+source venv/bin/activate
+```
+- You should see `(venv)` at the beginning of your prompt when activated.
+
+### ❌ Resolution Error (Divisible by 8)
+**Error**: `height and width have to be divisible by 8`
+**Cause**: Deep learning models (UNets) process images in blocks of 8 pixels.
+**Solution**:
+- The script automatically offers to retry with valid dimensions (e.g. `340x333` → `344x336`).
+- Press **'y'** when prompted to auto-fix and resume.
+
+### ❌ Hardware Limitation (Invalid Buffer Size)
+**Error**: `Invalid buffer size: ... GiB`
+**Cause**: Attempting to generate extremely high resolutions (e.g., native 5K/8K) in a single pass.
+- **Why**: "Attention" calculations scale quadratically. A 5K image (14.7MP) creates internal tensors larger than what a single GPU buffer can hold (often limited to ~4GB on MPS, regardless of total VRAM).
+**Solution**:
+- **Generate Lower, Upscale Later**: Generate at 4K (3840x2160) or 2K.
+- **Wait for Updates**: Future versions may support "MultiDiffusion" (Tiled Generation) to bypass this limit.
+
+### ❓ High RAM Usage (50GB+)
+**Observation**: "I enabled VAE Tiling but it still uses ~50GB RAM for 4K."
+**Explanation**:
+- **VAE Tiling** only optimizes the *final* step (decoding Latents to Pixels), preventing a massive spike that would otherwise crash the system (saving ~10-20GB).
+- **The UNet (Main Generation)** still requires holding the entire image context in memory during the process. For 4K/float32, utilizing ~50GB is normal and unavoidable without "Tiled Diffusion".
+
+### ❓ Why do I see `alignment required` during upscaling?
+**Message**: `ℹ️ Temporarily padding 1280x720 → 1280x768 (64px alignment required)`
+**Cause**: The upscaler models require specific dimension alignments:
+- **x2 latent upscaler**: Divisible by **64** (operates in latent space)
+- **x4 upscaler**: Divisible by **8** (standard Stable Diffusion requirement)
+
+**What happens**:
+1. Your image is temporarily **padded** to the nearest 64-pixel boundary
+2. Upscaling is performed on the padded image
+3. The result is **cropped back** to your exact target dimensions
+**Impact**: The final output matches your requested dimensions exactly. The padding is only used internally.
+
 ## Dependencies
 
 This project uses the following open-source libraries:
@@ -344,6 +471,8 @@ This project uses the following open-source libraries:
 - **Zeroscope** by Cerspense - [cerspense/zeroscope](https://huggingface.co/cerspense/zeroscope_v2_576w)
 - **CogVideoX** by THUDM - [THUDM/CogVideo](https://github.com/THUDM/CogVideo)
 - **Stable Video Diffusion** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
+- **Stable Diffusion x2 Latent Upscaler** by Stability AI - [stabilityai/sd-x2-latent-upscaler](https://huggingface.co/stabilityai/sd-x2-latent-upscaler)
+- **Stable Diffusion x4 Upscaler** by Stability AI - [stabilityai/stable-diffusion-x4-upscaler](https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler)
 
 
 ## Disclaimer
