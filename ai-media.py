@@ -113,8 +113,8 @@ MODEL_REQUIREMENTS = {
     # Image Models (max_resolution based on training data and VRAM constraints)
     "runwayml/stable-diffusion-v1-5": {"vram": 4, "ram": 8, "max_resolution": (1280, 1280)},  # Trained 512x512, works to ~1280
     "stabilityai/sdxl-turbo": {"vram": 8, "ram": 16, "max_resolution": (1536, 1536)},  # Trained 1024x1024
-    "black-forest-labs/FLUX.1-schnell": {"vram": 12, "ram": 24, "max_resolution": (2048, 2048)},
-    "black-forest-labs/FLUX.1-dev": {"vram": 16, "ram": 32, "max_resolution": (2048, 2048)},
+    "black-forest-labs/FLUX.1-schnell": {"vram": 16, "ram": 70, "max_resolution": (2048, 2048)}, # ~70GB on Mac (float32)
+    "black-forest-labs/FLUX.1-dev": {"vram": 24, "ram": 80, "max_resolution": (2048, 2048)},
     # Audio Models (max_duration in seconds, based on model architecture limits)
     "facebook/musicgen-small": {"vram": 4, "ram": 8, "max_duration": 30},
     "facebook/musicgen-medium": {"vram": 8, "ram": 12, "max_duration": 60},
@@ -123,7 +123,7 @@ MODEL_REQUIREMENTS = {
     # Video Models (max_resolution based on training data)
     "damo-vilab/text-to-video-ms-1.7b": {"vram": 12, "ram": 16, "max_resolution": (1280, 720)},
     "cerspense/zeroscope_v2_576w": {"vram": 8, "ram": 12, "max_resolution": (576, 320)},
-    "THUDM/CogVideoX-5b": {"vram": 24, "ram": 32, "max_resolution": (1920, 1080)},
+    "THUDM/CogVideoX-5b": {"vram": 32, "ram": 48, "max_resolution": (1920, 1080)}, # ~50GB on Mac (float32)
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
     "stabilityai/stable-diffusion-x4-upscaler": {"vram": 8, "ram": 16, "max_resolution": (4096, 4096)},
     "stabilityai/sd-x2-latent-upscaler": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
@@ -787,7 +787,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # MPS FIX: These models need Float32/CPU on MPS
         # - Text-to-Video models: Float16 corrupts output
         # - SVD: 3D convolutions cause "Invalid buffer size" errors on MPS
-        mps_incompatible_models = ["ms-1.7b", "text-to-video-ms-1.7b", "zeroscope", "stable-video-diffusion"]
+        mps_incompatible_models = ["ms-1.7b", "text-to-video-ms-1.7b", "zeroscope", "stable-video-diffusion", "cogvideox"]
         is_mps_incompatible = any(m in model_id.lower() for m in mps_incompatible_models)
         
         if device.type == "mps" and is_mps_incompatible:

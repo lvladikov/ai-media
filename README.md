@@ -338,7 +338,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | :--- | :--- | :--- | :--- | :--- |
 | **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
 | **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
-| **CogVideoX** | `cogvideox` | Any | ~15GB | High fidelity. **Supports I2V**. |
+| **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
 
 > [!WARNING]
