@@ -45,6 +45,7 @@ logging.getLogger("diffusers").setLevel(logging.ERROR)
 # Set environment variable to suppress transformers warnings (must be before import)
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["DIFFUSERS_VERBOSITY"] = "error"
+os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 
 
 # --- Constants ---
@@ -619,7 +620,202 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
         return False
 
 
-def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", image_input=None):
+def generate_caption(input_path, device, quiet=False, model_type="florence"):
+    """
+    Generate a text description for an image or video.
+    Models: 
+      - 'florence' (Microsoft Florence-2-Large, SOTA)
+      - 'blip' (Salesforce BLIP-Large, Classic)
+    """
+    try:
+        if not quiet: print(f"👁️  Analyzing input: {input_path}")
+        
+        # ----------------------------------------------------------------
+        # MODEL: BLIP
+        # ----------------------------------------------------------------
+        if model_type == "blip":
+            from transformers import BlipProcessor, BlipForConditionalGeneration
+            from diffusers.utils import load_image
+            import torch
+            from PIL import Image
+            import cv2
+            import numpy as np
+
+            caption_model_id = "Salesforce/blip-image-captioning-large"
+            if not quiet: print(f"   Loading Caption Model: {caption_model_id}...")
+            
+            processor = BlipProcessor.from_pretrained(caption_model_id)
+            model = BlipForConditionalGeneration.from_pretrained(caption_model_id).to(device)
+            
+            # Check if video
+            ext = input_path.lower().split('.')[-1]
+            is_video = ext in ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'gif']
+            
+            if is_video:
+                 # Video Logic (Same as before)
+                cap = cv2.VideoCapture(input_path)
+                if not cap.isOpened():
+                    return "Unknown video content"
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                num_samples = 10
+                indices = np.linspace(0, total_frames - 1, num_samples, dtype=int)
+                captions = []
+                for i, idx in enumerate(indices):
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ret, frame = cap.read()
+                    if not ret: continue
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_image = Image.fromarray(rgb_frame)
+                    
+                    inputs = processor(pil_image, return_tensors="pt").to(device)
+                    out = model.generate(**inputs)
+                    frame_caption = processor.decode(out[0], skip_special_tokens=True)
+                    captions.append(frame_caption)
+                cap.release()
+                return ", ".join(captions)
+            else:
+                # Image Logic
+                raw_image = load_image(input_path).convert('RGB')
+                inputs = processor(raw_image, return_tensors="pt").to(device)
+                out = model.generate(**inputs)
+                caption = processor.decode(out[0], skip_special_tokens=True)
+                if not quiet: print(f"   Detected: '{caption}'")
+                return caption
+
+        # ----------------------------------------------------------------
+        # MODEL: Florence-2 (Default/SOTA)
+        # ----------------------------------------------------------------
+        else:
+            from transformers import AutoProcessor, AutoModelForCausalLM
+            from diffusers.utils import load_image
+            import cv2
+            import numpy as np
+            import torch
+            from PIL import Image
+            
+            # Load Florence-2 (SOTA Captioning, ~1.5GB)
+            # Note: Requires timm and trust_remote_code=True
+            caption_model_id = "microsoft/Florence-2-large"
+            
+            if not quiet: print(f"   Loading Caption Model: {caption_model_id}...")
+            
+            # Florence-2 needs device_map or manual to(device). 
+            # On MPS, manual to(device) is safer for now.
+            processor = AutoProcessor.from_pretrained(caption_model_id, trust_remote_code=True)
+            
+            # Use eager attention to avoid SDPA crashes on MPS/Mac with recent transformers
+            model = AutoModelForCausalLM.from_pretrained(
+                caption_model_id, 
+                trust_remote_code=True,
+                attn_implementation="eager"
+            ).to(device) 
+            
+            # Task prompt for Florence-2
+            task_prompt = "<MORE_DETAILED_CAPTION>"
+            
+            # Check if video
+            ext = input_path.lower().split('.')[-1]
+            is_video = ext in ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'gif']
+            
+            if is_video:
+                cap = cv2.VideoCapture(input_path)
+                if not cap.isOpened():
+                    if not quiet: print(f"⚠️  Could not open video: {input_path}")
+                    return "Unknown video content"
+                    
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                duration = total_frames / fps if fps > 0 else 0
+                
+                # Select 10 evenly distributed frames
+                num_samples = 10
+                indices = np.linspace(0, total_frames - 1, num_samples, dtype=int)
+                
+                captions = []
+                if not quiet: print(f"   Analyzing {num_samples} frames from video ({duration:.1f}s)...")
+                
+                for i, idx in enumerate(indices):
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ret, frame = cap.read()
+                    if not ret: continue
+                    
+                    # Convert BGR (OpenCV) to RGB (PIL)
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_image = Image.fromarray(rgb_frame)
+                    
+                    # Generate caption (Florence-2)
+                    inputs = processor(text=task_prompt, images=pil_image, return_tensors="pt") # .to(device) moved below
+                    
+                    # Ensure pixel_values are correct dtype if needed, though from_pretrained handles it usually.
+                    # On MPS, float32 is safest.
+                    if device.type == "mps":
+                        inputs["pixel_values"] = inputs["pixel_values"].to(device, torch.float32)
+                        inputs["input_ids"] = inputs["input_ids"].to(device)
+                    else:
+                        inputs = inputs.to(device)
+
+                    # Disable cache to avoid MPS past_key_values crash
+                    generated_ids = model.generate(
+                        input_ids=inputs["input_ids"],
+                        pixel_values=inputs["pixel_values"],
+                        max_new_tokens=1024,
+                        do_sample=False,
+                        num_beams=3,
+                        use_cache=False,
+                    )
+                    
+                    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+                    parsed_answer = processor.post_process_generation(generated_text, task=task_prompt, image_size=(pil_image.width, pil_image.height))
+                    frame_caption = parsed_answer[task_prompt]
+                    
+                    timestamp = idx / fps if fps > 0 else 0
+                    captions.append(f"[{timestamp:.1f}s]: {frame_caption}")
+                    if not quiet: print(f"   Frame {i+1}/{num_samples} ({timestamp:.1f}s): {frame_caption}")
+                    
+                cap.release()
+                
+                # Consolidated description
+                summary = ", ".join([c.split(": ")[1] for c in captions])
+                return summary 
+                
+            else:
+                # Image handling
+                raw_image = load_image(input_path).convert('RGB')
+                
+                inputs = processor(text=task_prompt, images=raw_image, return_tensors="pt") # .to(device) moved below
+                
+                # Ensure pixel_values are correct dtype if needed, though from_pretrained handles it usually.
+                # On MPS, float32 is safest.
+                if device.type == "mps":
+                    inputs["pixel_values"] = inputs["pixel_values"].to(device, torch.float32)
+                    inputs["input_ids"] = inputs["input_ids"].to(device)
+                else:
+                    inputs = inputs.to(device)
+
+                # Disable cache to avoid MPS past_key_values crash
+                generated_ids = model.generate(
+                    input_ids=inputs["input_ids"],
+                    pixel_values=inputs["pixel_values"],
+                    max_new_tokens=1024,
+                    do_sample=False,
+                    num_beams=3,
+                    use_cache=False,
+                )
+                
+                generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+                parsed_answer = processor.post_process_generation(generated_text, task=task_prompt, image_size=(raw_image.width, raw_image.height))
+                caption = parsed_answer[task_prompt]
+                
+                if not quiet: print(f"   Detected: '{caption}'")
+                return caption
+            
+    except Exception as e:
+        if not quiet: 
+             print(f"⚠️  Analysis failed: {e}")
+        return None
+
+def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", image_input=None, caption_model="florence"):
     """Generate audio using MusicGen or AudioLDM (supports Image-to-Audio via captioning)."""
     
     model_id = AUDIO_MODELS.get(model_name.lower(), model_name)
@@ -629,33 +825,20 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
     
     # --- Image-to-Audio Logic (Captioning) ---
     if image_input:
-        print(f"👁️  Analyzing input image: {image_input}")
-        try:
-            from transformers import BlipProcessor, BlipForConditionalGeneration
-            from diffusers.utils import load_image
-            
-            # Load BLIP (lightweight, ~500MB)
-            caption_model_id = "Salesforce/blip-image-captioning-base"
-            processor = BlipProcessor.from_pretrained(caption_model_id)
-            model = BlipForConditionalGeneration.from_pretrained(caption_model_id).to(device)
-            
-            raw_image = load_image(image_input).convert('RGB')
-            inputs = processor(raw_image, return_tensors="pt").to(device)
-            
-            out = model.generate(**inputs)
-            caption = processor.decode(out[0], skip_special_tokens=True)
-            
-            print(f"   Detected: '{caption}'")
+        caption = generate_caption(image_input, device, model_type=caption_model)
+        if caption:
             # Combine User Prompt + Image Caption
             # Prompt is the "Action" or "Style", Caption is the "Content"
+            if "Video Sequence Analysis" in caption: # Check if it's the raw video output (not valid here yet, need to fix generate_caption return)
+                 # Actually generate_caption currently returns the summary string for both image and video
+                 pass
+            
             full_prompt = f"{prompt}, inspired by {caption}"
             print(f"   Full Prompt: '{full_prompt}'")
-            
             # Update prompt for downstream models
             prompt = full_prompt
-            
-        except Exception as e:
-            print(f"⚠️  Image analysis failed: {e}. Proceeding with text prompt only.")
+        else:
+            print(f"⚠️  Image analysis failed. Proceeding with text prompt only.")
 
     print(f"🎵 Generating Audio")
     print(f"   Model:    {model_id}")
@@ -1847,7 +2030,7 @@ class CleanHelpFormatter(argparse.RawTextHelpFormatter):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate, upscale, and convert media using AI and FFmpeg.",
+        description="Generate, describe, upscale, and convert media using AI and FFmpeg.",
         formatter_class=CleanHelpFormatter,
         epilog="""
 Examples:
@@ -1873,6 +2056,12 @@ Examples:
   python ai-media.py -a -p "Jazz saxophone" -o jazz.mp3 -l 30s
   python ai-media.py -a -p "Rainforest" -o rain.wav --audio-model audioldm2
   python ai-media.py -a -p "Spooky" -ii ./haunted.jpg -o spooky.mp3 (Image-to-Audio)
+  python ai-media.py -a -ii ./image.jpg -cm blip (Image-to-Audio w/ BLIP)
+
+  -- Generate Description --
+  python ai-media.py -gd -ii video.mp4
+  python ai-media.py -gd -ii image.jpg -cm blip (Use simpler model)
+
 
 Supported Models:
   Images:
@@ -1890,12 +2079,16 @@ Supported Models:
   Video:
     - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
     - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
-    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (🔒 Gated - Free Login Required)
+    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (Open)
     - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
     
   Upscaling:
     - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
     - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
+    
+  Captioning:
+    - florence (default) : ~1.5GB | microsoft/Florence-2-large (SOTA Details)
+    - blip               : ~1GB   | Salesforce/blip-image-captioning-large (Simple)
         """
     )
     
@@ -1919,6 +2112,7 @@ Supported Models:
     mode_group.add_argument("-i", "--generate-image", action="store_true", help="Generate Image")
     mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
     mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
+    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video. Usage: -gd [file] OR -gd -ii [file]")
     
     # Common
     common_group = parser.add_argument_group("Common Parameters")
@@ -1934,35 +2128,48 @@ Supported Models:
     
     # Orientation (swaps w/h for portrait mode)
     common_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait"], default="landscape",
-                              help="Orientation: 'landscape' (default) or 'portrait'. Portrait swaps width/height.")
+                              help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
     
-    # Image Input (for Image-to-Video and Image-to-Audio)
-    common_group.add_argument("-ii", "--image-input", help="Input image path for Image-to-Video or Image-to-Audio generation.")
+    # Specific options
+    image_group = parser.add_argument_group("Image Options")
+    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(IMAGE_MODELS.keys())}")
+    image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
+    
+    video_group = parser.add_argument_group("Video Options")
+    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())}")
+    video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
+    video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
+    
+    audio_group = parser.add_argument_group("Audio Options")
+    audio_group.add_argument("--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
+    audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k, 48k). Default: 32000.")
+    audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
+    audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
+    
+    # Captioning Options
+    caption_group = parser.add_argument_group("Captioning Options")
+    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip"], help="Model for description generation: 'florence' (default, SOTA) or 'blip'.")
     
     # Performance Tracking
-    common_group.add_argument("--npt", "--no-performance-tracking", action="store_true", dest="no_performance_tracking",
-                              help="Disable performance tracking (prevents updating 'average_time' in performance.json).")
+    common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
     
     # Safety Checker
-    common_group.add_argument("--unsafe", action="store_true",
-                              help="Disable NSFW safety checker (reduces false positives but allows adult content).")
+    # common_group.add_argument("--unsafe", action="store_true",
+    #                           help="Disable NSFW safety checker (reduces false positives but allows adult content).")
 
     # Time/Length
-    common_group.add_argument("-l", "--length", default=DEFAULT_DURATION,
-                              help="Duration: '15s', '1h', '{m:2, s:30}'. Default: 15s")
+    # common_group.add_argument("-l", "--length", default=DEFAULT_DURATION,
+    #                           help="Duration: '15s', '1h', '{m:2, s:30}'. Default: 15s")
                               
     # Model Selection
-    model_group = parser.add_argument_group("Model Selection")
-    model_group.add_argument("--image-model", default="default", help="Model code or ID for image generation. Default: sdxl")
-    model_group.add_argument("--audio-model", default="default", help="Model code or ID for audio generation. Default: musicgen-small")
-    model_group.add_argument("--video-model", default="default", help="Model code or ID for video generation. Default: zeroscope")
+    # model_group = parser.add_argument_group("Model Selection")
+    # model_group.add_argument("--image-model", default="default", help="Model code or ID for image generation. Default: sdxl")
+    # model_group.add_argument("--audio-model", default="default", help="Model code or ID for audio generation. Default: musicgen-small")
+    # model_group.add_argument("--video-model", default="default", help="Model code or ID for video generation. Default: zeroscope")
     
     # Audio Specific
-    audio_group = parser.add_argument_group("Audio Parameters")
-    audio_group.add_argument("-m", "--sampling", help="Sampling rate (e.g. '44100', '48k'). Default: 32000")
-    audio_group.add_argument("-b", "--bit-depth", type=int, default=DEFAULT_AUDIO_BITDEPTH, help="Bit depth (16, 24). Default: 16")
 
-    audio_group.add_argument("-r", "--bit-rate", help="Bitrate (e.g. '320k').")
+
 
     # Upscaling Options (applies to both standalone and chained upscaling)
     upscale_group = parser.add_argument_group("Upscaling Options")
@@ -1974,9 +2181,10 @@ Supported Models:
     
     args = parser.parse_args()
     
-    # Prompt Validation (Required unless upscaling/converting)
+    # Prompt Validation (Required unless upscaling/converting/captioning)
     standalone_modes = (args.upscale_image or args.upscale_video or 
-                       args.convert_image or args.convert_video or args.convert_audio)
+                       args.convert_image or args.convert_video or args.convert_audio or
+                       args.generate_description)
     if not standalone_modes and not args.prompt:
         parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert Mode.\n                            (e.g. python ai-media.py -i -p \"cat\")")
     
@@ -1988,7 +2196,54 @@ Supported Models:
     if args.force:
         os.environ["AI_MEDIA_FORCE"] = "1"
     
-    # 0. Media Conversion (Highest Priority - No AI)
+    # 0. Generate Description (Captioning)
+    if args.generate_description:
+        # Determine input file
+        target_file = None
+        if args.generate_description != "USE_INPUT_IMAGE":
+            target_file = args.generate_description
+        elif args.input_image:
+            target_file = args.input_image
+            
+        if not target_file:
+            print("❌ Error: --generate-description requires a file path.\n   Usage: -gd [file]  OR  -gd -ii [file]")
+            sys.exit(1)
+        
+        device, _ = get_optimal_device_and_dtype(quiet=False)
+        caption = generate_caption(target_file, device, model_type=args.caption_model)
+        
+        if caption:
+            print(f"\n📝 Generated Description:\n{caption}\n")
+            
+            output_path = args.output
+            if not output_path:
+                 # Auto-generate filename: input_basename.txt
+                 base_name = os.path.splitext(target_file)[0]
+                 output_path = f"{base_name}.txt"
+            
+            # Ensure folder exists
+            ensure_paths(output_path)
+            
+            # check overwrite
+            if os.path.exists(output_path) and not args.force:
+                print(f"⚠️  File '{output_path}' already exists.")
+                try:
+                    choice = input(f"   Overwrite? [y/N]: ").lower().strip()
+                    if choice not in ['y', 'yes']:
+                        print("❌ Operation cancelled.")
+                        sys.exit(0)
+                except KeyboardInterrupt:
+                    print("\n❌ Operation cancelled.")
+                    sys.exit(0)
+
+            with open(output_path, "w") as f:
+                f.write(caption)
+            print(f"✅ Saved description to: {output_path}")
+        else:
+            print("❌ Failed to generate description.")
+        sys.exit(0)
+
+    # 1. Media Conversion (Highest Priority - No AI)
     if args.convert_image:
         if not args.convert_image_to:
             parser.error("Image conversion requires -cit/--convert-image-to (e.g., -ci input.gif -cit png)")
@@ -2040,8 +2295,8 @@ Supported Models:
         return
 
     # 2. Validation for Generation
-    if not any([args.generate_image, args.generate_video, args.generate_audio]):
-        parser.error("You must specify a generation mode: -i, -v, -a (or --upscale-image/--upscale-video)")
+    if not any([args.generate_image, args.generate_video, args.generate_audio, args.generate_description]):
+        parser.error("You must specify a generation mode: -i, -v, -a, -gd (or --upscale-image/--upscale-video)")
     
     # Auto-generate output filename from prompt if not provided
     if not args.output:
@@ -2249,7 +2504,7 @@ Supported Models:
                 w, 
                 h, 
                 model_name=args.video_model,
-                image_input=args.image_input,
+                image_input=args.input_image,
                 audio_prompt=args.audio_prompt
             )
             if mon_ctx: mon_ctx.__exit__(None, None, None)
@@ -2265,7 +2520,7 @@ Supported Models:
             # Resolve model ID for consistent tracking
             model_key = AUDIO_MODELS.get(args.audio_model.lower(), args.audio_model)
             if args.audio_model.lower() == "default": model_key = AUDIO_MODELS["default"]
-            hz = parse_sampling_rate(args.sampling)
+            hz = parse_sampling_rate(args.sampling_rate)
             
             # Resource check before starting
             check_resources_and_warn(model_key, duration=duration_sec, force=args.force)
@@ -2281,7 +2536,12 @@ Supported Models:
             
             mon_ctx = ResourceMonitor() if tracker else None
             if mon_ctx: mon_ctx.__enter__()
-            success = generate_audio(args.prompt, args.output, duration_sec, hz, model_name=args.audio_model, image_input=args.image_input)
+            success = generate_audio(
+                args.prompt, args.output, duration_sec, 
+                args.sampling_rate, model_name=args.audio_model,
+                image_input=args.input_image,
+                caption_model=args.caption_model
+            )
             if mon_ctx: mon_ctx.__exit__(None, None, None)
             
             if success and tracker:

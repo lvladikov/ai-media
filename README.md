@@ -1,6 +1,6 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
 
 ## Features
 
@@ -9,6 +9,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
 - 🎵 **Audio Generation** - **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
 - 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
+- 📝 **Description Generation** - Generate a description for an image or video using models like Florence/BLIP (via `transformers`).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -180,12 +181,29 @@ python ai-media.py -i -p "Cyberpunk city" --upscale -uof "city_poster.png"
 python ai-media.py -v -p "Robot dance" --upscale -uf 2.0
 ```
 
+**Description Generation (Captioning)**
+Analyze images or videos to generate text descriptions (captions).
+```bash
+# Describe an image (prints to console + saves to text file)
+python ai-media.py -gd input.jpg
+
+# Use a specific model (florence or blip)
+python ai-media.py -gd input.jpg -cm blip
+
+# Describe a video (analyzes 10 frames + summary)
+python ai-media.py -gd clip.mp4
+
+# Custom output filename
+python ai-media.py -gd input.jpg -o my_caption.txt
+```
+
 ---
 ### Generation Modes
 
 - `-i, --generate-image`: Generate an image
 - `-v, --generate-video`: Generate a video
 - `-a, --generate-audio`: Generate audio/music
+- `-gd, --generate-description`: Describe an image or video
 
 ### Examples
 
@@ -235,6 +253,9 @@ python ai-media.py -a -p "Rainforest ambience" -l 1m -o rain.wav -m 48000 -b 24 
 
 # Image-to-Audio (Generate sound matching an image)
 python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp3
+
+# Image-to-Audio with specific caption model (BLIP)
+python ai-media.py -a -p "Mystery theme" -ii "./haunted.jpg" -cm blip
 ```
 
 **AI Upscaling**
@@ -356,6 +377,13 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | :--- | :--- | :--- | :--- | :--- |
 | **SD x2 Latent** | `upscaler_x2` | ~4GB | ~8GB | **Factors ≤ 2x**. Fast, preserves original style. |
 | **SD x4 Upscaler** | `upscaler` | ~8GB | ~16GB | **Factors > 2x**. High detail, sharpens textures. |
+
+### Caption Models (`--caption-model` or `-cm`)
+
+| Model | Code | Size | Best For |
+| :--- | :--- | :--- | :--- |
+| **Florence-2 Large** | `florence` | ~1.5GB | **Default**. SOTA details, rich descriptions, "seeing" the scene. |
+| **BLIP Large** | `blip` | ~0.9GB | **Legacy**. Simple, concise captions. Faster but less detailed. |
 
 ### AI Upscaling Architecture
 
@@ -550,6 +578,8 @@ This project uses the following open-source libraries:
 | [safetensors](https://github.com/huggingface/safetensors) | Safe model loading format | [huggingface/safetensors](https://github.com/huggingface/safetensors) |
 | [scipy](https://github.com/scipy/scipy) | Audio processing mathematics | [scipy/scipy](https://github.com/scipy/scipy) |
 | [opencv-python](https://github.com/opencv/opencv-python) | Video frame processing | [opencv/opencv](https://github.com/opencv/opencv) |
+| [timm](https://github.com/huggingface/pytorch-image-models) | Image models (Required for Florence-2) | [huggingface/pytorch-image-models](https://github.com/huggingface/pytorch-image-models) |
+| [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
 
 **AI Models used:**
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
@@ -563,6 +593,8 @@ This project uses the following open-source libraries:
 - **Stable Video Diffusion** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion x2 Latent Upscaler** by Stability AI - [stabilityai/sd-x2-latent-upscaler](https://huggingface.co/stabilityai/sd-x2-latent-upscaler)
 - **Stable Diffusion x4 Upscaler** by Stability AI - [stabilityai/stable-diffusion-x4-upscaler](https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler)
+- **Florence-2** by Microsoft - [microsoft/Florence-2-large](https://huggingface.co/microsoft/Florence-2-large)
+- **BLIP** by Salesforce - [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large)
 
 
 ## Disclaimer

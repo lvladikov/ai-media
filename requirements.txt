@@ -9,3 +9,5 @@ opencv-python>=4.9.0
 huggingface_hub[cli]>=0.20.0
 psutil>=5.9.0
 protobuf>=4.0.0
+timm>=0.9.10
+einops>=0.7.0
