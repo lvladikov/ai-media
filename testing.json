@@ -147,6 +147,78 @@
       ]
     },
     {
+      "name": "Video - MKV Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mkv -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.mkv"
+      ]
+    },
+    {
+      "name": "Video - WebM Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.webm -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.webm"
+      ]
+    },
+    {
+      "name": "Video - WMV Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.wmv -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.wmv"
+      ]
+    },
+    {
+      "name": "Video - AVI Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.avi -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.avi"
+      ]
+    },
+    {
+      "name": "Video - MOV Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mov -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.mov"
+      ]
+    },
+    {
+      "name": "Audio - WAV Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.wav -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.wav"
+      ]
+    },
+    {
+      "name": "Audio - FLAC Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.flac -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.flac"
+      ]
+    },
+    {
+      "name": "Audio - OGG Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.ogg -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.ogg"
+      ]
+    },
+    {
+      "name": "Audio - AAC Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.aac -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.aac"
+      ]
+    },
+    {
       "name": "Audio - MusicGen Small",
       "command": "-a -p \"Piano melody\" -o testData/outputs/aud_musicgen_small.mp3 -l 2s --audio-model musicgen-small --force",
       "expectedInputItems": [],

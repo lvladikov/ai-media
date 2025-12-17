@@ -344,6 +344,11 @@ python ai-media.py -i -p "Forest landscape" -o "./outputs/landscapes/forest.jpg"
 
 # Advanced JSON size & Model selection
 python ai-media.py -i -p "Portrait of a wizard" -o wizard.png --size "{w: 512, h: 768}" --image-model sd-1.5
+
+# Different output formats (auto-detected from extension)
+python ai-media.py -i -p "Logo design" -o logo.png           # PNG (lossless, transparency)
+python ai-media.py -i -p "Web banner" -o banner.webp         # WebP (modern, small size)
+python ai-media.py -i -p "Animation frame" -o frame.gif      # GIF
 ```
 
 **Video Generation**
@@ -362,6 +367,12 @@ python ai-media.py -v -p "Cyberpunk dancers" --audio-prompt "Heavy techno beat" 
 
 # Long video (1m 30s) using Zeroscope model
 python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -o flight.mp4 --video-model zeroscope
+
+# Different output formats (auto-detected from extension)
+python ai-media.py -v -p "Nature scene" -l 5s -o nature.mkv    # MKV (H.264)
+python ai-media.py -v -p "Web clip" -l 5s -o clip.webm         # WebM (VP9)
+python ai-media.py -v -p "Legacy format" -l 5s -o old.avi      # AVI (MPEG4)
+python ai-media.py -v -p "Windows format" -l 5s -o win.wmv     # WMV
 ```
 
 **Audio Generation**
@@ -384,8 +395,13 @@ python ai-media.py -a -ii "./beach.jpg" -o beach_sounds.mp3
 # Video-to-Audio (Auto-Caption Video Frames + Audio Gen)
 python ai-media.py -a -ii "./clip.mp4" -l 10s -o soundcheck.mp3
 
-# Image-to-Audio pluss Prompt with specific caption model (BLIP)
+# Image-to-Audio plus Prompt with specific caption model (BLIP)
 python ai-media.py -a -p "Mystery theme" -ii "./haunted.jpg" -cm blip
+
+# Different output formats (auto-detected from extension)
+python ai-media.py -a -p "Epic orchestra" -l 30s -o epic.flac   # FLAC (lossless)
+python ai-media.py -a -p "Game music" -l 30s -o game.ogg        # OGG Vorbis
+python ai-media.py -a -p "Podcast intro" -l 10s -o intro.aac    # AAC
 ```
 
 **AI Upscaling**

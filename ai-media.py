@@ -1302,6 +1302,32 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         return False
 
 
+def get_video_encoding_params(output_path):
+    """Get FFmpeg encoding parameters based on output file extension.
+    
+    Returns a list of FFmpeg arguments for video codec, pixel format, and audio codec.
+    Supports: mp4, mkv, mov, webm, wmv, avi
+    """
+    ext = os.path.splitext(output_path)[1].lower()
+    
+    # Default: H.264 for broad compatibility
+    if ext in ['.mp4', '.m4v']:
+        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+    elif ext == '.mkv':
+        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+    elif ext == '.mov':
+        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+    elif ext == '.webm':
+        return ["-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:v", "2M"]
+    elif ext == '.wmv':
+        return ["-c:v", "wmv2", "-c:a", "wmav2", "-b:v", "2M"]
+    elif ext == '.avi':
+        return ["-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-c:a", "mp3", "-b:v", "2M"]
+    else:
+        # Fallback to H.264
+        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+
+
 def generate_video(prompt, output_path, duration, width, height, model_name="default", image_input=None, audio_prompt=None):
     """Generate video (Text-to-Video or Image-to-Video) with optional Audio."""
     
@@ -1420,12 +1446,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         temp_raw_video = video_out + ".raw.mp4"
         export_to_video(video_frames, temp_raw_video, fps=7 if "stable-video-diffusion" in model_id.lower() else 16) 
         
-        # Re-encode with FFmpeg for universal playback
+        # Re-encode with FFmpeg for universal playback (format-aware)
         import subprocess
+        encoding_params = get_video_encoding_params(video_out)
         try:
             subprocess.run([
                 "ffmpeg", "-y", "-i", temp_raw_video,
-                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                *encoding_params,
                 video_out
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             os.remove(temp_raw_video)
@@ -1771,13 +1798,18 @@ def simple_upscale_video(video_path, output_path, factor=2.0):
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # FFmpeg upscale with Lanczos
+        # FFmpeg upscale with Lanczos (format-aware encoding)
+        encoding_params = get_video_encoding_params(str(output_path))
+        # For upscaling, we want to preserve audio and use high quality
+        # Filter out audio codec from encoding_params and use -c:a copy
+        video_params = [p for i, p in enumerate(encoding_params) if not (encoding_params[i-1:i] == ["-c:a"] or p in ["aac", "libopus", "wmav2", "mp3"])]
+        video_params = [p for p in video_params if p != "-c:a"]
+        
         cmd = [
             "ffmpeg", "-y", "-i", str(video_path),
             "-vf", f"scale={target_w}:{target_h}:flags=lanczos",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+            *video_params,
             "-c:a", "copy",  # Preserve audio
-            "-pix_fmt", "yuv420p",
             str(output_path),
             "-loglevel", "warning"
         ]
@@ -2207,12 +2239,17 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
+        # Get format-specific encoding params
+        encoding_params = get_video_encoding_params(output_path)
+        # Remove audio codec params since we're creating from images
+        video_params = [p for i, p in enumerate(encoding_params) if not (encoding_params[i-1:i] == ["-c:a"] or p in ["aac", "libopus", "wmav2", "mp3"])]
+        video_params = [p for p in video_params if p != "-c:a"]
+        
         cmd = [
             "ffmpeg", "-y",
             "-framerate", str(fps),
             "-i", str(temp_dir / "upscaled_%05d.png"),
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
+            *video_params,
             output_path
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -2355,7 +2392,8 @@ def convert_video_file(input_path, target):
     
     try:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["ffmpeg", "-y", "-i", input_path, "-c:v", "libx264", "-c:a", "aac", output_path], 
+        encoding_params = get_video_encoding_params(output_path)
+        subprocess.run(["ffmpeg", "-y", "-i", input_path, *encoding_params, output_path], 
                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print(f"✅ Converted video saved to {output_path}")
         return True
