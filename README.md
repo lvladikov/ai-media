@@ -1,6 +1,6 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing media with AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
 
 ## Features
 
@@ -8,7 +8,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🎨 **Image Generation** - Text-to-Image using models like Flux/SDXL (via `diffusers`).
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
 - 🎵 **Audio Generation** - **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
-- 📈 **AI Upscaling** - Upscale images and videos using Stable Diffusion models (x2 Latent, x4 Standard). Supports custom factors and chained workflows.
+- 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -90,6 +90,10 @@ python ai-media.py -ui "my-image.jpg" -uf 2.0
 
 # Upscale a video
 python ai-media.py -uv "my-video.mp4" -uf 2.0
+
+# Simple upscale (no AI - uses Lanczos/FFmpeg, very fast)
+python ai-media.py -ui "photo.jpg" -uf 4 -su
+python ai-media.py -uv "clip.mp4" -uf 2 -su
 ```
 
 | Argument | Description | Default |
@@ -98,7 +102,8 @@ python ai-media.py -uv "my-video.mp4" -uf 2.0
 | `-uv`, `--upscale-video` | Path to the video file to upscale. | `None` |
 | `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
 | `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
-| `-us`, `--upscale-strength` | *Experimental*: Noise strength. | `0.0` |
+| `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Higher values allow the model to generate more texture/detail but may diverge from the original. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
+| `-su`, `--simple-upscale` | Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast, preserves original quality. | `False` |
 
 > [!NOTE]
 > **Resource Safety Check:** Before starting, the script calculates the target resolution (e.g., 8K = 33MP) and estimated RAM usage. If it detects a risk of massive swapping or system freeze ("Billboard Sizing"), it will warn you and ask for confirmation. Use `--force` to bypass this.
@@ -225,9 +230,18 @@ python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp
 # Standalone Image Upscale (input.jpg -> output_upscaled.png)
 python ai-media.py -ui input.jpg
 
-# Custom Upscale Factor (e.g., 2x, 8x)
-# Note: Factors > 4x use multi-pass upscaling (slower but necessary)
-python ai-media.py -ui input.jpg -uf 8x
+# Default (faithful upscaling, less artifacts)
+python ai-media.py -ui original.jpg -uf 4.0
+
+# If you want MORE detail generation (real photos, very low-res inputs)
+python ai-media.py -ui photo.jpg -uf 4.0 -us 0.3
+
+# Maximum creative freedom (may diverge from original)
+python ai-media.py -ui input.jpg -uf 4.0 -us 0.8
+
+# Custom Upscale Factor (e.g., 2x, 6x, 8x)
+# Smart multi-stage: 6x = 4x AI + 1.5x Lanczos, 8x = 4x AI + 2x AI
+python ai-media.py -ui input.jpg -uf 6x
 
 # Upscale Video (Frame-by-Frame, slow but high quality)
 python ai-media.py -uv clip.mp4
@@ -267,6 +281,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
 | `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
+| `-otn, --orientation` | `landscape` (default) or `portrait`. Portrait swaps width/height - **recommended for single-person portraits** to avoid duplicate faces. |
 | `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
 | `-ii, --image-input` | Source image path for **Image-to-Video** generation. |
 | `--npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
@@ -332,15 +347,30 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 ### AI Upscaling Architecture
 
-The script uses a **Dual-Model Approach** to balance speed and quality:
+The script uses a **Smart Multi-Stage Approach** to balance speed and quality:
 
-1.  **Small Boosts (≤ 2.0x)**: Uses the **Latent Upscaler (`sd-x2-latent-upscaler`)**.
-    *   **Why?** It works in "latent space" (like the generator), making it fast and excellent at preserving the original image's style and composition without hallucinating weird details.
-    *   *Perfect for: Sharpening 720p to 1080p, or 3K to 4K.*
+| Factor | AI Passes | Final Resize | Example |
+| :--- | :--- | :--- | :--- |
+| **≤ 2x** | 1x x2 Latent | None | 720p → 1080p |
+| **3x** | 1x x2 Latent | 1.5x Lanczos | 720p → ~2K |
+| **4x** | 1x x4 Upscaler | None | 720p → ~3K |
+| **5x** | 1x x4 Upscaler | 1.25x Lanczos | 720p → ~4K |
+| **6x** | 1x x4 Upscaler | 1.5x Lanczos | 720p → ~4K |
+| **8x** | 1x x4 + 1x x2 | None | 720p → ~6K |
+| **10x** | 1x x4 + 1x x2 | 1.25x Lanczos | 720p → ~7K |
 
-2.  **Large Boosts (> 2.0x)**: Uses the **Super-Resolution Upscaler (`stable-diffusion-x4-upscaler`)**.
-    *   **Why?** It generates brand new texture details that didn't exist before.
-    *   **Supersampling**: If you ask for 3x (e.g. 720p -> 4K), the model internally generates a **4x** image (Supersampling) and then carefully downscales it to your exact target. This results in cleaner edges than generating at the lower resolution directly
+**Model Details:**
+- **SD x2 Latent** (`upscaler_x2`): Works in latent space, fast and faithful to original style.
+- **SD x4 Upscaler** (`upscaler`): Generates new texture details. Supports `--upscale-strength`.
+- **Lanczos**: High-quality non-AI resize for fractional remainder.
+
+> [!TIP]
+> **Reducing Upscaling Artifacts:** By default, the x4 upscaler uses `noise_level=0` which stays faithful to the original image. If your upscaled images look too "painted" or have artifacts:
+> - Keep `--upscale-strength 0.0` (default) for most AI-generated images
+> - Try `-us 0.2` to `-us 0.5` if you want more detail generation (real photos)
+> - Higher values (`-us 0.8+`) give the model more creative freedom but may diverge from the original
+>
+> The upscaler also uses negative prompts internally to reduce blur, noise, and JPEG artifacts.
 
 
 ## Supported Resolutions & Times
@@ -440,6 +470,15 @@ python ai-media.py -i -p "Haunted house at night" -o haunted.jpg --unsafe
 > Using `--unsafe` disables all content filtering. You are responsible for ensuring your prompts and outputs comply with applicable laws and ethical guidelines.
 
 ## Troubleshooting
+
+### ❓ Duplicate/Cloned Faces in Portraits
+**Symptom**: When generating a portrait of "one person", you get two identical or near-identical faces.
+**Cause**: SDXL-Turbo on wide aspect ratios (like 1280x720) tends to fill horizontal space with duplicates. The model's training data includes many multi-person shots at these ratios.
+**Solution**: Use `-otn portrait` to swap to vertical orientation:
+```bash
+python ai-media.py -i -p "Portrait of a woman" -otn portrait
+# Generates at 720x1280 instead of 1280x720
+```
 
 ### ❌ Python Not Found / Module Errors
 **Error**: `python: command not found` or `ModuleNotFoundError: No module named 'diffusers'`

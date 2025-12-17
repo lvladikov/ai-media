@@ -1106,9 +1106,142 @@ def check_resources_and_confirm(w, h, f, dev):
         return confirm == 'y'
     return True
 
+
+def simple_upscale_image(image_path, output_path, factor=2.0):
+    """Simple non-AI image upscaling using PIL Lanczos interpolation.
+    
+    Fast, preserves original quality without AI hallucination.
+    Uses Lanczos algorithm which is considered the best for downscaling/upscaling.
+    """
+    from PIL import Image
+    
+    print(f"🔍 Simple Upscaling Image: {image_path}")
+    print(f"   Method: PIL Lanczos (No AI)")
+    print(f"   Factor: {factor}x")
+    
+    # Pre-flight check: Avoid wasting processing time if output exists
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            print(f"\n⚠️  Output file already exists: {output_path}")
+            confirm = input("   Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted to prevent overwrite.")
+                return False
+        else:
+            print(f"   ⚠️  Overwriting existing file (--force).")
+    
+    try:
+        image = Image.open(image_path).convert("RGB")
+        orig_w, orig_h = image.size
+        target_w = int(orig_w * factor)
+        target_h = int(orig_h * factor)
+        
+        print(f"   {orig_w}x{orig_h} → {target_w}x{target_h}")
+        
+        upscaled = image.resize((target_w, target_h), Image.LANCZOS)
+        
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        upscaled.save(output_path)
+        
+        print(f"✅ Simple upscaled image saved to {output_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Simple upscaling failed: {e}")
+        return False
+
+
+def simple_upscale_video(video_path, output_path, factor=2.0):
+    """Simple non-AI video upscaling using FFmpeg scale filter.
+    
+    Fast, uses FFmpeg's high-quality Lanczos scaling.
+    """
+    import subprocess
+    
+    print(f"🔍 Simple Upscaling Video: {video_path}")
+    print(f"   Method: FFmpeg Lanczos (No AI)")
+    print(f"   Factor: {factor}x")
+    
+    # Pre-flight check: Avoid wasting processing time if output exists
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            print(f"\n⚠️  Output file already exists: {output_path}")
+            confirm = input("   Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted to prevent overwrite.")
+                return False
+        else:
+            print(f"   ⚠️  Overwriting existing file (--force).")
+    
+    try:
+        # Get video dimensions first
+        probe_cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0:s=x",
+            str(video_path)
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"❌ Failed to probe video: {result.stderr}")
+            return False
+        
+        orig_w, orig_h = map(int, result.stdout.strip().split('x'))
+        target_w = int(orig_w * factor)
+        target_h = int(orig_h * factor)
+        
+        # FFmpeg requires even dimensions
+        target_w = target_w if target_w % 2 == 0 else target_w + 1
+        target_h = target_h if target_h % 2 == 0 else target_h + 1
+        
+        print(f"   {orig_w}x{orig_h} → {target_w}x{target_h}")
+        
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # FFmpeg upscale with Lanczos
+        cmd = [
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-vf", f"scale={target_w}:{target_h}:flags=lanczos",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+            "-c:a", "copy",  # Preserve audio
+            "-pix_fmt", "yuv420p",
+            str(output_path),
+            "-loglevel", "warning"
+        ]
+        
+        print("   ⏳ Processing with FFmpeg...")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"❌ FFmpeg failed: {result.stderr}")
+            return False
+        
+        print(f"✅ Simple upscaled video saved to {output_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Simple upscaling failed: {e}")
+        return False
+
 def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
-    """Upscale an image using Stable Diffusion x4 Upscaler.
-       Supports multi-pass for factors > 4x (e.g. 8x = 4x -> 4x -> resize)."""
+    """Upscale an image using smart multi-stage AI upscaling.
+       
+       Uses optimal combination of x4, x2 AI passes + final Lanczos resize:
+       - 6x  → 4x AI + 1.5x Lanczos
+       - 8x  → 4x AI + 2x AI
+       - 10x → 4x AI + 2x AI + 1.25x Lanczos
+       
+       Args:
+           image_path: Path to image to upscale
+           output_path: Output file path
+           strength: Noise strength 0.0-1.0 (x4 upscaler only). Higher values add more
+                     noise, allowing the model to generate more details/texture but
+                     potentially diverging from the original. Default 0.0 keeps original.
+           factor: Upscale factor (e.g., 2.0, 4.0, 6.0, 8.0)
+    """
     
     
     # Select Model based on factor
@@ -1120,6 +1253,19 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
     print(f"🚀 Upscaling Image: {image_path}")
     print(f"   Model: {model_id}")
     print(f"   Target Factor: {factor}x")
+    
+    # Noise level for x4 upscaler (maps 0.0-1.0 to 0-100)
+    # Default to 0 (faithful to original) - user can increase for more detail generation
+    noise_level = int(strength * 100)
+    
+    if use_x2_model:
+        if strength > 0:
+            print(f"   ⚠️  Note: x2 Latent Upscaler does not support --upscale-strength. Ignored.")
+    else:
+        if strength > 0:
+            print(f"   Noise Level: {noise_level} (strength={strength} - more creative/details)")
+        else:
+            print(f"   Noise Level: {noise_level} (faithful to original)")
     
     # Pre-flight check: Avoid wasting processing time if output exists
     if Path(output_path).exists():
@@ -1164,53 +1310,91 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
              print("❌ Upload aborted by user.")
              return False
 
-        # Load Pipeline
-        print(f"🔗 Loading Upscale Model ({'x2 Latent' if use_x2_model else 'x4 Std'})...")
+        # ===== SMART MULTI-STAGE UPSCALING =====
+        # Strategy: Use optimal combination of 4x, 2x AI passes + final Lanczos resize
+        # Examples:
+        #   6x  → 4x AI + 1.5x Lanczos
+        #   8x  → 4x AI + 2x AI  
+        #   10x → 4x AI + 2x AI + 1.25x Lanczos
+        #   3x  → 2x AI + 1.5x Lanczos
+        #   5x  → 4x AI + 1.25x Lanczos
         
-        if use_x2_model:
-            pipe = StableDiffusionLatentUpscalePipeline.from_pretrained(
-                model_id,
-                torch_dtype=dtype,
-            )
-        else:
-            pipe = StableDiffusionUpscalePipeline.from_pretrained(
-                model_id, 
-                torch_dtype=dtype,
-                variant="fp16" if dtype == torch.float16 else None
-            )
+        # Calculate optimal pass sequence
+        passes = []
+        remaining = factor
+        
+        while remaining >= 2.0:
+            if remaining >= 4.0:
+                passes.append(('x4', 4.0))
+                remaining /= 4.0
+            elif remaining >= 2.0:
+                passes.append(('x2', 2.0))
+                remaining /= 2.0
+        
+        # Remaining factor will be handled by Lanczos at the end
+        final_lanczos_factor = remaining if remaining > 1.0 else None
+        
+        # Display the plan
+        print(f"\n   📋 Upscale Plan:")
+        for i, (model_type, scale) in enumerate(passes, 1):
+            print(f"      Pass {i}: {model_type} AI ({scale}x)")
+        if final_lanczos_factor:
+            print(f"      Final: Lanczos resize ({final_lanczos_factor:.2f}x)")
+        print("")
+        
+        # Load both pipelines if needed (lazy loading)
+        pipe_x2 = None
+        pipe_x4 = None
+        
+        def get_pipeline(model_type):
+            nonlocal pipe_x2, pipe_x4
             
-        # Memory Optimizations
-        # 1. Use CPU Offload (or just move to device if already CPU)
-        if device.type != "cpu":
-             pipe.enable_model_cpu_offload() 
-        else:
-             pipe.to(device)
+            if model_type == 'x2':
+                if pipe_x2 is None:
+                    print(f"   🔗 Loading x2 Latent Upscaler...")
+                    pipe_x2 = StableDiffusionLatentUpscalePipeline.from_pretrained(
+                        IMAGE_MODELS['upscaler_x2'],
+                        torch_dtype=dtype,
+                    )
+                    if device.type != "cpu":
+                        pipe_x2.enable_model_cpu_offload()
+                    else:
+                        pipe_x2.to(device)
+                    if hasattr(pipe_x2, 'vae') and hasattr(pipe_x2.vae, 'enable_tiling'):
+                        pipe_x2.vae.enable_tiling()
+                return pipe_x2, 64  # alignment requirement
+            else:
+                if pipe_x4 is None:
+                    print(f"   🔗 Loading x4 Upscaler...")
+                    pipe_x4 = StableDiffusionUpscalePipeline.from_pretrained(
+                        IMAGE_MODELS['upscaler'],
+                        torch_dtype=dtype,
+                        variant="fp16" if dtype == torch.float16 else None
+                    )
+                    if device.type != "cpu":
+                        pipe_x4.enable_model_cpu_offload()
+                    else:
+                        pipe_x4.to(device)
+                    if hasattr(pipe_x4, 'vae') and hasattr(pipe_x4.vae, 'enable_tiling'):
+                        pipe_x4.vae.enable_tiling()
+                return pipe_x4, 8  # alignment requirement
         
-        # Note: No MPS specific tiling/slicing needed here because we forced CPU above.
-        # But we still enable VAE Tiling if available to save System RAM.
-        if hasattr(pipe, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
-             print("   ✓ Enabling VAE Tiling (Memory Optimization)")
-             pipe.vae.enable_tiling()
+        # Upscaling prompts (neutral to avoid hallucination)
+        upscale_prompt = "sharp, high resolution"
+        negative_prompt = "blur, noise, artifacts, distortion, jpeg artifacts, oversaturated, low quality"
         
-        # Recursive Upscaling Loop
         current_image = image
-        current_scale = 1.0
-        pass_idx = 1
         
-        # Decide base step scale
-        step_scale = 2.0 if use_x2_model else 4.0
-        
-        while current_scale < factor:
+        for pass_idx, (model_type, step_scale) in enumerate(passes, 1):
             print("")
-            print("="*60)
-            print(f"🎨 Pass {pass_idx}: Upscaling {step_scale}x (Internal Base)...")
-            print("="*60)
+            print("=" * 60)
+            print(f"🎨 Pass {pass_idx}/{len(passes)}: {model_type} AI Upscaling ({step_scale}x)")
+            print("=" * 60)
             print("")
+            
+            pipe, alignment = get_pipeline(model_type)
             
             # --- DIMENSION ALIGNMENT FIX ---
-            # x2 latent upscaler requires dimensions divisible by 64 (latent space)
-            # x4 upscaler requires dimensions divisible by 8 (standard SD requirement)
-            alignment = 64 if use_x2_model else 8
             img_w, img_h = current_image.size
             pad_w = (alignment - (img_w % alignment)) % alignment
             pad_h = (alignment - (img_h % alignment)) % alignment
@@ -1234,12 +1418,23 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
             else:
                 padded_image = current_image
             
-            # x2 model works better with fewer steps usually? default is fine.
-            upscaled_result = pipe(
-                prompt="High quality, detailed, sharp, 8k", 
-                image=padded_image, 
-                num_inference_steps=20,
-            ).images[0]
+            # Run upscaling with model-specific parameters
+            if model_type == 'x2':
+                # x2 Latent Upscaler: doesn't support noise_level or negative_prompt
+                upscaled_result = pipe(
+                    prompt=upscale_prompt, 
+                    image=padded_image, 
+                    num_inference_steps=50,
+                ).images[0]
+            else:
+                # x4 Upscaler: supports noise_level and negative_prompt
+                upscaled_result = pipe(
+                    prompt=upscale_prompt, 
+                    negative_prompt=negative_prompt,
+                    image=padded_image, 
+                    num_inference_steps=50,
+                    noise_level=noise_level,
+                ).images[0]
             
             # Crop back to target dimensions (remove padding effect)
             target_w_pass = int(img_w * step_scale)
@@ -1249,21 +1444,21 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
             else:
                 current_image = upscaled_result
             
-            current_scale *= step_scale
-            pass_idx += 1
+            print(f"   ✓ Pass {pass_idx} complete: {current_image.size[0]}x{current_image.size[1]}")
         
-        # Final Resize to exact factor
+        # Final Resize to exact factor using Lanczos (high-quality non-AI resize)
         target_w = int(orig_w * factor)
         target_h = int(orig_h * factor)
         
         if current_image.size != (target_w, target_h):
-            print(f"   ↘️  Resizing final result to exact {factor}x ({target_w}x{target_h})...")
+            actual_lanczos = target_w / current_image.size[0]
+            print(f"\n   ↘️  Lanczos resize ({actual_lanczos:.2f}x) to exact target: {target_w}x{target_h}")
             current_image = current_image.resize((target_w, target_h), Image.LANCZOS)
         
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         current_image.save(output_path)
-        print(f"✅ Upscaled image saved to {output_path}")
+        print(f"\n✅ Upscaled image saved to {output_path}")
         return True
         
     except Exception as e:
@@ -1735,6 +1930,10 @@ Supported Models:
     common_group.add_argument("-s", "--size",
                               help="Resolution for Image/Video: '720p', '1080p', '4k', '8k', 'HD', '1280x720'. Default: 720p")
     
+    # Orientation (swaps w/h for portrait mode)
+    common_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait"], default="landscape",
+                              help="Orientation: 'landscape' (default) or 'portrait'. Portrait swaps width/height.")
+    
     # Image Input (for Image-to-Video and Image-to-Audio)
     common_group.add_argument("-ii", "--image-input", help="Input image path for Image-to-Video or Image-to-Audio generation.")
     
@@ -1769,6 +1968,7 @@ Supported Models:
     upscale_group.add_argument("--upscale", action="store_true", help="Enable AI Upscaling after generation (chained mode).")
     upscale_group.add_argument("-uof", "--upscaled-output-file", help="Custom filename for the upscaled output (e.g. 'highres.png').")
     upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
+    upscale_group.add_argument(\"-su\", \"--simple-upscale\", action=\"store_true\", help=\"Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast.\")
     
     args = parser.parse_args()
     
@@ -1816,15 +2016,25 @@ Supported Models:
     if args.upscale_image:
         if not args.output:
              name, ext = os.path.splitext(args.upscale_image)
-             args.output = f"{name}_upscaled_{uf}x.png"
-        upscale_image_file(args.upscale_image, args.output, args.upscale_strength, factor=uf)
+             suffix = "simple" if args.simple_upscale else "upscaled"
+             args.output = f"{name}_{suffix}_{uf}x.png"
+        
+        if args.simple_upscale:
+            simple_upscale_image(args.upscale_image, args.output, factor=uf)
+        else:
+            upscale_image_file(args.upscale_image, args.output, args.upscale_strength, factor=uf)
         return
 
     if args.upscale_video:
         if not args.output:
              name, ext = os.path.splitext(args.upscale_video)
-             args.output = f"{name}_upscaled_{uf}x.mp4"
-        upscale_video_file(args.upscale_video, args.output, args.upscale_strength, factor=uf)
+             suffix = "simple" if args.simple_upscale else "upscaled"
+             args.output = f"{name}_{suffix}_{uf}x.mp4"
+        
+        if args.simple_upscale:
+            simple_upscale_video(args.upscale_video, args.output, factor=uf)
+        else:
+            upscale_video_file(args.upscale_video, args.output, args.upscale_strength, factor=uf)
         return
 
     # 2. Validation for Generation
@@ -1901,6 +2111,11 @@ Supported Models:
             model_key = IMAGE_MODELS.get(args.image_model.lower(), args.image_model)
             if args.image_model.lower() == "default": model_key = IMAGE_MODELS["default"]
             w, h = parse_size(final_size)
+            
+            # Apply orientation swap if portrait mode
+            if args.orientation == "portrait":
+                w, h = h, w
+                print(f"📐 Portrait orientation: swapped to {w}x{h}")
             
             # --- Proactive Optimization for High-Res (4K+) ---
             # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
