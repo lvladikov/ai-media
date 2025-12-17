@@ -25,11 +25,43 @@
       ]
     },
     {
+      "name": "Image - Flux",
+      "command": "-i -p \"A blue car\" -o testData/outputs/img_flux.jpg -s 64x64 --image-model flux --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_flux.jpg"
+      ]
+    },
+    {
+      "name": "Image - Flux Dev",
+      "command": "-i -p \"A blue car\" -o testData/outputs/img_flux_dev.jpg -s 64x64 --image-model flux-dev --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_flux_dev.jpg"
+      ]
+    },
+    {
       "name": "Image - Portrait Orientation",
       "command": "-i -p \"A tall tree\" -o testData/outputs/img_portrait.jpg -s 64x64 -otn portrait --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/img_portrait.jpg"
+      ]
+    },
+    {
+      "name": "Image - Landscape Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_landscape.jpg -s 64x64 -otn landscape --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_landscape.jpg"
+      ]
+    },
+    {
+      "name": "Image - Square Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_square.jpg -s 64x64 -otn square --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_square.jpg"
       ]
     },
     {
@@ -46,6 +78,30 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/frog.png"
+      ]
+    },
+    {
+      "name": "Image - JPG Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f jpg -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.jpg"
+      ]
+    },
+    {
+      "name": "Image - WebP Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f webp -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.webp"
+      ]
+    },
+    {
+      "name": "Image - GIF Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f gif -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.gif"
       ]
     },
     {
@@ -70,6 +126,24 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/vid_ms17b.mp4"
+      ]
+    },
+    {
+      "name": "Video - CogVideoX",
+      "command": "-v -p \"A dog running\" -o testData/outputs/vid_cogvideox.mp4 -l 1s --video-model cogvideox --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_cogvideox.mp4"
+      ]
+    },
+    {
+      "name": "Video - Stable Video Diffusion (I2V)",
+      "command": "-v -ii testData/inputs/sample.jpg -o testData/outputs/vid_svd.mp4 -l 1s --video-model svd --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/vid_svd.mp4"
       ]
     },
     {
@@ -333,61 +407,90 @@
       "name": "Interactive - Jump 1 (Image)",
       "command": "--interactive 1",
       "interactive": true,
-      "expectedStdoutItems": ["Image Generation", "Select Model"]
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Select Model"
+      ]
     },
     {
       "name": "Interactive - Jump 1/1 (SDXL)",
       "command": "--interactive 1/1",
       "interactive": true,
-      "expectedStdoutItems": ["Image Generation", "Model: sdxl"]
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: sdxl"
+      ]
     },
     {
       "name": "Interactive - Jump 2 (Video)",
       "command": "--interactive 2",
       "interactive": true,
-      "expectedStdoutItems": ["Video Generation"]
+      "expectedStdoutItems": [
+        "Video Generation"
+      ]
     },
     {
       "name": "Interactive - Jump 3 (Audio)",
       "command": "--interactive 3",
       "interactive": true,
-      "expectedStdoutItems": ["Audio Generation", "Select Model"]
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Select Model"
+      ]
     },
     {
       "name": "Interactive - Jump 3/5 (Bark)",
       "command": "--interactive 3/5",
       "interactive": true,
-      "expectedStdoutItems": ["Audio Generation", "Model: bark"]
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: bark"
+      ]
     },
     {
       "name": "Interactive - Jump 5 (Upscale)",
       "command": "--interactive 5",
       "interactive": true,
-      "expectedStdoutItems": ["Upscale Media"]
+      "expectedStdoutItems": [
+        "Upscale Media"
+      ]
     },
     {
       "name": "Interactive - Jump 7 (Caption)",
       "command": "--interactive 7",
       "interactive": true,
-      "expectedStdoutItems": ["Generate Caption"]
+      "expectedStdoutItems": [
+        "Generate Caption"
+      ]
     },
     {
       "name": "Interactive - Jump 8 (SysInfo)",
       "command": "--interactive 8",
       "interactive": true,
-      "expectedStdoutItems": ["System Information", "OS:", "CPU:", "RAM:", "GPU:"]
+      "expectedStdoutItems": [
+        "System Information",
+        "OS:",
+        "CPU:",
+        "RAM:",
+        "GPU:"
+      ]
     },
     {
       "name": "Interactive - Jump sysinfo",
       "command": "--interactive sysinfo",
       "interactive": true,
-      "expectedStdoutItems": ["System Information"]
+      "expectedStdoutItems": [
+        "System Information"
+      ]
     },
     {
-        "name": "Interactive - Jump image/sdxl",
-        "command": "--interactive image/sdxl",
-        "interactive": true,
-        "expectedStdoutItems": ["Image Generation", "Model: sdxl"]
+      "name": "Interactive - Jump image/sdxl",
+      "command": "--interactive image/sdxl",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: sdxl"
+      ]
     }
   ]
 }

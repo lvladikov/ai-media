@@ -3433,8 +3433,11 @@ def run_tests(verbose=False):
                 if is_interactive:
                     if verbose: print(f"⏳ Waiting {interactive_wait}s for interactive output...")
                     time.sleep(interactive_wait)
-                    # Send SIGINT to exit interactive loop
-                    current_process.send_signal(signal.SIGINT)
+                    # Terminate interactive process (Windows-compatible)
+                    if os.name == 'nt':
+                        current_process.terminate()  # Windows: terminate gracefully
+                    else:
+                        current_process.send_signal(signal.SIGINT)  # Unix: send CTRL+C
                 
                 stdout, stderr = current_process.communicate(timeout=600 if not is_interactive else 5)
                 elapsed = time.time() - start_time
@@ -4332,12 +4335,19 @@ Supported Models:
             # Actually, let's create a NEW file to be safe: _upscaled.
             
             name, ext = os.path.splitext(args.output)
-            upscale_out = args.upscaled_output_file or f"{name}_upscaled_{uf}x{ext}"
+            suffix = "simple_upscaled" if args.simple_upscale else "upscaled"
+            upscale_out = args.upscaled_output_file or f"{name}_{suffix}_{uf}x{ext}"
             
             if args.generate_image:
-                upscale_image_file(args.output, upscale_out, args.upscale_strength, factor=uf)
+                if args.simple_upscale:
+                    simple_upscale_image(args.output, upscale_out, factor=uf)
+                else:
+                    upscale_image_file(args.output, upscale_out, args.upscale_strength, factor=uf)
             elif args.generate_video:
-                upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
+                if args.simple_upscale:
+                    simple_upscale_video(args.output, upscale_out, factor=uf)
+                else:
+                    upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user.")
