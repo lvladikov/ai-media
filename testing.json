@@ -1,0 +1,393 @@
+{
+  "tests": [
+    {
+      "name": "Image - SDXL (Default)",
+      "command": "-i -p \"A red apple\" -o testData/outputs/img_sdxl.jpg -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sdxl.jpg"
+      ]
+    },
+    {
+      "name": "Image - SDXL Explicit",
+      "command": "-i -p \"Orange fruit\" -o testData/outputs/img_sdxl_exp.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sdxl_exp.jpg"
+      ]
+    },
+    {
+      "name": "Image - SD 1.5",
+      "command": "-i -p \"A blue car\" -o testData/outputs/img_sd15.jpg -s 64x64 --image-model sd-1.5 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sd15.jpg"
+      ]
+    },
+    {
+      "name": "Image - Portrait Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_portrait.jpg -s 64x64 -otn portrait --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_portrait.jpg"
+      ]
+    },
+    {
+      "name": "Image - Auto Filename",
+      "command": "-i -p \"sunset beach\" -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "sunset-beach.jpg"
+      ]
+    },
+    {
+      "name": "Image - PNG Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f png -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.png"
+      ]
+    },
+    {
+      "name": "Video - Zeroscope (Default)",
+      "command": "-v -p \"A cat walking\" -o testData/outputs/vid_zeroscope.mp4 -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_zeroscope.mp4"
+      ]
+    },
+    {
+      "name": "Video - Zeroscope Explicit",
+      "command": "-v -p \"Bird flying\" -o testData/outputs/vid_zeroscope_exp.mp4 -l 1s --video-model zeroscope --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_zeroscope_exp.mp4"
+      ]
+    },
+    {
+      "name": "Video - ModelScope",
+      "command": "-v -p \"A dog running\" -o testData/outputs/vid_ms17b.mp4 -l 1s --video-model ms-1.7b --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_ms17b.mp4"
+      ]
+    },
+    {
+      "name": "Audio - MusicGen Small",
+      "command": "-a -p \"Piano melody\" -o testData/outputs/aud_musicgen_small.mp3 -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_small.mp3"
+      ]
+    },
+    {
+      "name": "Audio - MusicGen Medium (Default)",
+      "command": "-a -p \"Jazz saxophone\" -o testData/outputs/aud_musicgen_medium.mp3 -l 2s --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_medium.mp3"
+      ]
+    },
+    {
+      "name": "Audio - MusicGen Medium Explicit",
+      "command": "-a -p \"Guitar solo\" -o testData/outputs/aud_musicgen_med_exp.mp3 -l 2s --audio-model musicgen-medium --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_med_exp.mp3"
+      ]
+    },
+    {
+      "name": "Audio - MusicGen Large",
+      "command": "-a -p \"Orchestra symphony\" -o testData/outputs/aud_musicgen_large.mp3 -l 2s --audio-model musicgen-large --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_large.mp3"
+      ]
+    },
+    {
+      "name": "Audio - AudioLDM2",
+      "command": "-a -p \"Thunder storm\" -o testData/outputs/aud_audioldm2.mp3 -l 2s --audio-model audioldm2 --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_audioldm2.mp3"
+      ]
+    },
+    {
+      "name": "Audio - Bark TTS",
+      "command": "-a -p \"Hello world\" -o testData/outputs/aud_bark.mp3 --audio-model bark --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_bark.mp3"
+      ]
+    },
+    {
+      "name": "Audio - Bark French Voice",
+      "command": "-a -p \"Bonjour\" -o testData/outputs/aud_bark_fr.mp3 --audio-model bark --voice-preset v2/fr_speaker_1 --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_bark_fr.mp3"
+      ]
+    },
+    {
+      "name": "Audio - Bark German Voice",
+      "command": "-a -p \"Guten tag\" -o testData/outputs/aud_bark_de.mp3 --audio-model bark --voice-preset v2/de_speaker_0 --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_bark_de.mp3"
+      ]
+    },
+    {
+      "name": "Transform - Anonymous Chain",
+      "command": "-i -p \"A cat\" -o testData/outputs/cat_chain.jpg -s 64x64 -ti -tp \"Make it anime\" --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/cat_chain.jpg"
+      ]
+    },
+    {
+      "name": "Transform - Standalone with -p",
+      "command": "-ti testData/inputs/sample.jpg -p \"Make it a painting\" -o testData/outputs/painting.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/painting.png"
+      ]
+    },
+    {
+      "name": "Transform - Standalone with -tp",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Make it cartoon\" -o testData/outputs/cartoon.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/cartoon.png"
+      ]
+    },
+    {
+      "name": "Transform - Background Removal (RMBG)",
+      "command": "-ti testData/inputs/sample.jpg --remove-background -o testData/outputs/nobg.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/nobg.png"
+      ]
+    },
+    {
+      "name": "Transform - Silhouette",
+      "command": "-ti testData/inputs/sample.jpg --remove-background --silhouette -o testData/outputs/silhouette.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/silhouette.png"
+      ]
+    },
+    {
+      "name": "Transform - Edit + Remove BG",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Make it neon\" --remove-background -o testData/outputs/neon_nobg.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/neon_nobg.png"
+      ]
+    },
+    {
+      "name": "Transform - Image Guidance",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Vintage look\" --image-guidance 2.0 -o testData/outputs/vintage.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/vintage.png"
+      ]
+    },
+    {
+      "name": "Triple Chain - Generate + Edit + Remove BG",
+      "command": "-i -p \"Portrait\" -o testData/outputs/triple.png -s 64x64 -ti -tp \"Add hat\" --remove-background --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/triple.png"
+      ]
+    },
+    {
+      "name": "Triple Chain - Generate + Edit + Silhouette",
+      "command": "-i -p \"Dancer\" -o testData/outputs/dancer_sil.png -s 64x64 -ti -tp \"Pose\" --remove-background --silhouette --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/dancer_sil.png"
+      ]
+    },
+    {
+      "name": "Upscale - Simple 2x",
+      "command": "-ui testData/inputs/sample.jpg -uf 2x -su -o testData/outputs/up_simple_2x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_simple_2x.png"
+      ]
+    },
+    {
+      "name": "Upscale - Simple 4x",
+      "command": "-ui testData/inputs/sample.jpg -uf 4x -su -o testData/outputs/up_simple_4x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_simple_4x.png"
+      ]
+    },
+    {
+      "name": "Upscale - AI 2x (x2 Latent)",
+      "command": "-ui testData/inputs/sample.jpg -uf 2x -o testData/outputs/up_ai_2x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_ai_2x.png"
+      ]
+    },
+    {
+      "name": "Image + Chained Simple Upscale",
+      "command": "-i -p \"Mountain\" -o testData/outputs/mountain.jpg -s 64x64 --upscale -uf 2x -su --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/mountain.jpg",
+        "testData/outputs/mountain_simple_upscaled_2.0x.jpg"
+      ]
+    },
+    {
+      "name": "Convert - Image PIL",
+      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted.png",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/converted.png"
+      ]
+    },
+    {
+      "name": "Convert - Image FFmpeg",
+      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted_ff.webp --convert-image-engine ffmpeg",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/converted_ff.webp"
+      ]
+    },
+    {
+      "name": "Caption - Florence (Default)",
+      "command": "-gd testData/inputs/sample.jpg -o testData/outputs/caption_florence.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_florence.txt"
+      ]
+    },
+    {
+      "name": "Caption - Florence Explicit",
+      "command": "-gd testData/inputs/sample.jpg -cm florence -o testData/outputs/caption_florence_exp.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_florence_exp.txt"
+      ]
+    },
+    {
+      "name": "Caption - BLIP",
+      "command": "-gd testData/inputs/sample.jpg -cm blip -o testData/outputs/caption_blip.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_blip.txt"
+      ]
+    },
+    {
+      "name": "Audio - Image-to-Audio",
+      "command": "-a -ii testData/inputs/sample.jpg -o testData/outputs/aud_i2a.mp3 -l 2s --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/aud_i2a.mp3"
+      ]
+    },
+    {
+      "name": "Audio - Image-to-Audio with BLIP Caption",
+      "command": "-a -ii testData/inputs/sample.jpg -cm blip -o testData/outputs/aud_i2a_blip.mp3 -l 2s --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/aud_i2a_blip.mp3"
+      ]
+    },
+    {
+      "name": "Interactive - Jump 1 (Image)",
+      "command": "--interactive 1",
+      "interactive": true,
+      "expectedStdoutItems": ["Image Generation", "Select Model"]
+    },
+    {
+      "name": "Interactive - Jump 1/1 (SDXL)",
+      "command": "--interactive 1/1",
+      "interactive": true,
+      "expectedStdoutItems": ["Image Generation", "Model: sdxl"]
+    },
+    {
+      "name": "Interactive - Jump 2 (Video)",
+      "command": "--interactive 2",
+      "interactive": true,
+      "expectedStdoutItems": ["Video Generation"]
+    },
+    {
+      "name": "Interactive - Jump 3 (Audio)",
+      "command": "--interactive 3",
+      "interactive": true,
+      "expectedStdoutItems": ["Audio Generation", "Select Model"]
+    },
+    {
+      "name": "Interactive - Jump 3/5 (Bark)",
+      "command": "--interactive 3/5",
+      "interactive": true,
+      "expectedStdoutItems": ["Audio Generation", "Model: bark"]
+    },
+    {
+      "name": "Interactive - Jump 5 (Upscale)",
+      "command": "--interactive 5",
+      "interactive": true,
+      "expectedStdoutItems": ["Upscale Media"]
+    },
+    {
+      "name": "Interactive - Jump 7 (Caption)",
+      "command": "--interactive 7",
+      "interactive": true,
+      "expectedStdoutItems": ["Generate Caption"]
+    },
+    {
+      "name": "Interactive - Jump 8 (SysInfo)",
+      "command": "--interactive 8",
+      "interactive": true,
+      "expectedStdoutItems": ["System Information", "OS:", "CPU:", "RAM:", "GPU:"]
+    },
+    {
+      "name": "Interactive - Jump sysinfo",
+      "command": "--interactive sysinfo",
+      "interactive": true,
+      "expectedStdoutItems": ["System Information"]
+    },
+    {
+        "name": "Interactive - Jump image/sdxl",
+        "command": "--interactive image/sdxl",
+        "interactive": true,
+        "expectedStdoutItems": ["Image Generation", "Model: sdxl"]
+    }
+  ]
+}

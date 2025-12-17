@@ -24,3 +24,13 @@ performance.json
 *.mp3
 *.wav
 
+# Test Data - ignore outputs (and subfolders), keep inputs
+testData/outputs/**
+
+# Unignore testData/inputs (need to unignore parent first, then contents)
+!testData/
+!testData/inputs/
+!testData/inputs/**
+
+# Allow testing.json to be committed
+!testing.json

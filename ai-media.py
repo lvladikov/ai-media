@@ -37,6 +37,8 @@ except ImportError:
     psutil = None
 from pathlib import Path
 from datetime import datetime
+import PIL.Image
+import PIL.ImageOps
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -66,6 +68,13 @@ IMAGE_MODELS = {
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler", # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",     # 2x Latent Upscaling
     "default": "stabilityai/sdxl-turbo"
+}
+
+EDIT_MODELS = {
+    "instruct-pix2pix": "timbrooks/instruct-pix2pix",
+    "instruct-pix2pix-sdxl": "diffusers/sdxl-instructpix2pix-768",
+    "remove-bg": "briaai/RMBG-1.4",
+    "default": "timbrooks/instruct-pix2pix"
 }
 
 AUDIO_MODELS = {
@@ -135,6 +144,9 @@ MODEL_REQUIREMENTS = {
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
     "stabilityai/stable-diffusion-x4-upscaler": {"vram": 8, "ram": 16, "max_resolution": (4096, 4096)},
     "stabilityai/sd-x2-latent-upscaler": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
+    "timbrooks/instruct-pix2pix": {"vram": 8, "ram": 12, "max_resolution": (1024, 1024)},
+    "diffusers/sdxl-instructpix2pix-768": {"vram": 10, "ram": 16, "max_resolution": (1024, 1024)},
+    "briaai/RMBG-1.4": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
 }
 
 
@@ -237,9 +249,29 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         sys.exit(0)
 
 # --- Signal Handling ---
+# Global test state for CTRL+C handling
+_test_state = {
+    'active': False,
+    'passed': 0,
+    'failed': 0,
+    'total': 0
+}
+
 def signal_handler(sig, frame):
-    print("\n\n⚠️  Interrupted! Cleaning up...")
-    sys.exit(0)
+    if _test_state['active']:
+        completed = _test_state['passed'] + _test_state['failed']
+        print(f"\n\n{'='*60}")
+        print(f"❌ Test suite interrupted by user (CTRL+C)")
+        print(f"{'='*60}")
+        print(f"   Completed: {completed}/{_test_state['total']}")
+        print(f"   Passed: {_test_state['passed']} ✅")
+        print(f"   Failed: {_test_state['failed']} ❌")
+        print(f"   Skipped: {_test_state['total'] - completed}")
+        print(f"{'='*60}")
+        sys.exit(130)
+    else:
+        print("\n\n⚠️  Interrupted! Cleaning up...")
+        sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -510,10 +542,13 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             }
         else:
             # Generic Text2Image (SD1.5, etc.)
+            # On MPS, generic models are safer in float32 to prevent dtype mismatches
+            run_dtype = torch.float32 if device.type == "mps" else dtype
+            
             pipe = AutoPipelineForText2Image.from_pretrained(
                 model_id, 
-                torch_dtype=dtype,
-                variant="fp16" if dtype == torch.float16 else None
+                torch_dtype=run_dtype,
+                variant="fp16" if run_dtype == torch.float16 else None
             )
             extra_kwargs = {} # Use defaults
             
@@ -530,6 +565,9 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             # Fix black images on MPS: VAE produces NaN in float16, use float32
             if hasattr(pipe, 'vae'):
                 pipe.vae = pipe.vae.to(torch.float32)
+            # Fix Safety Checker dtype mismatch on MPS (Input Half vs Bias Float)
+            if hasattr(pipe, 'safety_checker') and pipe.safety_checker is not None:
+                pipe.safety_checker = pipe.safety_checker.to(torch.float32)
 
         # High-Resolution Memory Optimization (VAE Tiling)
         # 4K images (3840x2160 = ~8.3MP) cause massive VRAM spikes during decoding without tiling
@@ -819,11 +857,171 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
                 
                 if not quiet: print(f"   Detected: '{caption}'")
                 return caption
-            
-    except Exception as e:
-        if not quiet: 
-             print(f"⚠️  Analysis failed: {e}")
+                
+    except ImportError as e:
+        print(f"❌ Error: Missing dependencies for captioning. {e}")
         return None
+    except Exception as e:
+        print(f"❌ Caption generation failed: {e}")
+        return None
+
+
+def generate_edit(input_path, prompt, output_path, model_name="default", guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False):
+    """
+    Edit an existing image based on instructions using InstructPix2Pix.
+    """
+    import torch
+    from diffusers import StableDiffusionInstructPix2PixPipeline, StableDiffusionXLInstructPix2PixPipeline
+    from diffusers.utils import load_image
+    
+    # Resolve Model ID
+    model_id = EDIT_MODELS.get(model_name.lower(), model_name)
+    if model_name.lower() == "default": model_id = EDIT_MODELS["default"]
+    
+    print(f"🎨 Editing Image")
+    print(f"   Model:     {model_id}")
+    print(f"   Input:     {input_path}")
+    print(f"   Instruct:  '{prompt}'")
+    print(f"   Output:    {output_path}")
+    print("") 
+
+    try:
+        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        
+        # CRITICAL FIX: InstructPix2Pix (SD1.5 based) often produces black images on MPS with float16.
+        # We force float32 for this specific pipeline on MPS to ensure valid output.
+        if device.type == "mps":
+            print(f"   ℹ️  MPS Detected: Forcing float32 for InstructPix2Pix to prevent black images.")
+            dtype = torch.float32
+
+        # Load Input Image
+        image = load_image(input_path)
+        image = PIL.ImageOps.exif_transpose(image)
+        image = image.convert("RGB")
+        
+        # Initialize Pipeline
+        if "sdxl" in model_id.lower():
+             # SDXL InstructPix2Pix
+            pipe = StableDiffusionXLInstructPix2PixPipeline.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                variant="fp16" if dtype == torch.float16 else None
+            ).to(device)
+            # Default scales for SDXL are different
+            if guidance_scale == 7.5: guidance_scale = 7.0 
+            if image_guidance_scale == 1.5: image_guidance_scale = 1.25
+            
+        else:
+            # Standard InstructPix2Pix (SD 1.5 based)
+            kwargs = {}
+            if unsafe:
+                kwargs["safety_checker"] = None
+                
+            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+                model_id, 
+                torch_dtype=dtype,
+                **kwargs
+            ).to(device)
+            
+        # Optimization
+        if device.type == "mps":
+             pipe.enable_attention_slicing()
+        
+        # Generate
+        print(f"✨ Applying edits... (Steps: {steps}, Text Guide: {guidance_scale}, Image Guide: {image_guidance_scale})")
+        with torch.inference_mode():
+            output = pipe(
+                prompt,
+                image=image,
+                num_inference_steps=steps,
+                guidance_scale=guidance_scale,
+                image_guidance_scale=image_guidance_scale
+            )
+            
+        result = output.images[0]
+        
+        # Safety Check
+        if hasattr(output, "nsfw_content_detected") and output.nsfw_content_detected:
+             if output.nsfw_content_detected[0]:
+                print(f"⚠️  Warning: Potential NSFW content detected. Black image returned.")
+                print(f"    ℹ️  This is frequently a false positive on Mac/MPS/CPU.")
+                print(f"    👉  Please retry this command with '--unsafe' to see the image.")
+                
+        result.save(output_path)
+        print(f"✅ Edited image saved to {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Edit failed: {e}")
+        return False
+
+
+def remove_background(input_path, output_path, model_name="remove-bg", silhouette=False):
+    """
+    Remove background using RMBG-1.4 (Transformer based).
+    """
+    import torch
+    from transformers import AutoModelForImageSegmentation
+    from torchvision.transforms.functional import normalize
+    import numpy as np
+    
+    print(f"✂️  Removing Background")
+    print(f"   Input:  {input_path}")
+    print(f"   Output: {output_path}")
+    if silhouette: print(f"   Mode:   Silhouette Maker")
+    print("")
+
+    try:
+        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        
+        # Load Model
+        model_id = EDIT_MODELS.get(model_name, "briaai/RMBG-1.4")
+        model = AutoModelForImageSegmentation.from_pretrained(model_id, trust_remote_code=True)
+        model.to(device)
+        model.eval()
+        
+        # Load Image
+        image = PIL.Image.open(input_path).convert("RGB")
+        image = PIL.ImageOps.exif_transpose(image)
+        original_size = image.size
+        
+        # Preprocess (Model expects 1024x1024)
+        model_input_size = (1024, 1024)
+        image_scaled = image.resize(model_input_size, PIL.Image.BILINEAR)
+        im_tensor = torch.tensor(np.array(image_scaled)).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        im_tensor = normalize(im_tensor, [0.5, 0.5, 0.5], [1.0, 1.0, 1.0]).to(device)
+        
+        # Inference
+        print(f"🧠 Processing...")
+        with torch.inference_mode():
+            result = model(im_tensor)
+        
+        # Post-process Mask
+        result = torch.nn.functional.interpolate(result[0][0], size=original_size[::-1], mode='bilinear')
+        ma = torch.sigmoid(result)
+        ma = (ma - ma.min()) / (ma.max() - ma.min())
+        
+        # Create PIL Mask from Tensor
+        mask = ma.cpu().data.numpy()[0, 0]
+        mask_pil = PIL.Image.fromarray((mask * 255).astype(np.uint8))
+        
+        # Apply Mask
+        if silhouette:
+            # Create black foreground
+            foreground = PIL.Image.new("RGBA", original_size, (0, 0, 0, 255))
+            final_image = PIL.Image.new("RGBA", original_size, (255, 255, 255, 0)) # Transparent
+            final_image.paste(foreground, (0, 0), mask_pil)
+        else:
+            final_image = image.copy()
+            final_image.putalpha(mask_pil)
+            
+        final_image.save(output_path, "PNG")
+        print(f"✅ Saved to {output_path}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Background removal failed: {e}")
+        return False
 
 def generate_long_bark(prompt, processor, model, device, voice_preset, sample_rate=24000):
     """
@@ -2175,6 +2373,1072 @@ def convert_audio_file(input_path, target):
         print(f"❌ Conversion failed: {e}")
         return False
 
+# --- Interactive Mode ---
+
+def clear_screen():
+    """Clear terminal screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def show_header(title="AI-Media"):
+    """Show interactive mode header."""
+    print(f"\n{'═'*60}")
+    print(f"🎨 {title}")
+    print(f"{'═'*60}\n")
+
+# --- Interactive Navigation Helpers ---
+
+def get_key():
+    """Read a single key press from stdin (Unix/Mac)."""
+    import tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+        if ch == '\x1b':  # Escape sequence
+            ch2 = sys.stdin.read(1)
+            
+            # Handle [ sequences
+            if ch2 == '[':
+                ch3 = sys.stdin.read(1)
+                if ch3 == 'A': return 'UP'
+                if ch3 == 'B': return 'DOWN'
+                if ch3 == 'H': return 'HOME'
+                if ch3 == 'F': return 'END'
+                # Handle [1~ (Home), [4~ (End), [5~ (PgUp), [6~ (PgDn)
+                if ch3 in ['1', '4', '5', '6']:
+                    ch4 = sys.stdin.read(1)
+                    if ch4 == '~':
+                        if ch3 == '1': return 'HOME'
+                        if ch3 == '4': return 'END'
+                        if ch3 == '5': return 'PAGE_UP'
+                        if ch3 == '6': return 'PAGE_DOWN'
+            
+            # Handle O sequences (OH = Home, OF = End)
+            if ch2 == 'O':
+                ch3 = sys.stdin.read(1)
+                if ch3 == 'H': return 'HOME'
+                if ch3 == 'F': return 'END'
+                
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    
+    if ch == '\r' or ch == '\n': return 'ENTER'
+    if ch == '\x03': raise KeyboardInterrupt # CTRL+C
+    return ch
+
+def prompt_menu(prompt, options, allow_back=True, default_index=0):
+    """
+    Show interactive menu with arrow key navigation.
+    Returns: value of selected option or None (if Back/Exit)
+    """
+    # ... (header omitted, unchanged)
+    # Prepare items list
+    items = list(options)
+    if allow_back:
+        items.append(("⬅️  Back", None))
+    elif not options:
+        # Fallback if empty
+        return None
+
+    current_idx = default_index if 0 <= default_index < len(items) else 0
+
+    # Hide cursor
+    print("\033[?25l", end="")
+    
+    if prompt:
+        print(f"{prompt}")
+    
+    # ANSI constants
+    UP = "\033[F"
+    CLEAR_LINE = "\033[K"
+    CYAN = "\033[96m" 
+    RESET = "\033[0m"
+    DIM = "\033[90m"
+
+    # Reserve space for menu
+    for _ in items:
+        print()
+    
+    # Move cursor back up to start of menu
+    print(UP * len(items), end="")
+
+    try:
+        while True:
+            # Render Menu
+            for i, (label, val) in enumerate(items):
+                # Alignment logic
+                is_selected = (i == current_idx)
+                prefix = " > " if is_selected else "   "
+                number = f"{i+1}." if i < len(options) else "0."
+                
+                # Ensure label spacing is consistent
+                display_label = label
+                
+                # Formatting
+                if is_selected:
+                    line = f"{CYAN}{prefix}{number:<4}  {display_label}{RESET}"
+                else:
+                    line = f"{prefix}{number:<4}  {display_label}"
+                
+                print(f"{line}{CLEAR_LINE}")
+            
+            # Move cursor back up to start for next redraw
+            print(UP * len(items), end="", flush=True)
+
+            # Handle Input
+            key = get_key()
+            
+            if key == 'UP':
+                current_idx = (current_idx - 1) % len(items)
+            elif key == 'DOWN':
+                current_idx = (current_idx + 1) % len(items)
+            elif key == 'PAGE_UP' or key == '[':
+                current_idx = (current_idx - 3) % len(items)
+            elif key == 'PAGE_DOWN' or key == ']':
+                current_idx = (current_idx + 3) % len(items)
+            elif key == 'HOME':
+                current_idx = 0
+            elif key == 'END':
+                current_idx = len(items) - 1
+            elif key == 'ENTER':
+                # Confirm selection
+                break
+            elif key in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
+                # Direct numeric jump (0-9)
+                num = int(key)
+                if 1 <= num <= len(options):
+                    current_idx = num - 1
+                    continue
+            elif key == '0' and allow_back:
+                 current_idx = len(items) - 1 # Jump to last item (Back)
+                 
+    except KeyboardInterrupt:
+        # Clean exit on CTRL+C
+        print(RESET + "\n" * len(items)) # Move past menu
+        print("\033[?25h", end="") # Show cursor
+        return None
+    finally:
+        # Restore cursor
+        print(RESET + "\n" * len(items)) # Move past menu
+        print("\033[?25h", end="") # Show cursor
+
+    # Re-print selection statically for history
+    selected_label, selected_val = items[current_idx]
+    return selected_val
+
+def prompt_choice(prompt, options, allow_back=True):
+    """Wrapper for prompt_menu (backward usage compatibility)."""
+    return prompt_menu(prompt, options, allow_back)
+
+def prompt_text(prompt, default=None, required=True):
+    """Get text input from user."""
+    default_str = f" [{default}]" if default else ""
+    while True:
+        try:
+            value = input(f"{prompt}{default_str}: ").strip()
+            if not value and default:
+                return default
+            if not value and required:
+                print("   This field is required.")
+                continue
+            return value
+        except KeyboardInterrupt:
+            return None
+
+def browse_files(start_dir="."):
+    """Interactively browse file system and return selected file path."""
+    current_dir = os.path.abspath(start_dir)
+    
+    while True:
+        try:
+            items = os.listdir(current_dir)
+        except PermissionError:
+            print(f"❌ Permission denied: {current_dir}")
+            current_dir = os.path.dirname(current_dir)
+            continue
+            
+        # Separate dirs and files
+        dirs = []
+        files = []
+        for item in items:
+            if item.startswith('.'): continue # Skip hidden
+            full_path = os.path.join(current_dir, item)
+            if os.path.isdir(full_path):
+                dirs.append(item)
+            else:
+                files.append(item)
+        
+        dirs.sort()
+        files.sort()
+        
+        menu_items = []
+        # Add parent directory option if not at root
+        if os.path.dirname(current_dir) != current_dir:
+            menu_items.append(("📂 .. (Up Directory)", ".."))
+        
+        for d in dirs:
+            menu_items.append((f"📁 {d}/", d))
+            
+        for f in files:
+            menu_items.append((f"📄 {f}", f))
+        
+        # Display Menu
+        print(f"\n📂 Location: {current_dir}")
+        choice = prompt_choice(None, menu_items, allow_back=True)
+        
+        if choice is None: # Back/Cancel
+            return None
+        
+        if choice == "..":
+            current_dir = os.path.dirname(current_dir)
+        else:
+            selected_path = os.path.join(current_dir, choice)
+            if os.path.isdir(selected_path):
+                current_dir = selected_path
+            else:
+                return selected_path
+
+def prompt_file(prompt, must_exist=True):
+    """Get file path input from user with browsing support."""
+    while True:
+        # If looking for existing file, offer browse option
+        if must_exist:
+            print(f"\n{prompt}")
+            options = [
+                ("📂 Browse Files", "browse"),
+                ("⌨️  Enter Path Manually", "manual"),
+                ("🔙 Cancel", None)
+            ]
+            method = prompt_choice(None, options, allow_back=False) # We handle None manually
+            
+            if method is None:
+                return None
+            
+            if method == "browse":
+                path = browse_files()
+                if path:
+                    return path
+                continue # If cancelled browsing, return to method choice
+                
+            elif method == "manual":
+                pass # Fall through to manual input
+        
+        # Manual Input Logic
+        try:
+            path = input(f"Enter file path: ").strip()
+            if not path:
+                print("   This field is required.")
+                continue
+            if must_exist and not os.path.exists(path):
+                print(f"   File not found: {path}")
+                continue
+            return path
+        except KeyboardInterrupt:
+            return None
+
+def run_interactive(jump_point=None):
+    """Run interactive menu mode.
+    
+    Args:
+        jump_point: Optional jump path (e.g., 'image/sdxl', '1/2', 'audio/bark')
+    """
+    
+    # Jump point mappings: name -> (menu_action, submenu_value)
+    JUMP_POINTS = {
+        # By name
+        'image': ('image', None),
+        'image/sdxl': ('image', 'sdxl'),
+        'image/sd15': ('image', 'sd-1.5'),
+        'image/flux': ('image', 'flux'),
+        'image/flux-dev': ('image', 'flux-dev'),
+        'video': ('video', None),
+        'video/zeroscope': ('video', 'zeroscope'),
+        'video/modelscope': ('video', 'ms-1.7b'),
+        'video/cogvideox': ('video', 'cogvideox'),
+        'video/svd': ('video', 'svd'),
+        'audio': ('audio', None),
+        'audio/musicgen': ('audio', 'musicgen-medium'),
+        'audio/musicgen-small': ('audio', 'musicgen-small'),
+        'audio/musicgen-large': ('audio', 'musicgen-large'),
+        'audio/audioldm2': ('audio', 'audioldm2'),
+        'audio/bark': ('audio', 'bark'),
+        'transform': ('transform', None),
+        'transform/edit': ('transform', 'edit'),
+        'transform/rembg': ('transform', 'rembg'),
+        'transform/silhouette': ('transform', 'silhouette'),
+        'upscale': ('upscale', None),
+        'convert': ('convert', None),
+        'caption': ('caption', None),
+        'sysinfo': ('sysinfo', None),
+        # By number (matching menu order)
+        '1': ('image', None),
+        '1/1': ('image', 'sdxl'),
+        '1/2': ('image', 'sd-1.5'),
+        '1/3': ('image', 'flux'),
+        '1/4': ('image', 'flux-dev'),
+        '2': ('video', None),
+        '2/1': ('video', 'zeroscope'),
+        '2/2': ('video', 'ms-1.7b'),
+        '2/3': ('video', 'cogvideox'),
+        '2/4': ('video', 'svd'),
+        '3': ('audio', None),
+        '3/1': ('audio', 'musicgen-medium'),
+        '3/2': ('audio', 'musicgen-small'),
+        '3/3': ('audio', 'musicgen-large'),
+        '3/4': ('audio', 'audioldm2'),
+        '3/5': ('audio', 'bark'),
+        '4': ('transform', None),
+        '4/1': ('transform', 'edit'),
+        '4/2': ('transform', 'rembg'),
+        '4/3': ('transform', 'silhouette'),
+        '5': ('upscale', None),
+        '6': ('convert', None),
+        '7': ('caption', None),
+        '8': ('sysinfo', None),
+    }
+    
+    # Parse jump point
+    initial_action = None
+    initial_model = None
+    if jump_point and jump_point != 'menu':
+        jp_lower = jump_point.lower()
+        if jp_lower in JUMP_POINTS:
+            initial_action, initial_model = JUMP_POINTS[jp_lower]
+        else:
+            print(f"⚠️  Unknown jump point: {jump_point}")
+            print("   Run with --help or see README for valid jump points.")
+    
+    def system_info_menu():
+        """Display system information."""
+        clear_screen()
+        show_header("System Information")
+        
+        import platform
+        import psutil
+        import torch
+        
+        # OS Info
+        os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
+        
+        # CPU Info
+        cpu_count = psutil.cpu_count(logical=True)
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        
+        # RAM Info
+        mem = psutil.virtual_memory()
+        ram_total = f"{mem.total / (1024**3):.1f} GB"
+        ram_used = f"{mem.used / (1024**3):.1f} GB"
+        ram_avail = f"{mem.available / (1024**3):.1f} GB"
+        ram_percent = f"{mem.percent}%"
+        
+        # GPU Info
+        if torch.backends.mps.is_available():
+            gpu_info = "MPS (Apple Silicon) ✅ Available"
+        elif torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            gpu_info = f"CUDA ({gpu_name}, {vram:.1f} GB VRAM) ✅ Available"
+        else:
+            gpu_info = "CPU Only (No Acceleration Detected)"
+            
+        print(f"💻 OS:       {os_info}")
+        print(f"🧠 CPU:      {cpu_count} Cores (Usage: {cpu_percent}%)")
+        print(f"💾 RAM:      {ram_avail} Available / {ram_total} Total ({ram_percent} Used)")
+        print(f"🎮 GPU:      {gpu_info}")
+        print()
+        
+        input("Press Enter to return...")
+
+    def main_menu():
+        """Show main menu and return action."""
+        clear_screen()
+        show_header("AI-Media Interactive Mode")
+        print("📋 What would you like to do?\n")
+        
+        options = [
+            ("🖼️   Generate Image", "image"),
+            ("🎬  Generate Video", "video"),
+            ("🎵  Generate Audio", "audio"),
+            ("✨  Transform/Edit Image", "transform"),
+            ("📈  Upscale Media", "upscale"),
+            ("🔄  Convert Media", "convert"),
+            ("📝  Generate Caption", "caption"),
+            ("ℹ️   System Information", "sysinfo"),
+            ("❌  Exit", None)
+        ]
+        
+        return prompt_choice(None, options, allow_back=False)
+    
+    def image_menu(preset_model=None):
+        """Image generation submenu."""
+        clear_screen()
+        show_header("Image Generation")
+        
+        # Model selection (skip if preset)
+        if preset_model:
+            model = preset_model
+            print(f"📦 Model: {model}\n")
+        else:
+            print("📦 Select Model:\n")
+            model_options = [
+                ("SDXL Turbo (Default, Fast) ~8GB", "sdxl"),
+                ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
+                ("Flux Schnell (High Quality, Slow on Mac) ~12GB", "flux"),
+                ("Flux Dev (Professional, Very Slow on Mac) ~16GB", "flux-dev"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+        
+        # Prompt
+        print()
+        prompt = prompt_text("📝 Enter prompt")
+        if prompt is None:
+            return
+        
+        # Resolution
+        print("\n📐 Select Resolution:\n")
+        size_options = [
+            ("720p (1280x720)", "720p"),
+            ("1080p (1920x1080)", "1080p"),
+            ("4K (3840x2160)", "4k"),
+            ("64x64 (Quick Test)", "64x64"),
+            ("Custom Resolution", "custom"),
+        ]
+        size = prompt_choice("Size", size_options)
+        if size is None:
+            return
+            
+        if size == "custom":
+            print()
+            size = prompt_text("Enter resolution (e.g. 512x512, 1024x768)")
+            if not size:
+                return
+        
+        # Orientation
+        print("\n🔄 Select Orientation:\n")
+        orient_options = [
+            ("Landscape (Default)", "landscape"),
+            ("Portrait", "portrait"),
+            ("Square", "square"),
+        ]
+        orientation = prompt_choice("Orientation", orient_options)
+        if orientation is None:
+            return
+        
+        # Output
+        print()
+        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+        
+        # Build and run command
+        cmd = f"-i -p \"{prompt}\" -s {size} -otn {orientation} --image-model {model}"
+        if output:
+            cmd += f" -o \"{output}\""
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    def video_menu(preset_model=None):
+        """Video generation submenu."""
+        clear_screen()
+        show_header("Video Generation")
+        
+        # Model selection (skip if preset)
+        if preset_model:
+            model = preset_model
+            print(f"📦 Model: {model}\n")
+        else:
+            print("📦 Select Model:\n")
+            model_options = [
+                ("Zeroscope (Default, No Watermarks)", "zeroscope"),
+                ("ModelScope (General Purpose, Has Watermarks)", "ms-1.7b"),
+                ("CogVideoX (State of the Art, Slow) ~15GB", "cogvideox"),
+                ("Stable Video Diffusion (Image-to-Video only)", "svd"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+        
+        # Prompt or Input Image (for SVD)
+        prompt = None
+        input_image = None
+        
+        if model == 'svd':
+             print("\n🖼️ Select Input Image for SVD:")
+             input_image = prompt_file("Input Image")
+             if not input_image:
+                 return
+        else:
+            print()
+            prompt = prompt_text("📝 Enter prompt")
+            if prompt is None:
+                return
+        
+        # Duration
+        print("\n⏱️ Select Duration:\n")
+        length_options = [
+            ("2 seconds (Quick)", "2s"),
+            ("5 seconds", "5s"),
+            ("10 seconds", "10s"),
+            ("Custom Duration", "custom"),
+        ]
+        
+        # Build and run command (partial logic needed inside/after check)
+        # We need duration first.
+        
+        length = prompt_choice("Duration", length_options)
+        if length is None:
+            return
+            
+        if length == "custom":
+            print()
+            length = prompt_text("Enter duration (e.g. 3s, 15s)")
+            if not length:
+                return
+
+        # Output
+        print()
+        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+        
+        # Build Command
+        cmd = f"-v -s {length} --video-model {model}"
+        if prompt:
+            cmd += f" -p \"{prompt}\""
+        if input_image:
+            cmd += f" -ii \"{input_image}\""
+        if output:
+             cmd += f" -o \"{output}\""
+             
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+
+    
+    def audio_menu(preset_model=None):
+        """Audio generation submenu."""
+        clear_screen()
+        show_header("Audio Generation")
+        
+        # Model selection (skip if preset)
+        if preset_model:
+            model = preset_model
+            print(f"📦 Model: {model}\n")
+        else:
+            print("📦 Select Model:\n")
+            model_options = [
+                ("MusicGen Medium (Default)", "musicgen-medium"),
+                ("MusicGen Small (Fast)", "musicgen-small"),
+                ("MusicGen Large (High Quality)", "musicgen-large"),
+                ("AudioLDM2 (Sound Effects)", "audioldm2"),
+                ("Bark (Speech/TTS)", "bark"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+        
+        # Prompt
+        print()
+        if model == "bark":
+            prompt = prompt_text("📝 Enter text to speak")
+        else:
+            prompt = prompt_text("📝 Enter audio description")
+        if prompt is None:
+            return
+        
+        # Duration (not for Bark)
+        length = "10s"
+        if model != "bark":
+            print("\n⏱️ Select Duration:\n")
+            length_options = [
+                ("5 seconds", "5s"),
+                ("10 seconds", "10s"),
+                ("30 seconds", "30s"),
+                ("Custom Duration", "custom"),
+            ]
+            length = prompt_choice("Duration", length_options)
+            if length is None:
+                return
+            if length == "custom":
+                print()
+                length = prompt_text("Enter duration (e.g. 8s, 1m)")
+                if not length:
+                    return
+        
+        # Output
+        print()
+        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+        
+        # Build and run command
+        cmd = f"-a -p \"{prompt}\" -l {length} --audio-model {model}"
+        if output:
+            cmd += f" -o \"{output}\""
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    def transform_menu(preset_operation=None):
+        """Image transformation submenu."""
+        clear_screen()
+        show_header("Transform/Edit Image")
+        
+        # Input file
+        print("📂 Select input image:\n")
+        input_file = prompt_file("Enter image path")
+        if input_file is None:
+            return
+        
+        # Operation (skip if preset)
+        if preset_operation:
+            operation = preset_operation
+            print(f"✨ Operation: {operation}\n")
+        else:
+            print("\n✨ Select Operation:\n")
+            op_options = [
+                ("Creative Edit (AI Instruction)", "edit"),
+                ("Remove Background", "rembg"),
+                ("Create Silhouette", "silhouette"),
+            ]
+            operation = prompt_choice("Operation", op_options)
+            if operation is None:
+                return
+        
+        # Build command based on operation
+        if operation == "edit":
+            print()
+            instruction = prompt_text("📝 Enter edit instruction (e.g., 'Make it anime')")
+            if instruction is None:
+                return
+            cmd = f"-ti \"{input_file}\" -tp \"{instruction}\""
+        elif operation == "rembg":
+            cmd = f"-ti \"{input_file}\" --remove-background"
+        elif operation == "silhouette":
+            cmd = f"-ti \"{input_file}\" --remove-background --silhouette"
+        
+        # Output
+        print()
+        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+        if output:
+            cmd += f" -o \"{output}\""
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    def upscale_menu():
+        """Upscale media submenu."""
+        clear_screen()
+        show_header("Upscale Media")
+        
+        # Media type
+        print("📁 Select Media Type:\n")
+        type_options = [
+            ("Image", "image"),
+            ("Video", "video"),
+        ]
+        media_type = prompt_choice("Type", type_options)
+        if media_type is None:
+            return
+        
+        # Input file
+        print("\n📂 Select input file:\n")
+        input_file = prompt_file("Enter file path")
+        if input_file is None:
+            return
+        
+        # Upscale factor
+        print("\n📈 Select Upscale Factor:\n")
+        factor_options = [
+            ("2x (Default)", "2x"),
+            ("4x", "4x"),
+            ("Custom Factor", "custom"),
+        ]
+        factor = prompt_choice("Factor", factor_options)
+        if factor == "custom":
+            print()
+            factor = prompt_text("Enter factor (e.g. 3x, 8x)")
+            if not factor:
+                return
+        if factor is None:
+            return
+        
+        # Method
+        print("\n⚙️ Select Method:\n")
+        method_options = [
+            ("AI Upscale (High Quality, Slow)", "ai"),
+            ("Simple Upscale (Fast, Lanczos)", "simple"),
+        ]
+        method = prompt_choice("Method", method_options)
+        if method is None:
+            return
+        
+        # Build command
+        if media_type == "image":
+            cmd = f"-ui \"{input_file}\" -uf {factor}"
+        else:
+            cmd = f"-uv \"{input_file}\" -uf {factor}"
+        
+        if method == "simple":
+            cmd += " -su"
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    def convert_menu():
+        """Convert media submenu."""
+        clear_screen()
+        show_header("Convert Media")
+        
+        # Media type
+        print("📁 Select Media Type:\n")
+        type_options = [
+            ("Image", "image"),
+            ("Video", "video"),
+            ("Audio", "audio"),
+        ]
+        media_type = prompt_choice("Type", type_options)
+        if media_type is None:
+            return
+        
+        # Input file
+        print("\n📂 Select input file:\n")
+        input_file = prompt_file("Enter file path")
+        if input_file is None:
+            return
+        
+        # Target format
+        print("\n🎯 Select Target Format:\n")
+        if media_type == "image":
+            format_options = [
+                ("PNG", "png"),
+                ("JPG", "jpg"),
+                ("WebP", "webp"),
+            ]
+        elif media_type == "video":
+            format_options = [
+                ("MP4", "mp4"),
+                ("WebM", "webm"),
+                ("AVI", "avi"),
+            ]
+        else:
+            format_options = [
+                ("MP3", "mp3"),
+                ("WAV", "wav"),
+                ("FLAC", "flac"),
+            ]
+        target_format = prompt_choice("Format", format_options)
+        if target_format is None:
+            return
+        
+        # Build command
+        if media_type == "image":
+            cmd = f"-ci \"{input_file}\" -cit {target_format}"
+        elif media_type == "video":
+            cmd = f"-cv \"{input_file}\" -cvt {target_format}"
+        else:
+            cmd = f"-ca \"{input_file}\" -cat {target_format}"
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    def caption_menu(preset_model=None):
+        """Generate caption submenu."""
+        clear_screen()
+        show_header("Generate Caption")
+        
+        # Input file
+        print("📂 Select input image or video:\n")
+        input_file = prompt_file("Enter file path")
+        if input_file is None:
+            return
+        
+        # Model (skip if preset)
+        if preset_model:
+            model = preset_model
+            print(f"📦 Model: {model}\n")
+        else:
+            print("\n📦 Select Caption Model:\n")
+            model_options = [
+                ("Florence-2 (Default, SOTA)", "florence"),
+                ("BLIP", "blip"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+        
+        # Build command
+        cmd = f"-gd \"{input_file}\" -cm {model}"
+        
+        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
+        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        input("\nPress Enter to continue...")
+    
+    # Main loop
+    first_run = True
+    while True:
+        # Use jump point on first run if provided
+        if first_run and initial_action:
+            action = initial_action
+            first_run = False
+        else:
+            action = main_menu()
+        
+        if action is None:
+            print("\n👋 Goodbye!")
+            break
+        elif action == "image":
+            image_menu(initial_model if first_run or initial_action == 'image' else None)
+            initial_model = None  # Clear after first use
+        elif action == "video":
+            video_menu(initial_model if first_run or initial_action == 'video' else None)
+            initial_model = None
+        elif action == "audio":
+            audio_menu(initial_model if first_run or initial_action == 'audio' else None)
+            initial_model = None
+        elif action == "transform":
+            transform_menu(initial_model if first_run or initial_action == 'transform' else None)
+            initial_model = None
+        elif action == "upscale":
+            upscale_menu()
+        elif action == "convert":
+            convert_menu()
+        elif action == "caption":
+            caption_menu(initial_model if first_run or initial_action == 'caption' else None)
+            initial_model = None
+        elif action == "sysinfo":
+            system_info_menu()
+
+# --- Test Runner ---
+
+
+def run_tests(verbose=False):
+    """Run test suite from testing.json."""
+    import shlex
+    import subprocess
+    
+    # Use global test state for CTRL+C handling
+    global _test_state
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    test_file = os.path.join(script_dir, "testing.json")
+    
+    if not os.path.exists(test_file):
+        print(f"❌ Test file not found: {test_file}")
+        sys.exit(1)
+    
+    with open(test_file, "r") as f:
+        data = json.load(f)
+    
+    tests = data.get("tests", [])
+    if not tests:
+        print("❌ No tests found in testing.json")
+        sys.exit(1)
+    
+    # Warning prompt
+    print(f"\n{'='*60}")
+    print(f"⚠️  WARNING: Test Suite")
+    print(f"{'='*60}")
+    print(f"   • Found {len(tests)} test(s) to run")
+    print(f"   • This may take a LONG time (30+ minutes)")
+    print(f"   • Uses significant system resources (CPU, RAM, GPU)")
+    print(f"   • Will download ALL models if not already cached")
+    print(f"   • Models can be 2-30GB each")
+    print(f"   • Press CTRL+C at any time to interrupt")
+    print(f"{'='*60}")
+    
+    try:
+        choice = input(f"\n   Continue? [Y/n]: ").lower().strip()
+        if choice in ['n', 'no']:
+            print("❌ Test cancelled.")
+            sys.exit(0)
+    except KeyboardInterrupt:
+        print("\n❌ Test cancelled.")
+        sys.exit(0)
+    
+    print(f"\n{'='*60}")
+    print(f"🧪 Running {len(tests)} test(s)")
+    print(f"{'='*60}\n")
+    
+    passed = 0
+    failed = 0
+    results = []
+    
+    # Set global test state for CTRL+C handler
+    _test_state['active'] = True
+    _test_state['total'] = len(tests)
+    _test_state['passed'] = 0
+    _test_state['failed'] = 0
+    
+    for i, test in enumerate(tests):
+        test_name = test.get("name", f"Test {i+1}")
+        command = test.get("command", "")
+        expected_inputs = test.get("expectedInputItems", [])
+        expected_outputs = test.get("expectedOutputItems", [])
+        
+        print(f"\n{'-'*50}")
+        print(f"📋 Test {i+1}/{len(tests)}: {test_name}")
+        print(f"{'-'*50}")
+        
+        test_passed = True
+        failure_reason = None
+        
+        # 1. Check expected input items exist
+        for input_item in expected_inputs:
+            input_path = os.path.join(script_dir, input_item)
+            if not os.path.exists(input_path):
+                print(f"❌ Missing input: {input_item}")
+                test_passed = False
+                failure_reason = f"Missing input: {input_item}"
+                break
+        
+        if not test_passed:
+            print(f"⏭️  Skipping due to missing inputs")
+            failed += 1
+            results.append((test_name, False, failure_reason))
+            continue
+        
+        # 2. Delete expected outputs before run (clean slate)
+        for output_item in expected_outputs:
+            output_path = os.path.join(script_dir, output_item)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+                print(f"🗑️  Deleted: {output_item}")
+        
+        # 3. Run the command
+        full_command = f"python3 {os.path.join(script_dir, 'ai-media.py')} {command}"
+        print(f"🚀 Running: python ai-media.py {command}")
+        
+        is_interactive = test.get("interactive", False)
+        interactive_wait = test.get("interactiveWait", 2.0)
+        expected_stdout_items = test.get("expectedStdoutItems", [])
+        
+        start_time = time.time()
+        current_process = None
+        try:
+            # Use Popen for better control over the subprocess
+            current_process = subprocess.Popen(
+                shlex.split(full_command),
+                cwd=script_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            try:
+                if is_interactive:
+                    if verbose: print(f"⏳ Waiting {interactive_wait}s for interactive output...")
+                    time.sleep(interactive_wait)
+                    # Send SIGINT to exit interactive loop
+                    current_process.send_signal(signal.SIGINT)
+                
+                stdout, stderr = current_process.communicate(timeout=600 if not is_interactive else 5)
+                elapsed = time.time() - start_time
+                
+                # Show verbose output if requested
+                if verbose:
+                    if stdout:
+                        print(f"\n--- STDOUT ---")
+                        print(stdout)
+                    if stderr:
+                        print(f"\n--- STDERR ---")
+                        print(stderr)
+                    print(f"--- END ---\n")
+                
+                if current_process.returncode != 0 and not is_interactive:
+                    # Interactive tests expect SIGINT exit code (usually 130 or 1 or 0 handling)
+                    # If caught cleanly it might be 0.
+                    # We only fail non-interactive tests on non-zero exit code here unless specific check later.
+                    print(f"❌ Command failed with exit code {current_process.returncode}")
+                    if stderr and not verbose:
+                        print(f"   Error: {stderr[:200]}")
+                    test_passed = False
+                    failure_reason = f"Exit code {current_process.returncode}"
+                
+                # Check STDOUT items
+                if test_passed and expected_stdout_items:
+                    for item in expected_stdout_items:
+                        if item not in stdout:
+                            print(f"❌ Missing stdout item: '{item}'")
+                            test_passed = False
+                            failure_reason = f"Missing stdout: '{item}'"
+                            break
+                        else:
+                            if verbose: print(f"✓ Found stdout item: '{item}'")
+                            
+            except subprocess.TimeoutExpired:
+                current_process.kill()
+                current_process.wait()
+                elapsed = time.time() - start_time
+                print(f"❌ Command timed out after 10 minutes")
+                test_passed = False
+                failure_reason = "Timeout"
+                
+        except KeyboardInterrupt:
+            # Terminate subprocess and re-raise to be caught by outer handler
+            if current_process:
+                current_process.terminate()
+                try:
+                    current_process.wait(timeout=2)
+                except:
+                    current_process.kill()
+            raise
+            
+        except Exception as e:
+            elapsed = time.time() - start_time
+            print(f"❌ Command exception: {e}")
+            test_passed = False
+            failure_reason = str(e)
+        
+        # 4. Check expected output items exist
+        if test_passed:
+            for output_item in expected_outputs:
+                output_path = os.path.join(script_dir, output_item)
+                if not os.path.exists(output_path):
+                    print(f"❌ Missing output: {output_item}")
+                    test_passed = False
+                    failure_reason = f"Missing output: {output_item}"
+                    break
+                else:
+                    print(f"✓ Output exists: {output_item}")
+        
+        # 5. Update test results
+        if test_passed:
+            print(f"✅ PASSED ({elapsed:.1f}s)")
+            passed += 1
+            _test_state['passed'] = passed
+            results.append((test_name, True, f"{elapsed:.1f}s"))
+        else:
+            print(f"❌ FAILED ({elapsed:.1f}s)")
+            failed += 1
+            _test_state['failed'] = failed
+            results.append((test_name, False, failure_reason))
+    
+    # Mark test as no longer active
+    _test_state['active'] = False
+    
+    # Print summary
+    print(f"\n{'='*60}")
+    print(f"📊 TEST SUMMARY")
+    print(f"{'='*60}")
+    print(f"   Total:  {len(tests)}")
+    print(f"   Passed: {passed} ✅")
+    print(f"   Failed: {failed} ❌")
+    print(f"{'='*60}")
+    
+    if failed > 0:
+        print(f"\n❌ Failed Tests:")
+        for name, success, reason in results:
+            if not success:
+                print(f"   - {name}: {reason}")
+    
+    print(f"\n📁 Results saved to: testing.json")
+    
+    sys.exit(0 if failed == 0 else 1)
+
 # --- Main Logic ---
 
 class CleanHelpFormatter(argparse.RawTextHelpFormatter):
@@ -2202,6 +3466,12 @@ Examples:
   python ai-media.py -cv clip.mov -cvt mp4
   python ai-media.py -ca song.wav -cat mp3
   
+  -- Transforming & Editing --
+  python ai-media.py -ti "photo.jpg" -p "Make it look like an anime drawing"
+  python ai-media.py -ti "photo.jpg" -p "Make it anime" -o "edits/anime_version.png"
+  python ai-media.py -ti "photo.jpg" --remove-background
+  python ai-media.py -ti "photo.jpg" --remove-background -o "no_bg/photo_clean.png"
+
   -- Image Generation --
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
@@ -2258,6 +3528,11 @@ Supported Models:
   Captioning:
     - florence (default) : ~1.5GB | microsoft/Florence-2-large (SOTA Details)
     - blip               : ~1GB   | Salesforce/blip-image-captioning-large (Simple)
+
+  Creative Transforming & Editing:
+    - instruct-pix2pix     : ~4GB  | timbrooks/instruct-pix2pix (Edit via prompts)
+    - instruct-pix2pix-sdxl: ~8GB  | diffusers/sdxl-instructpix2pix-768 (High Quality)
+    - remove-bg            : ~1GB  | briaai/RMBG-1.4 (State of the art BG Removal)
         """
     )
     
@@ -2281,7 +3556,8 @@ Supported Models:
     mode_group.add_argument("-i", "--generate-image", action="store_true", help="Generate Image")
     mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
     mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
-    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video. Usage: -gd [file] OR -gd -ii [file]")
+    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video.")
+    mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
     
     # Common
     common_group = parser.add_argument_group("Common Parameters")
@@ -2296,7 +3572,7 @@ Supported Models:
                               help="Resolution for Image/Video: '720p', '1080p', '4k', '8k', 'HD', '1280x720'. Default: 720p")
     
     # Orientation (swaps w/h for portrait mode)
-    common_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait"], default="landscape",
+    common_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
                               help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
     
     # Specific options
@@ -2327,6 +3603,14 @@ Supported Models:
     # common_group.add_argument("--unsafe", action="store_true",
     #                           help="Disable NSFW safety checker (reduces false positives but allows adult content).")
 
+    transform_group = parser.add_argument_group("Transformation Options (-ti)")
+    transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
+    transform_group.add_argument("--remove-background", "-rb", action="store_true", help="Remove background (Transparent PNG).")
+    transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
+    transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
+    # transform_group.add_argument("--vignette", action="store_true", help="Add a vignette effect.")
+    # transform_group.add_argument("--add-noise", type=float, help="Add noise strength (0.0-1.0).")
+
     # Time/Length
     # common_group.add_argument("-l", "--length", default=DEFAULT_DURATION,
     #                           help="Duration: '15s', '1h', '{m:2, s:30}'. Default: 15s")
@@ -2349,18 +3633,44 @@ Supported Models:
     upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
     upscale_group.add_argument("-su", "--simple-upscale", action="store_true", help="Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast.")
     
+    # Testing
+    test_group = parser.add_argument_group("Testing")
+    test_group.add_argument("--test", action="store_true", help="Run test suite from testing.json (quiet mode).")
+    test_group.add_argument("--test-verbose", action="store_true", help="Run test suite with full output (errors, warnings, details).")
+    
+    # Interactive Mode
+    parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
+                        help="Run in interactive mode. Optional: Jump point (e.g., 'image/sdxl', 'audio/bark').")
+    
     args = parser.parse_args()
     
-    # Prompt Validation (Required unless upscaling/converting/captioning OR using Image Input for Generation)
+    # Run test suite if --test or --test-verbose is provided
+    if args.test or args.test_verbose:
+        run_tests(verbose=args.test_verbose)
+        return  # run_tests calls sys.exit
+    
+    # Run interactive mode if --interactive is provided OR no arguments given
+    # Check if any meaningful argument was provided
+    has_action = (args.generate_image or args.generate_video or args.generate_audio or
+                  args.generate_description or args.transform_image or
+                  args.upscale_image or args.upscale_video or
+                  args.convert_image or args.convert_video or args.convert_audio or
+                  args.prompt)
+    
+    if args.interactive or not has_action:
+        run_interactive(args.interactive)
+        return
+    
+    # Prompt Validation (Required unless upscaling/converting/captioning/transforming OR using Image Input for Generation)
     standalone_modes = (args.upscale_image or args.upscale_video or 
                        args.convert_image or args.convert_video or args.convert_audio or
-                       args.generate_description)
+                       args.generate_description or args.transform_image)
     
     # Check if we are generating with an image input (valid for Audio and Video)
     is_image_based_generation = (args.generate_audio or args.generate_video) and args.input_image
     
     if not standalone_modes and not args.prompt and not is_image_based_generation:
-        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert Mode or providing an Input Image.\n                            (e.g. python ai-media.py -i -p \"cat\")")
+        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert/Transform Mode or providing an Input Image.\n                            (e.g. python ai-media.py -i -p \"cat\")")
     
     # --- Logic Routing ---
     
@@ -2369,7 +3679,9 @@ Supported Models:
     # Propagate Force Flag globally
     if args.force:
         os.environ["AI_MEDIA_FORCE"] = "1"
-    
+        
+
+
     # 0. Generate Description (Captioning)
     if args.generate_description:
         # Determine input file
@@ -2469,10 +3781,9 @@ Supported Models:
         return
 
     # 2. Validation for Generation
-    if not any([args.generate_image, args.generate_video, args.generate_audio, args.generate_description]):
-        parser.error("You must specify a generation mode: -i, -v, -a, -gd (or --upscale-image/--upscale-video)")
+    if not any([args.generate_image, args.generate_video, args.generate_audio, args.generate_description, args.transform_image, args.upscale_image, args.upscale_video]):
+        parser.error("You must specify a generation mode: -i, -v, -a, -gd, -ti (or --upscale-image/--upscale-video)")
     
-    # Auto-generate output filename from prompt if not provided
     # Auto-generate output filename from prompt if not provided
     if not args.output:
         # Sanitize prompt to create safe filename (first 2 words, alphanumeric only)
@@ -2488,6 +3799,12 @@ Supported Models:
              base = os.path.splitext(os.path.basename(args.input_image))[0]
              args.output = f"audio_{base}" if args.generate_audio else f"video_{base}"
              print(f"ℹ️  No output specified. Using input basename: {args.output}")
+
+        elif args.transform_image:
+             # Use transform input filename as base
+             base = os.path.splitext(os.path.basename(args.transform_image))[0]
+             args.output = f"{base}_transformed"
+             print(f"ℹ️  No output specified. Using transform basename: {args.output}")
         else:
              parser.error("Cannot auto-generate filename (no prompt or input image). Please specify -o.")
 
@@ -2512,6 +3829,9 @@ Supported Models:
             elif args.generate_audio:
                 args.output += ".mp3"
                 print(f"ℹ️  No extension specified. Using default: .mp3\n")
+            elif args.transform_image:
+                args.output += ".png"
+                print(f"ℹ️  No extension specified. Using default: .png\n")
 
     ensure_paths(args.output)
     
@@ -2553,9 +3873,15 @@ Supported Models:
             w, h = parse_size(final_size)
             
             # Apply orientation swap if portrait mode
+            # Apply orientation swap if portrait mode
             if args.orientation == "portrait":
                 w, h = h, w
                 print(f"📐 Portrait orientation: swapped to {w}x{h}")
+            elif args.orientation == "square":
+                # User request: use the smaller size and repeat it
+                side = min(w, h)
+                w, h = side, side
+                print(f"📐 Square orientation: adjusted to {w}x{h}")
             
             # --- Proactive Optimization for High-Res (4K+) ---
             # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
@@ -2734,6 +4060,161 @@ Supported Models:
                 print("")  # Spacer
                 print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
                 tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram)
+
+        # X. Transform Image (-ti) - Chained or Standalone
+        if args.transform_image:
+            # If generation just happened (success=True), we might need to rely on the Output of that generation
+            # as the input for this transformation, IF the input was specified as the output name.
+            
+            # Handle anonymous chain: -ti without filename uses generated output
+            if args.transform_image == "USE_GENERATED":
+                if success and args.output:
+                    input_file = args.output
+                    print(f"🔗 Anonymous chain: Using generated output '{input_file}' as transformation input")
+                else:
+                    print("❌ Error: -ti used without a file, but no image was generated.")
+                    print("   Either specify a file: -ti photo.jpg")
+                    print("   Or chain with generation: -i -p \"...\" -ti -tp \"...\"")
+                    sys.exit(1)
+            else:
+                input_file = args.transform_image
+            
+            # Check if input file exists
+            if not os.path.exists(input_file):
+                print(f"❌ Error: Input file for transformation not found: {input_file}")
+                sys.exit(1)
+
+            # Determine output
+            # If args.output was set for generation, it is currently holding that value.
+            # If we want to overwrite, that's fine.
+            # If args.output wasn't set, it was auto-generated.
+            
+            # NOTE: If we are chaining, we usually want to operate in-place OR allow a new output.
+            # But argparse only allows one -o. 
+            # So usually Chained = In-Place (User provided same filename).
+            
+            # If Standalone -ti, args.output might be empty.
+            if not args.output or (args.output == input_file and not args.force and not success):
+                 # Auto-generate output name if not provided OR if matches input (safe default without force)
+                 # But if success=True (Generation happened), we created the file, so checking existence/overwrite again is annoying?
+                 # Actually, if we generated 'file.png' and now want to transform 'file.png' -> 'file.png',
+                 # we shouldn't prompt for overwrite again if we just made it? 
+                 # But the transformation functions might prompt.
+                 
+                 if not args.output:
+                     name = os.path.splitext(input_file)[0]
+                     suffix = "transformed"
+                     if args.remove_background: suffix = "transformed-nobg"
+                     if args.transform_prompt or args.prompt: suffix = "transformed-edit"
+                     args.output = f"{name}_{suffix}.png"
+                 
+            # Add overwrite protection and path creation (Only if we didn't just generate it?)
+            # If success=True, we own the file, probably safe to overwrite?
+            ensure_paths(args.output)
+            
+            if os.path.exists(args.output) and not args.force and not success:
+                print(f"⚠️  File '{args.output}' already exists.")
+                try:
+                    choice = input(f"   Overwrite? [y/N]: ").lower().strip()
+                    if choice not in ['y', 'yes']:
+                        print("❌ Operation cancelled.")
+                        sys.exit(0)
+                except KeyboardInterrupt:
+                    print("\n❌ Operation cancelled.")
+                    sys.exit(0)
+
+            current_input = input_file
+            intermediate_file = None
+            
+            print("")
+            print(f"🎨 Starting Transformation on: {current_input}")
+
+            # 1. Instructional Editing (Step 1)
+            # Use 'success' to chain through this block locally
+            transform_success = True
+            
+            # Use transform_prompt if provided, otherwise fall back to prompt (for standalone -ti)
+            edit_prompt = args.transform_prompt or args.prompt
+            
+            if edit_prompt:
+                steps = 50
+                model_to_use = "default" 
+                if args.image_model and "sdxl" in args.image_model.lower():
+                    model_to_use = "instruct-pix2pix-sdxl"
+                
+                # If chaining internal steps (Edit + RemoveBG), execute to a temporary intermediate file
+                target_out = args.output
+                if args.remove_background:
+                    name_part = os.path.splitext(args.output)[0]
+                    intermediate_file = f"{name_part}_temp_edit.png"
+                    target_out = intermediate_file
+                    
+                    print("")
+                    header = "🔗 Chaining detected: 2 Steps"
+                    step1 = "   Step 1 - Creative Edit (InstructPix2Pix)"
+                    step2 = "   Step 2 - Remove Background (RMBG-1.4)"
+                    
+                    max_len = max(len(header), len(step1), len(step2))
+                    separator = "=" * (max_len + 4) # Add some padding
+
+                    print(separator)
+                    print(f"  {header}")
+                    print(f"  {step1}")
+                    print(f"  {step2}")
+                    print(separator)
+
+                    print(f"\n{separator}")
+                    print(f"Step 1/2: Creative Edit")
+                    print(separator)
+                    print(f"🔗 Intermediate input: '{os.path.basename(intermediate_file)}'")
+
+                transform_success = generate_edit(
+                    current_input, 
+                    edit_prompt, 
+                    target_out, 
+                    model_name=model_to_use, 
+                    guidance_scale=7.5, 
+                    image_guidance_scale=args.image_guidance,
+                    unsafe=args.unsafe
+                )
+                
+                if not transform_success:
+                    if intermediate_file and os.path.exists(intermediate_file):
+                        os.remove(intermediate_file)
+                    # Don't exit, just mark fail?
+                    success = False
+
+                # Update input for next step
+                if transform_success and args.remove_background:
+                    current_input = intermediate_file
+
+            # 2. Background Removal / Silhouette (Step 2 or Only Step)
+            if transform_success and args.remove_background:
+                if edit_prompt:
+                     # Use the same separator length if available, otherwise default
+                     sep = separator if 'separator' in locals() else "============================"
+                     print(f"\n\n{sep}")
+                     print(f"Step 2/2: Remove Background")
+                     print(sep)
+
+                transform_success = remove_background(current_input, args.output, silhouette=args.silhouette)
+                
+                # Cleanup intermediate
+                if intermediate_file and os.path.exists(intermediate_file):
+                    os.remove(intermediate_file)
+                
+                if not transform_success: success = False
+                
+            # 3. Warn if no action
+            if not edit_prompt and not args.remove_background:
+                 print("⚠️  Transform mode requires either a prompt (-tp or -p) or --remove-background.")
+                 success = False
+                 
+            # Update global success for next stages (Upscale)
+            if transform_success:
+                success = True # Ensure we can continue to upscale if requested
+            else:
+                success = False
 
         # --- Stage 2: Upscaling (Chained) ---
         if success and args.upscale:

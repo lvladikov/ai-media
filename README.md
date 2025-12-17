@@ -1,6 +1,6 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
 
 ## Features
 
@@ -8,6 +8,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🎨 **Image Generation** - Text-to-Image using models like Flux/SDXL (via `diffusers`).
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
 - 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
+- 🪄 **Creative Image Transformations** - Edit images using natural language instructions (InstructPix2Pix) or remove backgrounds (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes).
 - 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
 - 📝 **Description Generation** - Generate a description for an image or video using models like Florence/BLIP (via `transformers`).
 - ⚙️ **Power User Controls**
@@ -57,6 +58,9 @@ Some state-of-the-art models (like `FLUX.1`) require authentication (but are **f
 
 *Note: The default model `sd-1.5` is open and requires no login.*
 
+---
+
+
 ## Installation
 
 ```bash
@@ -81,6 +85,11 @@ cd ai-media
 
 # 3. Activate environment
 source venv/bin/activate
+    # Windows:
+    .venv\Scripts\activate.bat
+    # or for PowerShell:
+    # if neededSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    .venv\Scripts\Activate.ps1
 
 # 4. Install dependencies
 pip install -r requirements.txt
@@ -196,6 +205,119 @@ python ai-media.py -gd clip.mp4
 
 # Custom output filename
 python ai-media.py -gd input.jpg -o my_caption.txt
+```
+
+---
+### 🎨 Creative Image Transformation / Editing
+Edit existing images using AI instructions or remove backgrounds.
+
+| Argument | Description |
+| :--- | :--- |
+| `-ti`, `--transform-image` | Path to the image file to transform. |
+| `-p`, `--prompt` | Edit instruction (works for standalone transformations). |
+| `-tp`, `--transform-prompt` | Edit instruction for chaining with generation (e.g., `-i -p "..." -ti file -tp "..."`). |
+| `--remove-background`, `-rb` | Remove background (outputs transparent PNG). |
+| `--silhouette` | Create a black silhouette (requires `--remove-background`). |
+| `--image-guidance` | Image guidance scale (default: `1.5`). Higher = closer to original structure. |
+
+> [!NOTE]
+> **`-p` vs `-tp`**: For standalone transformations (`-ti` only), use `-p`. When chaining generation (`-i`) with transformation (`-ti`), use `-p` for the **generation prompt** and `-tp` for the **edit instruction**.
+
+**1. Instructional Editing (InstructPix2Pix)**
+Change style, remove objects, or modify content using natural language.
+```bash
+# Turn into Anime
+python ai-media.py -ti photo.jpg -tp "Make it look like an anime drawing"
+
+# Remove a beard
+python ai-media.py -ti face.jpg -tp "Remove the beard"
+
+# Change style to Oil Painting
+python ai-media.py -ti landscape.jpg -tp "Make it look like an oil painting by Van Gogh"
+```
+
+**2. Background Removal (RMBG-1.4)**
+Create transparent PNGs or silhouettes.
+```bash
+# Remove Background (Transparent PNG)
+python ai-media.py -ti photo.jpg --remove-background
+
+# Create a Silhouette (Black Subject, White Background)
+python ai-media.py -ti dancer.jpg --remove-background --silhouette
+```
+
+**3. Transformation Recipe Book 🪄**
+Here are prompt examples for common editing tasks.
+
+| Goal | Command Pattern |
+| :--- | :--- |
+| **Styles** | |
+| Anime / Manga | `-tp "Turn him into an anime character"` |
+| Disney / Pixar | `-tp "Make it look like a 3D Pixar character"` |
+| Studio Ghibli | `-tp "Make it look like a Studio Ghibli movie"` |
+| Oil Painting | `-tp "Make it look like an oil painting"` |
+| Watercolor | `-tp "Turn this into a watercolor painting"` |
+| Pencil Sketch | `-tp "Turn this into a pencil sketch"` |
+| Cartoon | `-tp "Turn this into a flat cartoon"` |
+| Coloring Page | `-tp "Make it a black and white coloring page"` |
+| Sticker | `-tp "Turn this into a sticker with a white outline"` |
+| **Photo Manipulations** | |
+| Remove Beard | `-tp "Remove the beard"` |
+| Change Hairstyle | `-tp "Give him a mohawk hairstyle"` |
+| Facial Expressions | `-tp "Make him smile"`, `-tp "Make her look surprised"` |
+| Age / Baby | `-tp "Make him look like a baby"` |
+| Caricature | `-tp "Turn this into a funny caricature"` |
+| Recolor | `-tp "Change the red dress to blue"` |
+| Colorize B&W | `-tp "Colorize this photo"` |
+| Sketch to Image | `-tp "Turn this sketch into a photo of an apple"` |
+| **Removal** | |
+| Background | `--remove-background` (No prompt needed) |
+| Silhouette | `--remove-background --silhouette` |
+| Text / Objects | `-tp "Remove the text"`, `-tp "Remove the cup"` (Experimental) |
+
+**4. Chaining Transformations 🔗**
+You can mix commands! The tool automatically executes them in the correct order: **Edit First → Remove Background Second**. This preserves transparency.
+
+```bash
+# 1. Edit Style -> Remove Background
+# Result: A transparent PNG of the anime character
+python ai-media.py -ti photo.jpg -tp "Make it anime" --remove-background
+
+# 2. Modify Subject -> Create Silhouette
+# Result: A black silhouette of the modified subject (e.g. adding a hat)
+python ai-media.py -ti photo.jpg -tp "Put a hat on him" --remove-background --silhouette
+```
+
+**5. Chaining Generations and Transformations 🔗**
+Chain **Image Generation** with **Transformations** in a single command. Use `-ti` without a filename to automatically use the generated output.
+
+```bash
+# Simplified syntax: -ti auto-uses generated output
+python ai-media.py -i -p "Portrait of a knight" -ti -tp "Make him hold a sword"
+
+# With --remove-background (triple chain!)
+python ai-media.py -i -p "Photo of a cat" -ti -tp "Make it anime" --remove-background
+
+# Create silhouette from generated image
+python ai-media.py -i -p "Dancer on stage" -ti -tp "Add dramatic lighting" --remove-background --silhouette
+
+# Explicit filename (traditional syntax still works)
+python ai-media.py -i -p "A knight" -o knight.png -ti knight.png -tp "Add sword"
+```
+
+> [!TIP]
+> Use `-p` for the **generation** prompt and `-tp` for the **edit** instruction. This allows completely different prompts for each stage.
+
+**6. Advanced Options**
+```bash
+# Custom Output Filename
+python ai-media.py -ti photo.jpg -tp "Anime" -o "anime_version.png"
+
+# Save to Subfolder (Dir is auto-created)
+python ai-media.py -ti photo.jpg -tp "Anime" -o "edits/versions/anime_v1.png"
+
+# Control guidance (Higher = Stick closer to original structure)
+python ai-media.py -ti photo.jpg -tp "Cyborg" --image-guidance 1.8
 ```
 
 ---
@@ -321,7 +443,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
 | `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
-| `-otn, --orientation` | `landscape` (default) or `portrait`. Portrait swaps width/height - **recommended for single-person portraits** to avoid duplicate faces. |
+| `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. Square effectively crops/forces 1:1 aspect ratio using the smaller dimension. |
 | `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
 | `-ii, --image-input` | Source image path for **Image-to-Video** generation. |
 | `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
@@ -416,6 +538,13 @@ By default, the Bark model can only generate ~14 seconds of audio per pass. This
 > [!NOTE]
 > **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.
 
+### Creative Transformation / Editing Models (`-ti`)
+
+| Model | Code | Download | VRAM | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **InstructPix2Pix** | `instruct-pix2pix` | ~4GB | ~8GB (High Precision) | Instructional image editing (e.g., "Make it anime"). |
+| **RMBG-1.4** | `remove-bg` | ~0.2GB | ~2GB | Background removal and silhouette creation. |
+
 ### Upscaling Models (Auto-selected based on factor)
 
 | Model | Code | Download | VRAM | Best For |
@@ -470,6 +599,57 @@ The tool supports natural language and object-style inputs:
 - **Strings**: `15s`, `1m`, `1h30m5s`
 - **Objects**: `{m: 1, s: 30}`, `{hours: 1, minutes: 15}`
 - **Numeric**: `30` (interpreted as seconds)
+
+## Interactive Mode 🎨
+
+The interactive mode offers a guided menu system for all features. It runs automatically if no arguments are provided, or explicitly via `--interactive`.
+
+```bash
+# Run interactive menu
+python ai-media.py
+# OR
+python ai-media.py --interactive
+```
+
+### Fast Jump Points
+
+You can jump directly to specific submenus or models using shortcut paths with `--interactive`:
+
+| Menu # | Task | Jump Point | Description |
+| :--- | :--- | :--- | :--- |
+| `1` | **Image** | `image` | Image Menu |
+| `1/1` | | `image/sdxl` | SDXL Turbo (Fast) |
+| `1/2` | | `image/sd15` | SD 1.5 (Regular) |
+| `1/3` | | `image/flux` | Flux Schnell |
+| `1/4` | | `image/flux-dev` | Flux Dev |
+| `2` | **Video** | `video` | Video Menu |
+| `2/1` | | `video/zeroscope` | Zeroscope (No Watermark) |
+| `2/2` | | `video/modelscope` | ModelScope (General) |
+| `2/3` | | `video/cogvideox` | CogVideoX |
+| `2/4` | | `video/svd` | Stable Video Diffusion |
+| `3` | **Audio** | `audio` | Audio Menu |
+| `3/1` | | `audio/musicgen` | MusicGen Medium |
+| `3/2` | | `audio/musicgen-small` | MusicGen Small (Fast) |
+| `3/3` | | `audio/musicgen-large` | MusicGen Large (Quality) |
+| `3/4` | | `audio/audioldm2` | AudioLDM2 (SFX) |
+| `3/5` | | `audio/bark` | Bark (TTS) |
+| `4` | **Edit** | `transform` | Transform Menu |
+| `4/1` | | `transform/edit` | Creative Edit |
+| `4/2` | | `transform/rembg` | Background Removal |
+| `4/3` | | `transform/silhouette` | Silhouette |
+| `5` | **Other** | `upscale` | Upscale Menu |
+| `6` | | `convert` | Convert Menu |
+| `7` | | `caption` | Caption Menu |
+| `8` | | `sysinfo` | System Information |
+
+```bash
+python ai-media.py --interactive "image/sdxl"
+python ai-media.py --interactive "audio/bark"
+python ai-media.py --interactive 8
+python ai-media.py --interactive "4/2"
+python ai-media.py --interactive 3/5
+```
+
 
 ## Performance Tracking
 
@@ -528,12 +708,12 @@ You'll be prompted if:
 
 ## Safety Checker
 
-**Image generation models only.** Video and audio models do not have safety checkers.
+**Image generation and editing models only.** Video and audio models do not have safety checkers.
 
-Image models include an NSFW safety checker that blocks potentially inappropriate content. However, this safety checker (especially on SD 1.5) is known to have **false positives** - blocking completely innocent prompts.
+Image generation (SDXL/Flux/SD1.5) and **InstructPix2Pix Editing** models include an NSFW safety checker. This checker is known to have **false positives**, especially on non-CUDA hardware.
 
 > [!WARNING]
-> **Non-NVIDIA Hardware (Apple Silicon, CPU):** The NSFW safety checker model does not work correctly on non-CUDA hardware and produces false positives on almost all prompts. If you're on **Apple Silicon/MPS**, you will likely need to use `--unsafe` with SD 1.5.
+> **Non-NVIDIA Hardware (Apple Silicon, CPU):** The NSFW safety checker model frequently produces false positives (black images) on Apple Silicon/MPS. This most commonly affects **Stable Diffusion 1.5** (`-i`) and **InstructPix2Pix** (`-ti`). If you encounter black outputs, you will likely need to use `--unsafe`.
 
 ### 🚫 False Positive Example
 Certain prompts may trigger the filter unexpectedly, resulting in:
@@ -608,6 +788,25 @@ source venv/bin/activate
 3. The result is **cropped back** to your exact target dimensions
 **Impact**: The final output matches your requested dimensions exactly. The padding is only used internally.
 
+### ❌ Windows: NVIDIA GPU Not Detected (Using CPU)
+**Symptom**: You have an NVIDIA GPU with CUDA support, but the script shows:
+```
+💻 Using CPU (Slow): CUDA or MPS not detected (or torch missing)
+```
+**Cause**: Mismatch between the system-installed CUDA version and the PyTorch bundled CUDA libraries. The default `pip install torch` may install a CPU-only or incompatible CUDA version.
+**Solution**: Reinstall PyTorch with the correct CUDA version for your system:
+```bash
+pip uninstall torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+```
+> [!TIP]
+> Replace `cu130` with your CUDA version (e.g., `cu118` for CUDA 11.8, `cu121` for CUDA 12.1). Check your CUDA version with `nvcc --version` or `nvidia-smi`.
+
+After reinstalling, you should see:
+```
+🚀 Detected NVIDIA GPU: Using CUDA
+```
+
 ## Dependencies
 
 This project uses the following open-source libraries:
@@ -642,7 +841,34 @@ This project uses the following open-source libraries:
 - **Stable Diffusion x4 Upscaler** by Stability AI - [stabilityai/stable-diffusion-x4-upscaler](https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler)
 - **Florence-2** by Microsoft - [microsoft/Florence-2-large](https://huggingface.co/microsoft/Florence-2-large)
 - **BLIP** by Salesforce - [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large)
+- **InstructPix2Pix** by Tim Brooks et al. - [timbrooks/instruct-pix2pix](https://github.com/timathy/instruct-pix2pix)
+- **RMBG-1.4** by BRIA AI - [briaai/RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4)
 
+---
+
+## Testing (Internal)
+
+This project includes an automated test suite for development and verification. It's primarily for internal use, but if you want to see everything in action, you're welcome to run it.
+
+```bash
+# Run tests (quiet mode)
+python ai-media.py --test
+
+# Run tests with full output
+python ai-media.py --test-verbose
+```
+
+| File/Folder | Description |
+| :--- | :--- |
+| `testing.json` | Test configurations (commands, expected outputs) |
+| `testData/inputs/` | Sample input files for tests |
+| `testData/outputs/` | Generated outputs (git-ignored) |
+
+> [!WARNING]
+> - This may take a **long time** (30+ minutes)
+> - Uses significant system resources (CPU, RAM, GPU)
+> - Will download **all models** if not already cached (2-30GB each)
+> - Press `CTRL+C` at any time to interrupt
 
 ## Disclaimer
 
