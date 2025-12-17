@@ -52,6 +52,10 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["DIFFUSERS_VERBOSITY"] = "error"
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 
+# CUDA Memory Optimization - Reduce fragmentation on Windows/NVIDIA
+# This helps prevent "CUDA out of memory" errors even when GPU has free memory
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+
 
 # --- Constants ---
 DEFAULT_IMAGE_SIZE = "720p"  # Maps to 1280x720
@@ -148,6 +152,26 @@ MODEL_REQUIREMENTS = {
     "diffusers/sdxl-instructpix2pix-768": {"vram": 10, "ram": 16, "max_resolution": (1024, 1024)},
     "briaai/RMBG-1.4": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
 }
+
+
+def clear_gpu_memory():
+    """Clear GPU memory cache to reduce fragmentation and prevent OOM errors.
+    
+    Call this between heavy operations to free unused memory.
+    """
+    import gc
+    gc.collect()
+    
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        elif torch.backends.mps.is_available():
+            # MPS doesn't have explicit cache clearing, but gc helps
+            pass
+    except ImportError:
+        pass
 
 
 def get_system_resources():
@@ -3379,7 +3403,7 @@ def run_tests(verbose=False):
                 print(f"🗑️  Deleted: {output_item}")
         
         # 3. Run the command
-        full_command = f"python3 {os.path.join(script_dir, 'ai-media.py')} {command}"
+        full_command = [sys.executable, os.path.join(script_dir, 'ai-media.py')] + shlex.split(command)
         print(f"🚀 Running: python ai-media.py {command}")
         
         is_interactive = test.get("interactive", False)
@@ -3389,13 +3413,20 @@ def run_tests(verbose=False):
         start_time = time.time()
         current_process = None
         try:
+            # Set UTF-8 for subprocess to handle emoji on Windows
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+            
             # Use Popen for better control over the subprocess
             current_process = subprocess.Popen(
-                shlex.split(full_command),
+                full_command,
                 cwd=script_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                env=env
             )
             
             try:
