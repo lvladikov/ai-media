@@ -373,6 +373,12 @@ To generate non-speech audio, use these tags in your prompt:
 *   `—` or `...` (hesitations)
 *   `♪` (wrap lyrics for singing, e.g. `♪ Hello World ♪`)
 
+> [!TIP]
+> **Token Reliability**: These sound effects are probabilistic and may not work with every voice or seed.
+> *   **Try different voices**: Some speakers "laugh" better than others.
+> *   **Context matters**: A prompt like *"That was funny! [laughter]"* works better than just `[laughter]`.
+> *   **Singing**: Lyrics wrapping `♪` works best with short, rhythmic lines.
+
 **2. Voice Presets (`--voice-preset`)**
 You can change the speaker using the `--voice-preset` flag (default: `v2/en_speaker_6`).
 *   **Format**: `v2/{lang}_speaker_{0-9}`
@@ -380,6 +386,16 @@ You can change the speaker using the `--voice-preset` flag (default: `v2/en_spea
 *   **Reference**: [Bark Speaker Library (Audio Samples)](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc8cd1ed101043facc93a945395850fb)
 
 > **Example**: `python ai-media.py -a -am bark -p "♪ In the jungle ♪ [laughter]" --voice-preset v2/it_speaker_2`
+
+**3. Auto-Chunking & Unlimited Length** ♾️
+By default, the Bark model can only generate ~14 seconds of audio per pass. This script includes an **automatic long-form generation** feature.
+*   **Triggers**: This mode activates automatically if your text is long (>150 characters) or if you explicitly set a long duration (e.g. `--length 20s`).
+*   **Audio Length**: The final audio length depends **entirely on your text**. (The `--length` flag effectively serves as a "force split" switch for Bark).
+*   **Process**: The script splits your text into sentences and generates them in independent, stable chunks to ensure voice consistency.
+*   **Usage**: Just provide a long text prompt.
+    *   `python ai-media.py -a -am bark -p "This is a very long story..."`
+    *   `python ai-media.py -a -am bark --voice-preset v2/en_speaker_6 -p "This is the first sentence. And this is the second one! Now we can go on forever without the model cutting us off. Like I am continuing here for a long long time [laughter]. Oh no [gasp], why did I do that!"`
+
 
 
 ### Video Models (`--video-model`)

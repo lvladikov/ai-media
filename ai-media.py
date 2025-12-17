@@ -825,6 +825,71 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
              print(f"⚠️  Analysis failed: {e}")
         return None
 
+def generate_long_bark(prompt, processor, model, device, voice_preset, sample_rate=24000):
+    """
+    Generate long-form audio with Bark by splitting text into sentences.
+    Avoids 'history' chaining to prevent hallucinations/degradation.
+    Concatenates independent chunks with the same voice preset.
+    """
+    import numpy as np
+    
+    # Smart split by sentence ending punctuation
+    # Splits on: . ? ! or newline, keeping the punctuation
+    sentences = re.split(r'([.?!]+|\n+)', prompt)
+    
+    # Recombine split text (sentence + punctuation)
+    chunks = []
+    current_chunk = ""
+    
+    for s in sentences:
+        s = s.strip()
+        if not s: continue
+        
+        # If it's punctuation, attach to previous
+        if re.match(r'^[.?!]+$', s) or re.match(r'^\n+$', s):
+            if chunks:
+                chunks[-1] += s
+            else:
+                current_chunk += s # edge case: starts with punctuation
+        else:
+            # If current chunk is getting too long (Bark limit ~14s is roughly ~20-30 words depending on speed)
+            # Heuristic: ~200 chars or ~30 words is safer upper bound
+            if len(current_chunk) + len(s) > 200:
+                chunks.append(current_chunk)
+                current_chunk = s
+            else:
+                # Basic accumulation
+                if current_chunk:
+                    # If current didn't end with proper punctuation, add space
+                    chunks.append(current_chunk)
+                    current_chunk = s
+                else:
+                    current_chunk = s
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+        
+    print(f"   ✂️  Splitting long text into {len(chunks)} chunks for stable generation...")
+    full_audio = []
+    
+    for i, text_chunk in enumerate(chunks):
+        if not text_chunk.strip(): continue
+        print(f"   ▶️  Generating chunk {i+1}/{len(chunks)}: '{text_chunk[:30]}...'")
+        
+        # Independent generation (Best stability)
+        inputs = processor(text_chunk, voice_preset=voice_preset).to(device)
+        audio_array = model.generate(**inputs, do_sample=True)
+        audio_array = audio_array.cpu().numpy().squeeze()
+        full_audio.append(audio_array)
+        
+        # Add a short silence between sentences for natural pacing (0.25s)
+        silence_len = int(sample_rate * 0.25)
+        full_audio.append(np.zeros(silence_len))
+
+    # Concatenate all
+    if not full_audio: return np.array([])
+    return np.concatenate(full_audio)
+
 def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", image_input=None, caption_model="florence", voice_preset="v2/en_speaker_6"):
     """Generate audio using MusicGen or AudioLDM (supports Image-to-Audio via captioning)."""
     
@@ -859,7 +924,12 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
     print(f"   Model:    {model_id}")
     print(f"   Prompt:   '{prompt}'")
     if image_input: print(f"   Input Img: {image_input}")
-    print(f"   Duration: {duration}s")
+    
+    if "bark" in model_id.lower():
+        print(f"   Duration: Auto (Text-based)")
+    else:
+        print(f"   Duration: {duration}s")
+        
     print(f"   Sampling: {sampling_rate}Hz")
     print(f"   Output:   {output_path}")
     print("") # Spacer
@@ -958,11 +1028,20 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
    *  Voice: Using preset '{voice_preset}'. Change with --voice-preset (e.g. 'v2/fr_speaker_1').
    *  Example: `python ai-media.py -a --audio-model bark -p "♪ Hello World ♪ [laughter]"`""")
             
-            # Use user-specified voice preset
-            inputs = processor(prompt, voice_preset=voice_preset).to(device)
-            # Bark output shape: [1, length]
-            audio_array = model.generate(**inputs) 
-            audio_array = audio_array.cpu().numpy().squeeze()
+            # Decide if Long-Form is needed
+            # Heuristic: Text > 150 chars OR user requested > 15 seconds
+            # Bark roughly does ~14s max.
+            is_long = len(prompt) > 150 or duration > 15.0
+            
+            if is_long:
+                print(f"   📜 Long text detected. Using chunked generation.")
+                audio_array = generate_long_bark(prompt, processor, model, device, voice_preset)
+            else:
+                # Use user-specified voice preset
+                inputs = processor(prompt, voice_preset=voice_preset).to(device)
+                # Bark output shape: [1, length]
+                audio_array = model.generate(**inputs) 
+                audio_array = audio_array.cpu().numpy().squeeze()
             
             rate = model.generation_config.sample_rate # 24000
             
