@@ -73,11 +73,11 @@ AUDIO_MODELS = {
 }
 
 VIDEO_MODELS = {
-    "ms-1.7b": "damo-vilab/text-to-video-ms-1.7b",     # Standard open research model
-    "zeroscope": "cerspense/zeroscope_v2_576w",        # 576x320 optimized
+    "ms-1.7b": "damo-vilab/text-to-video-ms-1.7b",     # Has watermark issues
+    "zeroscope": "cerspense/zeroscope_v2_576w",        # 576x320 optimized (default)
     "cogvideox": "THUDM/CogVideoX-5b",                 # High quality (requires high VRAM)
     "svd": "stabilityai/stable-video-diffusion-img2vid-xt", # SVD Image-to-Video
-    "default": "damo-vilab/text-to-video-ms-1.7b"
+    "default": "cerspense/zeroscope_v2_576w"
 }
 
 # Resolution Presets
@@ -781,6 +781,23 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         from diffusers.utils import export_to_video, load_image
         
         device, dtype = get_optimal_device_and_dtype(quiet=True)
+        
+        # MPS FIX: These models need Float32/CPU on MPS
+        # - Text-to-Video models: Float16 corrupts output
+        # - SVD: 3D convolutions cause "Invalid buffer size" errors on MPS
+        mps_incompatible_models = ["ms-1.7b", "text-to-video-ms-1.7b", "zeroscope", "stable-video-diffusion"]
+        is_mps_incompatible = any(m in model_id.lower() for m in mps_incompatible_models)
+        
+        if device.type == "mps" and is_mps_incompatible:
+            # SVD needs CPU entirely (3D convolutions fail on MPS)
+            if "stable-video-diffusion" in model_id.lower():
+                print("⚠️  MPS Compatibility: SVD requires CPU on Apple Silicon.")
+                print("   (3D convolutions cause 'Invalid buffer size' on MPS)")
+                device = torch.device("cpu")
+            else:
+                print("⚠️  MPS Compatibility: Using Float32 for correct video output.")
+            dtype = torch.float32
+        
         print("⚠️  Video generation is resource intensive.")
         
         # --- Stage 1: Video Generation ---
@@ -791,18 +808,29 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         elif "stable-video-diffusion" in model_id.lower():
             pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16" if dtype == torch.float16 else None)
         else:
-            # Generic / Text-to-Video
-            pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16" if dtype == torch.float16 else None)
+            # Generic / Text-to-Video - try fp16 variant first, fallback to default
+            try:
+                if dtype == torch.float16:
+                    pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16")
+                else:
+                    pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            except Exception:
+                # Model doesn't have fp16 variant, load without it
+                pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype)
         
         # Scheduler Optimization
         if hasattr(pipe, "scheduler"):
             try:
                 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
             except: pass 
-            
-        pipe.enable_model_cpu_offload()
-        if device.type == "mps":
-             pipe.enable_attention_slicing()
+        
+        # Device/Memory Optimization
+        if device.type == "cpu":
+            pipe.to(device)
+        else:
+            pipe.enable_model_cpu_offload()
+            if device.type == "mps":
+                pipe.enable_attention_slicing()
         
         # Generate Frames
         print(f"🎬 Rendering video frames... (This will be slow)")
@@ -818,9 +846,24 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             num_frames = int(duration * 16)
             video_frames = pipe(prompt, num_inference_steps=25, num_frames=num_frames).frames[0]
         
-        # Save Video
-        export_to_video(video_frames, video_out, fps=7 if "stable-video-diffusion" in model_id.lower() else 16) 
-        print(f"✅ Video track saved to {video_out}")
+        # Save Video (raw export - may need re-encoding for compatibility)
+        temp_raw_video = video_out + ".raw.mp4"
+        export_to_video(video_frames, temp_raw_video, fps=7 if "stable-video-diffusion" in model_id.lower() else 16) 
+        
+        # Re-encode with FFmpeg for universal playback
+        import subprocess
+        try:
+            subprocess.run([
+                "ffmpeg", "-y", "-i", temp_raw_video,
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                video_out
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.remove(temp_raw_video)
+            print(f"✅ Video track saved to {video_out}")
+        except Exception as e:
+            # Fallback: use raw video if FFmpeg fails
+            os.rename(temp_raw_video, video_out)
+            print(f"⚠️  Video saved (may require VLC to play): {video_out}")
         
         # --- Stage 2 & 3: Audio Generation & Muxing ---
         if audio_prompt:
@@ -1432,21 +1475,197 @@ def parse_upscale_factor(val):
         print(f"⚠️  Invalid upscale factor '{val}'. Using default 2.0x.")
         return 2.0
 
+def convert_image_file(input_path, target):
+    """Convert image format using PIL (no AI).
+    
+    Args:
+        input_path: Source image file
+        target: Output path, extension (.png), or format (png)
+    """
+    from PIL import Image
+    from pathlib import Path
+    
+    # Parse target format
+    target = target.strip()
+    
+    # Determine output path and format
+    if '/' in target or '\\' in target or len(target) > 6:
+        # It's a full path
+        output_path = target
+    elif target.startswith('.'):
+        # It's an extension like ".png"
+        name = Path(input_path).stem
+        output_path = f"{name}{target}"
+    else:
+        # It's just a format like "png" or "PNG"
+        name = Path(input_path).stem
+        output_path = f"{name}.{target.lower()}"
+    
+    print(f"🔄 Converting Image: {input_path}")
+    print(f"   Output: {output_path}")
+    
+    # Overwrite protection
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            confirm = input(f"⚠️  '{output_path}' exists. Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted.")
+                return False
+    
+    try:
+        img = Image.open(input_path)
+        
+        # Handle transparency for formats that don't support it
+        output_ext = Path(output_path).suffix.lower()
+        if output_ext in ['.jpg', '.jpeg'] and img.mode in ['RGBA', 'P']:
+            print(f"   ℹ️  Converting RGBA → RGB (JPEG doesn't support transparency)")
+            img = img.convert('RGB')
+        
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        img.save(output_path)
+        print(f"✅ Converted image saved to {output_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        return False
+
+def convert_image_ffmpeg(input_path, target):
+    """Convert image format using FFmpeg."""
+    from pathlib import Path
+    import subprocess
+    
+    target = target.strip()
+    if '/' in target or '\\' in target or len(target) > 6:
+        output_path = target
+    elif target.startswith('.'):
+        output_path = f"{Path(input_path).stem}{target}"
+    else:
+        output_path = f"{Path(input_path).stem}.{target.lower()}"
+    
+    print(f"🔄 Converting Image (FFmpeg): {input_path}")
+    print(f"   Output: {output_path}")
+    
+    # Overwrite protection
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            confirm = input(f"⚠️  '{output_path}' exists. Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted.")
+                return False
+    
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-i", input_path, output_path], 
+                      check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"✅ Converted image saved to {output_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        return False
+
+def convert_video_file(input_path, target):
+    """Convert video format using FFmpeg."""
+    from pathlib import Path
+    import subprocess
+    
+    target = target.strip()
+    if '/' in target or '\\' in target or len(target) > 6:
+        output_path = target
+    elif target.startswith('.'):
+        output_path = f"{Path(input_path).stem}{target}"
+    else:
+        output_path = f"{Path(input_path).stem}.{target.lower()}"
+    
+    print(f"🎬 Converting Video: {input_path}")
+    print(f"   Output: {output_path}")
+    
+    # Overwrite protection
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            confirm = input(f"⚠️  '{output_path}' exists. Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted.")
+                return False
+    
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-i", input_path, "-c:v", "libx264", "-c:a", "aac", output_path], 
+                      check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"✅ Converted video saved to {output_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        return False
+
+def convert_audio_file(input_path, target):
+    """Convert audio format using FFmpeg."""
+    from pathlib import Path
+    import subprocess
+    
+    target = target.strip()
+    if '/' in target or '\\' in target or len(target) > 6:
+        output_path = target
+    elif target.startswith('.'):
+        output_path = f"{Path(input_path).stem}{target}"
+    else:
+        output_path = f"{Path(input_path).stem}.{target.lower()}"
+    
+    print(f"🎵 Converting Audio: {input_path}")
+    print(f"   Output: {output_path}")
+    
+    # Overwrite protection
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            confirm = input(f"⚠️  '{output_path}' exists. Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted.")
+                return False
+    
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-i", input_path, output_path], 
+                      check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"✅ Converted audio saved to {output_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        return False
+
 # --- Main Logic ---
+
+class CleanHelpFormatter(argparse.RawTextHelpFormatter):
+    """Custom formatter that hides metavar and uses wider columns."""
+    def __init__(self, prog):
+        super().__init__(prog, max_help_position=40, width=120)
+    
+    def _format_action_invocation(self, action):
+        if not action.option_strings:
+            return super()._format_action_invocation(action)
+        # For options with nargs or that take values, hide the metavar
+        if action.nargs != 0 and action.option_strings:
+            # Return just the option strings without the metavar
+            return ', '.join(action.option_strings)
+        return super()._format_action_invocation(action)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Image, Video, or Audio from text prompts. Upscale existing images and videos with AI.",
-        formatter_class=argparse.RawTextHelpFormatter,
+        description="Generate, upscale, and convert media using AI and FFmpeg.",
+        formatter_class=CleanHelpFormatter,
         epilog="""
 Examples:
+  -- Media Conversion --
+  python ai-media.py -ci photo.gif -cit png
+  python ai-media.py -cv clip.mov -cvt mp4
+  python ai-media.py -ca song.wav -cat mp3
+  
   -- Image Generation --
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
   
-  -- Upscaling --
-  python ai-media.py --upscale-image input.jpg -o upscaled.png
-  python ai-media.py --upscale-image input.jpg -uf 4x (Native 4x gen)
+  -- AI Upscaling --
+  python ai-media.py -ui input.jpg -uf 2x
+  python ai-media.py -ui input.jpg -uf 4x
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -1472,12 +1691,31 @@ Supported Models:
     - audioldm2                : ~4GB
     
   Video:
-    - ms-1.7b (default) : ~10GB | damo-vilab/text-to-video-ms-1.7b (Open)
-    - zeroscope         : ~4GB  | cerspense/zeroscope_v2_576w (Open)
-    - cogvideox         : ~15GB | THUDM/CogVideoX-5b (🔒 Gated - Free Login Required)
-    - svd               : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
+    - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
+    - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
+    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (🔒 Gated - Free Login Required)
+    - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
+    
+  Upscaling:
+    - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
+    - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
         """
     )
+    
+    # Media Conversion (Standalone - No AI)
+    convert_group = parser.add_argument_group("Media Conversion")
+    convert_group.add_argument("-ci", "--convert-image", metavar="FILE", help="Convert image format (e.g., gif→png)")
+    convert_group.add_argument("-cit", "--convert-image-to", metavar="FMT", help="Output format (png, .webp, out.jpg)")
+    convert_group.add_argument("-cv", "--convert-video", metavar="FILE", help="Convert video (mov→mp4)")
+    convert_group.add_argument("-cvt", "--convert-video-to", metavar="FMT", help="Output format (mp4, .webm, out.avi)")
+    convert_group.add_argument("-ca", "--convert-audio", metavar="FILE", help="Convert audio (wav→mp3)")
+    convert_group.add_argument("-cat", "--convert-audio-to", metavar="FMT", help="Output format (mp3, .flac, out.ogg)")
+    convert_group.add_argument("--convert-image-engine", choices=["pil", "ffmpeg"], default="pil", help="pil (default) or ffmpeg")
+    
+    # AI Upscaling (Standalone Mode)
+    upscale_mode_group = parser.add_argument_group("AI Upscaling")
+    upscale_mode_group.add_argument("-ui", "--upscale-image", metavar="FILE", help="Upscale an existing image")
+    upscale_mode_group.add_argument("-uv", "--upscale-video", metavar="FILE", help="Upscale an existing video")
     
     # Modes
     mode_group = parser.add_argument_group("Generation Mode")
@@ -1516,7 +1754,7 @@ Supported Models:
     model_group = parser.add_argument_group("Model Selection")
     model_group.add_argument("--image-model", default="default", help="Model code or ID for image generation. Default: sdxl")
     model_group.add_argument("--audio-model", default="default", help="Model code or ID for audio generation. Default: musicgen-small")
-    model_group.add_argument("--video-model", default="default", help="Model code or ID for video generation. Default: ms-1.7b")
+    model_group.add_argument("--video-model", default="default", help="Model code or ID for video generation. Default: zeroscope")
     
     # Audio Specific
     audio_group = parser.add_argument_group("Audio Parameters")
@@ -1525,20 +1763,20 @@ Supported Models:
 
     audio_group.add_argument("-r", "--bit-rate", help="Bitrate (e.g. '320k').")
 
-    # Upscaling Parameters
-    upscale_group = parser.add_argument_group("Upscaling Parameters")
-    upscale_group.add_argument("--upscale-image", help="Path to input image for 4x AI Upscaling")
-    upscale_group.add_argument("--upscale-video", help="Path to input video for 4x AI Upscaling")
-    upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
+    # Upscaling Options (applies to both standalone and chained upscaling)
+    upscale_group = parser.add_argument_group("Upscaling Options")
     upscale_group.add_argument("-uf", "--upscale-factor", help="Upscale factor (e.g. '2x', '4'). Default: 2x")
-    upscale_group.add_argument("--upscale", action="store_true", help="Enable 4x AI Upscaling for the generated content (Stage 2).")
+    upscale_group.add_argument("--upscale", action="store_true", help="Enable AI Upscaling after generation (chained mode).")
     upscale_group.add_argument("-uof", "--upscaled-output-file", help="Custom filename for the upscaled output (e.g. 'highres.png').")
+    upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
     
     args = parser.parse_args()
     
-    # Prompt Validation (Required unless upscaling)
-    if not (args.upscale_image or args.upscale_video) and not args.prompt:
-        parser.error(" The -p/--prompt argument is required unless running in Upscale Mode.\n                            (e.g. python ai-media.py -i -p \"cat\")")
+    # Prompt Validation (Required unless upscaling/converting)
+    standalone_modes = (args.upscale_image or args.upscale_video or 
+                       args.convert_image or args.convert_video or args.convert_audio)
+    if not standalone_modes and not args.prompt:
+        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert Mode.\n                            (e.g. python ai-media.py -i -p \"cat\")")
     
     # --- Logic Routing ---
     
@@ -1547,6 +1785,28 @@ Supported Models:
     # Propagate Force Flag globally
     if args.force:
         os.environ["AI_MEDIA_FORCE"] = "1"
+    
+    # 0. Media Conversion (Highest Priority - No AI)
+    if args.convert_image:
+        if not args.convert_image_to:
+            parser.error("Image conversion requires -cit/--convert-image-to (e.g., -ci input.gif -cit png)")
+        if args.convert_image_engine == "ffmpeg":
+            convert_image_ffmpeg(args.convert_image, args.convert_image_to)
+        else:
+            convert_image_file(args.convert_image, args.convert_image_to)
+        return
+    
+    if args.convert_video:
+        if not args.convert_video_to:
+            parser.error("Video conversion requires -cvt/--convert-video-to (e.g., -cv input.mov -cvt mp4)")
+        convert_video_file(args.convert_video, args.convert_video_to)
+        return
+    
+    if args.convert_audio:
+        if not args.convert_audio_to:
+            parser.error("Audio conversion requires -cat/--convert-audio-to (e.g., -ca input.wav -cat mp3)")
+        convert_audio_file(args.convert_audio, args.convert_audio_to)
+        return
         
     # Handle -uof alias for standalone mode (treat as output)
     if args.upscaled_output_file and not args.output:
@@ -1639,72 +1899,72 @@ Supported Models:
         if args.generate_image:
             # Resolve model ID for consistent tracking (in case defaults change)
             model_key = IMAGE_MODELS.get(args.image_model.lower(), args.image_model)
-        if args.image_model.lower() == "default": model_key = IMAGE_MODELS["default"]
-        w, h = parse_size(final_size)
-        
-        # --- Proactive Optimization for High-Res (4K+) ---
-        # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
-        total_pixels = w * h
-        if total_pixels > 6_000_000 and not args.upscale:
-            # Calculate Safe 3K Base
-            long_edge = max(w, h)
-            scale = 3072 / long_edge
-            safe_w = int(w * scale)
-            safe_h = int(h * scale)
+            if args.image_model.lower() == "default": model_key = IMAGE_MODELS["default"]
+            w, h = parse_size(final_size)
             
-            # Make sure safe dimensions are divisible by 8
-            safe_w = (safe_w // 8) * 8
-            safe_h = (safe_h // 8) * 8
-            
-            calc_factor = 1 / scale
-            
-            print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
-            print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
-            try:
-                choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
-                if choice not in ['n', 'no']:
-                    print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
-                    w = safe_w
-                    h = safe_h
-                    args.upscale = True
-                    uf = calc_factor # Setup factor for Stage 2
-                    args.force = True # Prevent double-confirmation (we just asked)
-            except KeyboardInterrupt:
-                pass
+            # --- Proactive Optimization for High-Res (4K+) ---
+            # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
+            total_pixels = w * h
+            if total_pixels > 6_000_000 and not args.upscale:
+                # Calculate Safe 3K Base
+                long_edge = max(w, h)
+                scale = 3072 / long_edge
+                safe_w = int(w * scale)
+                safe_h = int(h * scale)
+                
+                # Make sure safe dimensions are divisible by 8
+                safe_w = (safe_w // 8) * 8
+                safe_h = (safe_h // 8) * 8
+                
+                calc_factor = 1 / scale
+                
+                print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
+                print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
+                try:
+                    choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
+                    if choice not in ['n', 'no']:
+                        print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
+                        w = safe_w
+                        h = safe_h
+                        args.upscale = True
+                        uf = calc_factor # Setup factor for Stage 2
+                        args.force = True # Prevent double-confirmation (we just asked)
+                except KeyboardInterrupt:
+                    pass
 
-        # Resource check before starting
-        check_resources_and_warn(model_key, width=w, height=h, force=args.force)
-        
-        # Estimate
-        if tracker:
-            est_time, est_cpu, est_ram = tracker.estimate_image(model_key, w, h, device)
-            if est_time:
-                print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
-            else:
-                print(f"⏱️  Estimated Resources: (Calibrating... first run for {w}x{h})")
-            print("") # Spacer
-        
-        # Monitor and Generate
-        mon_ctx = ResourceMonitor() if tracker else None
-        
-        if mon_ctx: mon_ctx.__enter__()
-        
-        if args.upscale:
-             print("")
-             print("="*60)
-             print(f"👉 Step 1 - Generate at {w}x{h}")
-             print("="*60)
-             print("")
-             
-        success = generate_image(args.prompt, args.output, w, h, model_name=args.image_model, unsafe=args.unsafe)
-        if mon_ctx: mon_ctx.__exit__(None, None, None)
-        
-        if success and tracker:
-            elapsed = time.time() - start_time
-            avg_cpu, avg_ram = mon_ctx.get_averages()
-            print("")  # Spacer
-            print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-            tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram)
+            # Resource check before starting
+            check_resources_and_warn(model_key, width=w, height=h, force=args.force)
+            
+            # Estimate
+            if tracker:
+                est_time, est_cpu, est_ram = tracker.estimate_image(model_key, w, h, device)
+                if est_time:
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                else:
+                    print(f"⏱️  Estimated Resources: (Calibrating... first run for {w}x{h})")
+                print("") # Spacer
+            
+            # Monitor and Generate
+            mon_ctx = ResourceMonitor() if tracker else None
+            
+            if mon_ctx: mon_ctx.__enter__()
+            
+            if args.upscale:
+                 print("")
+                 print("="*60)
+                 print(f"👉 Step 1 - Generate at {w}x{h}")
+                 print("="*60)
+                 print("")
+                 
+            success = generate_image(args.prompt, args.output, w, h, model_name=args.image_model, unsafe=args.unsafe)
+            if mon_ctx: mon_ctx.__exit__(None, None, None)
+            
+            if success and tracker:
+                elapsed = time.time() - start_time
+                avg_cpu, avg_ram = mon_ctx.get_averages()
+                print("")  # Spacer
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
+                tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram)
         
         elif args.generate_video:
             # Resolve model ID for consistent tracking

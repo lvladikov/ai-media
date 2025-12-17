@@ -16,7 +16,11 @@ performance.json
 *.jpg
 *.gif
 *.png
+*.webp
 *.mp4
+*.mov
+*.avi
+*.mkv
 *.mp3
 *.wav
 

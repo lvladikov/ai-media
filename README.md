@@ -1,17 +1,17 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing images and videos with AI. This tool wraps libraries like `diffusers` and `transformers` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Upscale existing media with AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
 
 ## Features
 
-- 🎨 **Image Generation** - Text-to-Image using models like generic Flux/SDXL (via `diffusers`)
-- 🎬 **Video Generation** - Supports **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic Muxing with FFmpeg).
-- 🎵 **Audio Generation** - Supports **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
+- 🔄 **Media Conversion** - Instantly convert images, videos, and audio between formats (no AI, uses PIL/FFmpeg).
+- 🎨 **Image Generation** - Text-to-Image using models like Flux/SDXL (via `diffusers`).
+- 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
+- 🎵 **Audio Generation** - **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
 - 📈 **AI Upscaling** - Upscale images and videos using Stable Diffusion models (x2 Latent, x4 Standard). Supports custom factors and chained workflows.
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
-    - Format conversion (JPG, PNG, MP4, MP3, WAV, etc.)
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
@@ -21,8 +21,10 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 ## Prerequisites
 
 1.  **Python 3.10 - 3.12** (3.12 is recommended for improved performance)
-2.  **FFmpeg** (Recommended for advanced format conversion)
+2.  **FFmpeg** (Required for video generation, conversion, and proper playback)
     -   macOS: `brew install ffmpeg`
+    -   Linux: `apt install ffmpeg`
+    -   Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
 
 ### Python Dependencies (installed via requirements.txt)
 
@@ -84,16 +86,16 @@ You can directly upscale existing images or videos without generating new ones.
 
 ```bash
 # Upscale an image to 4K (assuming input is 1920x1080) with 2x factor
-python ai-media.py --upscale-image "my-image.jpg" -uf 2.0
+python ai-media.py -ui "my-image.jpg" -uf 2.0
 
 # Upscale a video
-python ai-media.py --upscale-video "my-video.mp4" -uf 2.0
+python ai-media.py -uv "my-video.mp4" -uf 2.0
 ```
 
 | Argument | Description | Default |
 | :--- | :--- | :--- |
-| `--upscale-image` | Path to the image file you want to upscale. | `None` |
-| `--upscale-video` | Path to the video file you want to upscale. | `None` |
+| `-ui`, `--upscale-image` | Path to the image file to upscale. | `None` |
+| `-uv`, `--upscale-video` | Path to the video file to upscale. | `None` |
 | `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
 | `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
 | `-us`, `--upscale-strength` | *Experimental*: Noise strength. | `0.0` |
@@ -102,15 +104,44 @@ python ai-media.py --upscale-video "my-video.mp4" -uf 2.0
 > **Resource Safety Check:** Before starting, the script calculates the target resolution (e.g., 8K = 33MP) and estimated RAM usage. If it detects a risk of massive swapping or system freeze ("Billboard Sizing"), it will warn you and ask for confirmation. Use `--force` to bypass this.
 
 > [!IMPORTANT]
-> **MacOS Users:** Upscaling is enforced to run on **CPU** (Float32) on Apple Silicon. This is due to two known PyTorch MPS limitations:
+> **MacOS/Apple Silicon - Upscaling:** Enforced to run on **CPU** (Float32). This is due to PyTorch MPS limitations:
 > 1. **Kernel Size Limit:** High-resolution tensors (4K+) exceed the MPS driver's maximum dimensions, causing crashes.
-> 2. **BFloat16 Incomplete:** CPU BFloat16 (for RAM savings) causes hangs due to unoptimized code paths.
+> 2. **BFloat16 Incomplete:** CPU BFloat16 causes hangs due to unoptimized code paths.
 >
 > **Result:** CPU + Float32 uses ~80GB RAM for 12K output and is slow, but is the only stable option.
-> **Outlook:** Apple's **Metal4** (macOS 16, expected 2026) promises native tensor support that should resolve these issues.
 
 > [!TIP]
 > **Overwrite Protection:** If the output file already exists, you'll be prompted before processing starts. Use `--force` to skip this check.
+
+---
+
+### 🔄 Media Conversion (No AI)
+
+Convert images, videos, and audio between formats using PIL (images) or FFmpeg (all formats).
+
+```bash
+# Image Conversion (PIL default, FFmpeg optional)
+python ai-media.py -ci input.gif -cit png
+python ai-media.py -ci input.png -cit output.webp --convert-image-engine ffmpeg
+
+# Video Conversion (FFmpeg)
+python ai-media.py -cv input.mov -cvt mp4
+python ai-media.py -cv clip.avi -cvt output/converted.webm
+
+# Audio Conversion (FFmpeg)
+python ai-media.py -ca input.wav -cat mp3
+python ai-media.py -ca song.flac -cat output/song.ogg
+```
+
+| Argument | Description |
+| :--- | :--- |
+| `-ci`, `--convert-image` | Source image path. |
+| `-cit`, `--convert-image-to` | Target format/path (`png`, `.webp`, `out.jpg`). |
+| `-cv`, `--convert-video` | Source video path. |
+| `-cvt`, `--convert-video-to` | Target format/path (`mp4`, `.webm`, `out.avi`). |
+| `-ca`, `--convert-audio` | Source audio path. |
+| `-cat`, `--convert-audio-to` | Target format/path (`mp3`, `.flac`, `out.ogg`). |
+| `--convert-image-engine` | Image engine: `pil` (default) or `ffmpeg`. |
 
 ---
 ### AI Upscaling (Chained)
@@ -192,14 +223,14 @@ python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp
 **AI Upscaling**
 ```bash
 # Standalone Image Upscale (input.jpg -> output_upscaled.png)
-python ai-media.py --upscale-image input.jpg
+python ai-media.py -ui input.jpg
 
 # Custom Upscale Factor (e.g., 2x, 8x)
 # Note: Factors > 4x use multi-pass upscaling (slower but necessary)
-python ai-media.py --upscale-image input.jpg -uf 8x
+python ai-media.py -ui input.jpg -uf 8x
 
 # Upscale Video (Frame-by-Frame, slow but high quality)
-python ai-media.py --upscale-video clip.mp4
+python ai-media.py -uv clip.mp4
 
 # Chained Generation (Generate -> Upscale)
 # Generates a 720p image, then immediately upscales it to 5K (4x)
@@ -276,12 +307,21 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 ### Video Models (`--video-model`)
 
-| Model | Code | Download | VRAM | Best For |
+| Model | Code | Resolution | Download | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **ModelScope** | `ms-1.7b` | ~10GB | ~12GB | **Default**. General purpose short clips. |
-| **Zeroscope** | `zeroscope` | ~4GB | ~8GB | Widescreen format, lower memory. |
-| **CogVideoX** | `cogvideox` | ~15GB | ~24GB | High fidelity. **Supports Image-to-Video**. 🔒 **Gated**. |
-| **Stable Video Diffusion** | `svd` | ~4GB | ~8GB | **I2V Only**. Industry standard for animating images. |
+| **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
+| **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
+| **CogVideoX** | `cogvideox` | Any | ~15GB | High fidelity. **Supports I2V**. 🔒 **Gated**. |
+| **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
+
+> [!WARNING]
+> **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
+
+> [!IMPORTANT]
+> **MacOS/Apple Silicon - Video Generation:** Text-to-Video models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
+
+> [!NOTE]
+> **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.
 
 ### Upscaling Models (Auto-selected based on factor)
 
