@@ -471,9 +471,11 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
         
         # Determine Pipeline Class based on model
         if "flux" in model_id.lower():
+            # FLUX on MPS requires float32 to avoid dtype mismatch errors
+            flux_dtype = torch.float32 if device.type == "mps" else dtype
             pipe = FluxPipeline.from_pretrained(
                 model_id, 
-                torch_dtype=dtype if device.type != "cpu" else torch.float32
+                torch_dtype=flux_dtype
             )
             # Flux parameters
             extra_kwargs = {
@@ -1968,7 +1970,7 @@ Supported Models:
     upscale_group.add_argument("--upscale", action="store_true", help="Enable AI Upscaling after generation (chained mode).")
     upscale_group.add_argument("-uof", "--upscaled-output-file", help="Custom filename for the upscaled output (e.g. 'highres.png').")
     upscale_group.add_argument("-us", "--upscale-strength", type=float, default=0.0, help="Upscale creativity/strength (0.0-1.0). Default: 0.0")
-    upscale_group.add_argument(\"-su\", \"--simple-upscale\", action=\"store_true\", help=\"Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast.\")
+    upscale_group.add_argument("-su", "--simple-upscale", action="store_true", help="Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast.")
     
     args = parser.parse_args()
     

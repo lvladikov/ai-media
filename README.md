@@ -36,11 +36,23 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - **scipy**: Audio signal processing & file handling
 
 ### 🔐 Gated Models (Optional)
-Some state-of-the-art models (like `FLUX.1` or `CogVideoX`) require authentication (but are **free to use**):
+Some state-of-the-art models (like `FLUX.1`) require authentication (but are **free to use**):
+
+> [!CAUTION]
+> **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
+
 1.  **The CLI will be installed as part of the installation process (requirements.txt)**
 2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
-3.  Accept the model license on the model card page (Free).
-4.  **Login**: Run `huggingface-cli login` in your terminal and paste your Access Token.
+3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
+    | Model | Accept License |
+    | :--- | :--- |
+    | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
+    | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
+4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
+    - **Quick option**: Select **"Read"** token type for simple read access to all repos.
+    - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
+5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
+
 *Note: The default model `sd-1.5` is open and requires no login.*
 
 ## Installation
@@ -72,8 +84,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 5. [Optional] Login to Hugging Face (Free); See Gated Models (Optional) section above.
-# Only required if you want to use Gated models like Flux or CogVideoX.
-huggingface-cli login
+# Only required if you want to use Gated models like Flux.
+hf auth login
 # (Paste your Access Token when prompted. It is invisible.)
 ```
 
@@ -303,8 +315,8 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | :--- | :--- | :--- | :--- | :--- |
 | **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | **Default**. Fast, high quality. Uses float32 on Apple Silicon. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. |
-| **Flux Schnell** | `flux` | ~24GB | ~12GB+ | High quality. 🔒 **Gated** (Requires Hugging Face Login). |
-| **Flux Dev** | `flux-dev` | ~24GB | ~16GB+ | Professional creative work. 🔒 **Gated** (Login required). |
+| **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
+| **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 
 > [!NOTE]
 > **Apple Silicon/MPS:** SDXL Turbo uses float32 precision on Mac to avoid black images (float16 produces NaN values in VAE). This doubles memory usage compared to NVIDIA/CUDA.
@@ -326,7 +338,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | :--- | :--- | :--- | :--- | :--- |
 | **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
 | **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
-| **CogVideoX** | `cogvideox` | Any | ~15GB | High fidelity. **Supports I2V**. 🔒 **Gated**. |
+| **CogVideoX** | `cogvideox` | Any | ~15GB | High fidelity. **Supports I2V**. |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
 
 > [!WARNING]
