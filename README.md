@@ -7,7 +7,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🔄 **Media Conversion** - Instantly convert images, videos, and audio between formats (no AI, uses PIL/FFmpeg).
 - 🎨 **Image Generation** - Text-to-Image using models like Flux/SDXL (via `diffusers`).
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
-- 🎵 **Audio Generation** - **Text-to-Audio** and **Image-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
+- 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
 - 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
 - 📝 **Description Generation** - Generate a description for an image or video using models like Florence/BLIP (via `transformers`).
 - ⚙️ **Power User Controls**
@@ -16,7 +16,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
-    - 💻 **CPU Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `--npt`). 
+    - 💻 **CPU Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). 
     - [See details](#performance-tracking).
 
 ## Prerequisites
@@ -49,6 +49,7 @@ Some state-of-the-art models (like `FLUX.1`) require authentication (but are **f
     | :--- | :--- |
     | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
     | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
+    | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
 4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
     - **Quick option**: Select **"Read"** token type for simple read access to all repos.
     - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
@@ -251,10 +252,16 @@ python ai-media.py -a -p "Jazz piano solo" -l 30s
 # High-Quality WAV (48kHz, 24-bit)
 python ai-media.py -a -p "Rainforest ambience" -l 1m -o rain.wav -m 48000 -b 24 --audio-model audioldm2
 
-# Image-to-Audio (Generate sound matching an image)
+# Image-to-Audio plus Prompt (Generate sound matching an image)
 python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp3
 
-# Image-to-Audio with specific caption model (BLIP)
+# Image-to-Audio (Auto-Caption: No prompt needed)
+python ai-media.py -a -ii "./beach.jpg" -o beach_sounds.mp3
+
+# Video-to-Audio (Auto-Caption Video Frames + Audio Gen)
+python ai-media.py -a -ii "./clip.mp4" -l 10s -o soundcheck.mp3
+
+# Image-to-Audio pluss Prompt with specific caption model (BLIP)
 python ai-media.py -a -p "Mystery theme" -ii "./haunted.jpg" -cm blip
 ```
 
@@ -317,7 +324,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | `-otn, --orientation` | `landscape` (default) or `portrait`. Portrait swaps width/height - **recommended for single-person portraits** to avoid duplicate faces. |
 | `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
 | `-ii, --image-input` | Source image path for **Image-to-Video** generation. |
-| `--npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
+| `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). [Read more](#safety-checker). |
 
 ### Audio Options
@@ -348,10 +355,32 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **MusicGen Small** | `musicgen-small` | ~2GB | ~4GB | **Default**. Quick music sketches. |
-| **MusicGen Medium** | `musicgen-medium` | ~6GB | ~8GB | Better composition & fidelity. |
+| **MusicGen Small** | `musicgen-small` | ~2GB | ~4GB | Fast, good for music sketches. |
+| **MusicGen Medium** | `musicgen-medium` | ~6GB | ~8GB | **Default**. Better composition & fidelity. |
 | **MusicGen Large** | `musicgen-large` | ~10GB | ~16GB | Highest quality music generation. |
 | **AudioLDM 2** | `audioldm2` | ~4GB | ~8GB | Sound effects (SFX), foley, environmental. |
+| **Stable Audio** | `stable-audio` | ~10GB | ~16GB | 🔒 **Gated**. Best for Sound Effects (SFX), Drums, Ambient. |
+| **Bark** | `bark` | ~4GB | ~12GB | Speech (TTS) & creative audio. Transformer-based. |
+
+
+### Bark Configuration (`--audio-model bark`)
+
+Bark is a transformer-based model that can generate highly realistic speech as well as other audio (music, background noise, etc.).
+
+**1. Special Tokens / Sound Effects**
+To generate non-speech audio, use these tags in your prompt:
+*   `[laughter]`, `[cheers]`, `[music]`, `[sighs]`, `[gasps]`, `[clears throat]`
+*   `—` or `...` (hesitations)
+*   `♪` (wrap lyrics for singing, e.g. `♪ Hello World ♪`)
+
+**2. Voice Presets (`--voice-preset`)**
+You can change the speaker using the `--voice-preset` flag (default: `v2/en_speaker_6`).
+*   **Format**: `v2/{lang}_speaker_{0-9}`
+*   **Languages**: `en` (English), `fr` (French), `de` (German), `es` (Spanish), `it` (Italian), `ja` (Japanese), `zh` (Chinese), `pt` (Portuguese), `ru` (Russian).
+*   **Reference**: [Bark Speaker Library (Audio Samples)](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc8cd1ed101043facc93a945395850fb)
+
+> **Example**: `python ai-media.py -a -am bark -p "♪ In the jungle ♪ [laughter]" --voice-preset v2/it_speaker_2`
+
 
 ### Video Models (`--video-model`)
 
@@ -450,7 +479,7 @@ It **only** records anonymous metrics:
 - ✅ Average RAM Usage (GB)
 
 ### 🚫 Opting Out
-If you prefer not to use this feature, you can completely disable the reading and writing of this file by using the `--npt` or `--no-performance-tracking` flag.
+If you prefer not to use this feature, you can completely disable the reading and writing of this file by using the `-npt` or `--no-performance-tracking` flag.
 
 ## Resource Safety Check
 
@@ -587,6 +616,8 @@ This project uses the following open-source libraries:
 - **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion](https://github.com/runwayml/stable-diffusion)
 - **MusicGen** by Meta AI - [facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
 - **AudioLDM 2** by Haohe Liu etc. - [haoheliu/AudioLDM2](https://github.com/haoheliu/AudioLDM2)
+- **Stable Audio Open** by Stability AI - [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0)
+- **Bark** by Suno - [suno-ai/bark](https://github.com/suno-ai/bark)
 - **ModelScope** by Alibaba - [modelscope/modelscope](https://github.com/modelscope/modelscope)
 - **Zeroscope** by Cerspense - [cerspense/zeroscope](https://huggingface.co/cerspense/zeroscope_v2_576w)
 - **CogVideoX** by THUDM - [THUDM/CogVideo](https://github.com/THUDM/CogVideo)

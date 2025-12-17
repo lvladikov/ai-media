@@ -31,7 +31,10 @@ import sys
 import signal
 import shutil
 import time
-import psutil  # For resource checking
+try:
+    import psutil  # For resource checking
+except ImportError:
+    psutil = None
 from pathlib import Path
 from datetime import datetime
 
@@ -70,7 +73,9 @@ AUDIO_MODELS = {
     "musicgen-medium": "facebook/musicgen-medium",     # Better quality music
     "musicgen-large": "facebook/musicgen-large",       # Best quality music
     "audioldm2": "cvssp/audioldm2",                    # General audio/SFX
-    "default": "facebook/musicgen-small"
+    "stable-audio": "stabilityai/stable-audio-open-1.0", # Variable length, high quality (Gated)
+    "bark": "suno/bark",                               # TTS / Audio (Transformer)
+    "default": "facebook/musicgen-medium"
 }
 
 VIDEO_MODELS = {
@@ -121,6 +126,8 @@ MODEL_REQUIREMENTS = {
     "facebook/musicgen-medium": {"vram": 8, "ram": 12, "max_duration": 60},
     "facebook/musicgen-large": {"vram": 16, "ram": 24, "max_duration": 120},
     "cvssp/audioldm2": {"vram": 8, "ram": 12, "max_duration": 60},
+    "stabilityai/stable-audio-open-1.0": {"vram": 10, "ram": 16, "max_duration": 47}, # Max 47s training
+    "suno/bark": {"vram": 4, "ram": 12, "max_duration": 30}, # Small/Large split, conservative est
     # Video Models (max_resolution based on training data)
     "damo-vilab/text-to-video-ms-1.7b": {"vram": 12, "ram": 16, "max_resolution": (1280, 720)},
     "cerspense/zeroscope_v2_576w": {"vram": 8, "ram": 12, "max_resolution": (576, 320)},
@@ -397,8 +404,11 @@ def parse_sampling_rate(value):
     
     # Handle "44.1khz" -> 44100
     if 'k' in normalized:
-        num = float(re.sub(r'[^0-9\.]', '', normalized))
-        return int(num * 1000)
+        try:
+            num = float(re.sub(r'[^0-9\.]', '', normalized))
+            return int(num * 1000)
+        except:
+             pass # Fallthrough to default behavior
     
     try:
         return int(re.sub(r'[^0-9]', '', normalized))
@@ -815,25 +825,30 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
              print(f"⚠️  Analysis failed: {e}")
         return None
 
-def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", image_input=None, caption_model="florence"):
+def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", image_input=None, caption_model="florence", voice_preset="v2/en_speaker_6"):
     """Generate audio using MusicGen or AudioLDM (supports Image-to-Audio via captioning)."""
     
     model_id = AUDIO_MODELS.get(model_name.lower(), model_name)
     if model_name.lower() == "default": model_id = AUDIO_MODELS["default"]
     
-    device, dtype = get_optimal_device_and_dtype()
+    import sys
+    sys.setrecursionlimit(50000) # Fix for Stable Audio / torchsde recursion on MPS
+    
+    device, dtype = get_optimal_device_and_dtype(quiet=True)
     
     # --- Image-to-Audio Logic (Captioning) ---
     if image_input:
         caption = generate_caption(image_input, device, model_type=caption_model)
         if caption:
-            # Combine User Prompt + Image Caption
-            # Prompt is the "Action" or "Style", Caption is the "Content"
-            if "Video Sequence Analysis" in caption: # Check if it's the raw video output (not valid here yet, need to fix generate_caption return)
-                 # Actually generate_caption currently returns the summary string for both image and video
-                 pass
-            
-            full_prompt = f"{prompt}, inspired by {caption}"
+            # If no user prompt is provided, use the caption directly
+            if not prompt:
+                print(f"   ℹ️  No prompt provided. Using generated caption as prompt.")
+                full_prompt = caption
+            else:
+                # Combine User Prompt + Image Caption
+                # Prompt is the "Action" or "Style", Caption is the "Content"
+                full_prompt = f"{prompt}, inspired by {caption}"
+                
             print(f"   Full Prompt: '{full_prompt}'")
             # Update prompt for downstream models
             prompt = full_prompt
@@ -853,7 +868,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         import torch
         import scipy.io.wavfile
         from transformers import pipeline
-        from diffusers import AudioLDMPipeline 
+        from diffusers import AudioLDM2Pipeline
         
         # Logic for Different Model Types
         if "musicgen" in model_id.lower():
@@ -874,16 +889,85 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             src_path = output_path + ".tmp.wav"
             
         elif "audioldm" in model_id.lower():
-            # Use Diffusers Pipeline for AudioLDM
-            print(f"   Loading AudioLDM pipeline...")
-            pipe = AudioLDMPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            # Use Diffusers Pipeline for AudioLDM2
+            # Workaround for transformers compatibility: explicit load of language_model
+            from transformers import GPT2LMHeadModel
+            print(f"   Loading AudioLDM2 pipeline components...")
+            language_model = GPT2LMHeadModel.from_pretrained(model_id, subfolder="language_model").to(dtype=dtype)
+            
+            pipe = AudioLDM2Pipeline.from_pretrained(
+                model_id, 
+                language_model=language_model,
+                torch_dtype=dtype
+            )
             pipe.to(device)
             
-            print(f"🎵 Synthesizing audio... (AudioLDM)")
+            print(f"🎵 Synthesizing audio... (AudioLDM2)")
             audio = pipe(prompt, audio_length_in_s=duration).audios[0]
             rate = 16000 # AudioLDM default usually
             
             scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio.T)
+            src_path = output_path + ".tmp.wav"
+            
+        elif "stable-audio" in model_id.lower():
+            # Use Diffusers Pipeline for Stable Audio
+            from diffusers import StableAudioPipeline, EulerDiscreteScheduler
+            
+            print(f"   Loading StableAudioPipeline...")
+            pipe = StableAudioPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            pipe.to(device)
+            
+            # Switch scheduler to EulerDiscrete to avoid torchsde recursion error on MPS
+            print(f"   ℹ️  Swapping scheduler to EulerDiscrete (MPS optimization)")
+            pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
+            
+            print(f"🎵 Synthesizing audio... (Stable Audio)")
+            # Stable Audio takes 'audio_end_in_s'
+            audio = pipe(prompt, audio_start_in_s=0.0, audio_end_in_s=duration, num_inference_steps=50).audios[0]
+            rate = 44100 # Standard for Stable Audio Open
+            
+            # Ensure numpy
+            import torch
+            if isinstance(audio, torch.Tensor):
+                audio = audio.cpu().float().numpy()
+            
+            scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio.T)
+            src_path = output_path + ".tmp.wav"
+            
+        elif "bark" in model_id.lower():
+            # Use Transformers for Bark
+            from transformers import BarkModel, AutoProcessor
+            print(f"   Loading Bark models...")
+            
+            # Bark on MPS often fails with float16 (Unsupported data type 'float16'). Force float32.
+            bark_dtype = dtype
+            if device.type == "mps":
+                bark_dtype = torch.float32
+                
+            processor = AutoProcessor.from_pretrained(model_id)
+            model = BarkModel.from_pretrained(model_id, torch_dtype=bark_dtype).to(device)
+            
+            print(f"🎵 Synthesizing audio... (Bark)")
+            if duration > 14:
+                 print(f"   (Note: Bark generates max ~14s sequences per history block. Output will be shorter than {duration}s)")
+            
+            print(f"""   💡 Tip:
+   *  Lyrics: Use '♪' for singing (e.g., `♪ Hello World ♪`).
+   *  Effects: Use tags like `[laughter]`, `[cheers]`, `[music]`, `[sighs]`, `[gasps]`, `[clears throat]`, `—` (hesitation).
+   *  Plain text without these tokens will usually be spoken as speech.
+   *  Voice: Using preset '{voice_preset}'. Change with --voice-preset (e.g. 'v2/fr_speaker_1').
+   *  Example: `python ai-media.py -a --audio-model bark -p "♪ Hello World ♪ [laughter]"`""")
+            
+            # Use user-specified voice preset
+            inputs = processor(prompt, voice_preset=voice_preset).to(device)
+            # Bark output shape: [1, length]
+            audio_array = model.generate(**inputs) 
+            audio_array = audio_array.cpu().numpy().squeeze()
+            
+            rate = model.generation_config.sample_rate # 24000
+            
+            # Scipy write
+            scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio_array)
             src_path = output_path + ".tmp.wav"
             
         else:
@@ -909,8 +993,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
         return True
         
-    except ImportError:
-        print("❌ Error: Missing transformers/scipy/torch/diffusers.")
+    except ImportError as e:
+        print(f"❌ Error: Missing dependencies or import failed. {e}")
         return False
     except Exception as e:
         print(f"❌ Audio generation failed: {e}")
@@ -2046,6 +2130,7 @@ Examples:
   -- AI Upscaling --
   python ai-media.py -ui input.jpg -uf 2x
   python ai-media.py -ui input.jpg -uf 4x
+  python ai-media.py -ui input.jpg -uf 4x -su (Simple Upscale)
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -2057,6 +2142,9 @@ Examples:
   python ai-media.py -a -p "Rainforest" -o rain.wav --audio-model audioldm2
   python ai-media.py -a -p "Spooky" -ii ./haunted.jpg -o spooky.mp3 (Image-to-Audio)
   python ai-media.py -a -ii ./image.jpg -cm blip (Image-to-Audio w/ BLIP)
+  python ai-media.py -a -ii ./image.jpg (Auto-caption + Audio)
+  python ai-media.py -a -ii ./video.mp4 (Auto-caption Video + Audio)
+  python ai-media.py -a -p "♪ In the jungle ♪ [laughter]" --audio-model bark (Bark Creative)
 
   -- Generate Description --
   python ai-media.py -gd -ii video.mp4
@@ -2071,10 +2159,12 @@ Supported Models:
     - flux-dev          : ~24GB | black-forest-labs/FLUX.1-dev (🔒 Gated - Free Login Required)
   
   Audio:
-    - musicgen-small (default) : ~2GB
-    - musicgen-medium          : ~6GB
-    - musicgen-large           : ~10GB
-    - audioldm2                : ~4GB
+    - musicgen-small           : ~2GB  | Fast, good for music sketches
+    - musicgen-medium (default): ~6GB  | Better composition & fidelity
+    - musicgen-large           : ~10GB | Highest quality music generation
+    - audioldm2                : ~4GB  | Sound effects (SFX), foley, environmental
+    - stable-audio             : ~10GB | 🔒 Gated. Best for Sound Effects (SFX), Drums, Ambient.
+    - bark                     : ~4GB  | Speech (TTS) & creative audio. Transformer-based
     
   Video:
     - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
@@ -2141,7 +2231,8 @@ Supported Models:
     video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
     
     audio_group = parser.add_argument_group("Audio Options")
-    audio_group.add_argument("--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
+    audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
+    audio_group.add_argument("--voice-preset", default="v2/en_speaker_6", help="Bark Voice Preset (e.g. 'v2/en_speaker_6', 'v2/fr_speaker_1'). Default: v2/en_speaker_6")
     audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k, 48k). Default: 32000.")
     audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
     audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
@@ -2181,12 +2272,16 @@ Supported Models:
     
     args = parser.parse_args()
     
-    # Prompt Validation (Required unless upscaling/converting/captioning)
+    # Prompt Validation (Required unless upscaling/converting/captioning OR using Image Input for Generation)
     standalone_modes = (args.upscale_image or args.upscale_video or 
                        args.convert_image or args.convert_video or args.convert_audio or
                        args.generate_description)
-    if not standalone_modes and not args.prompt:
-        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert Mode.\n                            (e.g. python ai-media.py -i -p \"cat\")")
+    
+    # Check if we are generating with an image input (valid for Audio and Video)
+    is_image_based_generation = (args.generate_audio or args.generate_video) and args.input_image
+    
+    if not standalone_modes and not args.prompt and not is_image_based_generation:
+        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert Mode or providing an Input Image.\n                            (e.g. python ai-media.py -i -p \"cat\")")
     
     # --- Logic Routing ---
     
@@ -2299,14 +2394,23 @@ Supported Models:
         parser.error("You must specify a generation mode: -i, -v, -a, -gd (or --upscale-image/--upscale-video)")
     
     # Auto-generate output filename from prompt if not provided
+    # Auto-generate output filename from prompt if not provided
     if not args.output:
         # Sanitize prompt to create safe filename (first 2 words, alphanumeric only)
-        words = re.findall(r'[a-zA-Z0-9]+', args.prompt.lower())[:2]
-        if words:
-            args.output = "-".join(words)
-            print(f"ℹ️  No output specified. Using: {args.output}")
+        if args.prompt:
+            words = re.findall(r'[a-zA-Z0-9]+', args.prompt.lower())[:2]
+            if words:
+                args.output = "-".join(words)
+                print(f"ℹ️  No output specified. Using: {args.output}")
+            else:
+                parser.error("Cannot auto-generate filename: prompt contains no valid words. Please specify -o.")
+        elif args.input_image:
+             # Use input filename as base
+             base = os.path.splitext(os.path.basename(args.input_image))[0]
+             args.output = f"audio_{base}" if args.generate_audio else f"video_{base}"
+             print(f"ℹ️  No output specified. Using input basename: {args.output}")
         else:
-            parser.error("Cannot auto-generate filename: prompt contains no valid words. Please specify -o.")
+             parser.error("Cannot auto-generate filename (no prompt or input image). Please specify -o.")
 
     # Smart Extension Handling
     # If format is specified (-f png) but output doesn't have it, append it.
@@ -2540,7 +2644,8 @@ Supported Models:
                 args.prompt, args.output, duration_sec, 
                 args.sampling_rate, model_name=args.audio_model,
                 image_input=args.input_image,
-                caption_model=args.caption_model
+                caption_model=args.caption_model,
+                voice_preset=args.voice_preset
             )
             if mon_ctx: mon_ctx.__exit__(None, None, None)
             
@@ -2574,7 +2679,7 @@ Supported Models:
                 upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
     
     except KeyboardInterrupt:
-        print("\n🛑 Operation cancelled by user.")
+        print("\n\n⚠️  Interrupted by user.")
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")

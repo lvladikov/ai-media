@@ -1,5 +1,5 @@
 diffusers>=0.25.0
-transformers>=4.36.0
+transformers>=4.57.3
 accelerate>=0.26.0
 torch>=2.2.0
 sentencepiece>=0.1.99
@@ -11,3 +11,4 @@ psutil>=5.9.0
 protobuf>=4.0.0
 timm>=0.9.10
 einops>=0.7.0
+torchsde>=0.2.6
