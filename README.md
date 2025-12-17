@@ -11,6 +11,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🪄 **Creative Image Transformations** - Edit images using natural language instructions (InstructPix2Pix) or remove backgrounds (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes).
 - 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
 - 📝 **Description Generation** - Generate a description for an image or video using models like Florence/BLIP (via `transformers`).
+- 🖥️ **Interactive Menus** - Optional guided menu system with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -600,7 +601,7 @@ The tool supports natural language and object-style inputs:
 - **Objects**: `{m: 1, s: 30}`, `{hours: 1, minutes: 15}`
 - **Numeric**: `30` (interpreted as seconds)
 
-## Interactive Mode 🎨
+## Interactive Mode
 
 The interactive mode offers a guided menu system for all features. It runs automatically if no arguments are provided, or explicitly via `--interactive`.
 

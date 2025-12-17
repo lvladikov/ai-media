@@ -2385,47 +2385,115 @@ def show_header(title="AI-Media"):
     print(f"🎨 {title}")
     print(f"{'═'*60}\n")
 
+def run_self_command(cmd_string):
+    """Run ai-media.py with the given command arguments (cross-platform safe).
+    
+    Accepts a command string like: -gd "path/to/file" -cm model
+    Properly handles quoted paths on both Windows and Unix.
+    """
+    import subprocess
+    import shlex
+    
+    script_path = os.path.abspath(__file__)
+    
+    # Display what we're running
+    print(f"\n🚀 Running: ai-media.py {cmd_string}\n")
+    
+    # Parse the command string properly
+    # On Windows, shlex.split with posix=False preserves quotes, so we strip them manually
+    if os.name == 'nt':
+        # Use posix=True even on Windows to properly handle quotes
+        # But escape backslashes first to prevent them being treated as escape chars
+        escaped = cmd_string.replace('\\', '\\\\')
+        try:
+            args = shlex.split(escaped, posix=True)
+            # Restore backslashes in paths
+            args = [arg.replace('\\\\', '\\') for arg in args]
+        except ValueError:
+            # Fallback: manually parse
+            args = []
+            current = ""
+            in_quotes = False
+            for char in cmd_string:
+                if char == '"' and not in_quotes:
+                    in_quotes = True
+                elif char == '"' and in_quotes:
+                    in_quotes = False
+                elif char == ' ' and not in_quotes:
+                    if current:
+                        args.append(current)
+                        current = ""
+                else:
+                    current += char
+            if current:
+                args.append(current)
+    else:
+        # Unix/Mac - standard shlex parsing works fine
+        args = shlex.split(cmd_string)
+    
+    # Run with subprocess (handles paths correctly on all platforms)
+    subprocess.run([sys.executable, script_path] + args)
+
 # --- Interactive Navigation Helpers ---
 
 def get_key():
-    """Read a single key press from stdin (Unix/Mac)."""
-    import tty, termios
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
-        if ch == '\x1b':  # Escape sequence
-            ch2 = sys.stdin.read(1)
-            
-            # Handle [ sequences
-            if ch2 == '[':
-                ch3 = sys.stdin.read(1)
-                if ch3 == 'A': return 'UP'
-                if ch3 == 'B': return 'DOWN'
-                if ch3 == 'H': return 'HOME'
-                if ch3 == 'F': return 'END'
-                # Handle [1~ (Home), [4~ (End), [5~ (PgUp), [6~ (PgDn)
-                if ch3 in ['1', '4', '5', '6']:
-                    ch4 = sys.stdin.read(1)
-                    if ch4 == '~':
-                        if ch3 == '1': return 'HOME'
-                        if ch3 == '4': return 'END'
-                        if ch3 == '5': return 'PAGE_UP'
-                        if ch3 == '6': return 'PAGE_DOWN'
-            
-            # Handle O sequences (OH = Home, OF = End)
-            if ch2 == 'O':
-                ch3 = sys.stdin.read(1)
-                if ch3 == 'H': return 'HOME'
-                if ch3 == 'F': return 'END'
+    """Read a single key press from stdin (cross-platform)."""
+    if os.name == 'nt':  # Windows
+        import msvcrt
+        ch = msvcrt.getch()
+        
+        # Handle special keys (arrow keys, etc.)
+        if ch in (b'\x00', b'\xe0'):  # Special key prefix
+            ch2 = msvcrt.getch()
+            if ch2 == b'H': return 'UP'
+            if ch2 == b'P': return 'DOWN'
+            if ch2 == b'G': return 'HOME'
+            if ch2 == b'O': return 'END'
+            if ch2 == b'I': return 'PAGE_UP'
+            if ch2 == b'Q': return 'PAGE_DOWN'
+            return ch2.decode('utf-8', errors='ignore')
+        
+        if ch == b'\r': return 'ENTER'
+        if ch == b'\x03': raise KeyboardInterrupt  # CTRL+C
+        return ch.decode('utf-8', errors='ignore')
+    else:  # Unix/Mac
+        import tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+            if ch == '\x1b':  # Escape sequence
+                ch2 = sys.stdin.read(1)
                 
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    
-    if ch == '\r' or ch == '\n': return 'ENTER'
-    if ch == '\x03': raise KeyboardInterrupt # CTRL+C
-    return ch
+                # Handle [ sequences
+                if ch2 == '[':
+                    ch3 = sys.stdin.read(1)
+                    if ch3 == 'A': return 'UP'
+                    if ch3 == 'B': return 'DOWN'
+                    if ch3 == 'H': return 'HOME'
+                    if ch3 == 'F': return 'END'
+                    # Handle [1~ (Home), [4~ (End), [5~ (PgUp), [6~ (PgDn)
+                    if ch3 in ['1', '4', '5', '6']:
+                        ch4 = sys.stdin.read(1)
+                        if ch4 == '~':
+                            if ch3 == '1': return 'HOME'
+                            if ch3 == '4': return 'END'
+                            if ch3 == '5': return 'PAGE_UP'
+                            if ch3 == '6': return 'PAGE_DOWN'
+                
+                # Handle O sequences (OH = Home, OF = End)
+                if ch2 == 'O':
+                    ch3 = sys.stdin.read(1)
+                    if ch3 == 'H': return 'HOME'
+                    if ch3 == 'F': return 'END'
+                    
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        
+        if ch == '\r' or ch == '\n': return 'ENTER'
+        if ch == '\x03': raise KeyboardInterrupt  # CTRL+C
+        return ch
 
 def prompt_menu(prompt, options, allow_back=True, default_index=0):
     """
@@ -2781,12 +2849,21 @@ def run_interactive(jump_point=None):
             print(f"📦 Model: {model}\n")
         else:
             print("📦 Select Model:\n")
-            model_options = [
-                ("SDXL Turbo (Default, Fast) ~8GB", "sdxl"),
-                ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
-                ("Flux Schnell (High Quality, Slow on Mac) ~12GB", "flux"),
-                ("Flux Dev (Professional, Very Slow on Mac) ~16GB", "flux-dev"),
-            ]
+            # Build model options - hide Mac-specific notes on Windows
+            if os.name == 'nt':  # Windows
+                model_options = [
+                    ("SDXL Turbo (Default, Fast) ~8GB", "sdxl"),
+                    ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
+                    ("Flux Schnell (High Quality) ~12GB", "flux"),
+                    ("Flux Dev (Professional) ~16GB", "flux-dev"),
+                ]
+            else:  # Mac/Linux
+                model_options = [
+                    ("SDXL Turbo (Default, Fast) ~8GB", "sdxl"),
+                    ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
+                    ("Flux Schnell (High Quality, Slow on Mac) ~12GB", "flux"),
+                    ("Flux Dev (Professional, Very Slow on Mac) ~16GB", "flux-dev"),
+                ]
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -2836,8 +2913,7 @@ def run_interactive(jump_point=None):
         if output:
             cmd += f" -o \"{output}\""
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def video_menu(preset_model=None):
@@ -2911,8 +2987,7 @@ def run_interactive(jump_point=None):
         if output:
              cmd += f" -o \"{output}\""
              
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
 
     
@@ -2975,8 +3050,7 @@ def run_interactive(jump_point=None):
         if output:
             cmd += f" -o \"{output}\""
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def transform_menu(preset_operation=None):
@@ -3023,8 +3097,7 @@ def run_interactive(jump_point=None):
         if output:
             cmd += f" -o \"{output}\""
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def upscale_menu():
@@ -3083,8 +3156,7 @@ def run_interactive(jump_point=None):
         if method == "simple":
             cmd += " -su"
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def convert_menu():
@@ -3141,8 +3213,7 @@ def run_interactive(jump_point=None):
         else:
             cmd = f"-ca \"{input_file}\" -cat {target_format}"
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def caption_menu(preset_model=None):
@@ -3173,8 +3244,7 @@ def run_interactive(jump_point=None):
         # Build command
         cmd = f"-gd \"{input_file}\" -cm {model}"
         
-        print(f"\n🚀 Running: python ai-media.py {cmd}\n")
-        os.system(f"python3 \"{os.path.abspath(__file__)}\" {cmd}")
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     # Main loop
