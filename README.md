@@ -89,7 +89,7 @@ source venv/bin/activate
     # Windows:
     .venv\Scripts\activate.bat
     # or for PowerShell:
-    # if neededSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    # if needed: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
     .venv\Scripts\Activate.ps1
 
 # 4. Install dependencies

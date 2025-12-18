@@ -543,6 +543,7 @@
       "name": "Interactive - Jump 8 (SysInfo)",
       "command": "--interactive 8",
       "interactive": true,
+      "interactiveWait": 5.0,
       "expectedStdoutItems": [
         "System Information",
         "OS:",
@@ -555,6 +556,7 @@
       "name": "Interactive - Jump sysinfo",
       "command": "--interactive sysinfo",
       "interactive": true,
+      "interactiveWait": 5.0,
       "expectedStdoutItems": [
         "System Information"
       ]

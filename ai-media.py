@@ -1231,10 +1231,9 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             from transformers import BarkModel, AutoProcessor
             print(f"   Loading Bark models...")
             
-            # Bark on MPS often fails with float16 (Unsupported data type 'float16'). Force float32.
-            bark_dtype = dtype
-            if device.type == "mps":
-                bark_dtype = torch.float32
+            # Bark requires float32 on all platforms (float16 causes "Unsupported data type" errors)
+            # This applies to both MPS and CUDA despite CUDA usually supporting float16
+            bark_dtype = torch.float32
                 
             processor = AutoProcessor.from_pretrained(model_id)
             model = BarkModel.from_pretrained(model_id, torch_dtype=bark_dtype).to(device)
