@@ -3477,7 +3477,9 @@ def run_tests(verbose=False):
                     else:
                         current_process.send_signal(signal.SIGINT)  # Unix: send CTRL+C
                 
-                stdout, stderr = current_process.communicate(timeout=600 if not is_interactive else 5)
+                # Get timeout from test config or default to 600s (10 mins)
+                timeout_limit = test.get("timeout", 600)
+                stdout, stderr = current_process.communicate(timeout=timeout_limit if not is_interactive else 5)
                 elapsed = time.time() - start_time
                 
                 # Show verbose output if requested
