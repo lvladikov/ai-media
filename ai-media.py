@@ -2903,10 +2903,65 @@ def run_interactive(jump_point=None):
         # GPU Info
         if torch.backends.mps.is_available():
             gpu_info = "MPS (Apple Silicon) ✅ Available"
+            try:
+                # [NEW] Mac MPS Stats
+                mem_curr = torch.mps.current_allocated_memory() / (1024**3)
+                mem_driver = torch.mps.driver_allocated_memory() / (1024**3)
+                
+                indent = " " * 13
+                gpu_info += f"\n{indent}Allocs: {mem_curr:.2f} GB Current | {mem_driver:.2f} GB Driver"
+            except:
+                pass
         elif torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            gpu_info = f"CUDA ({gpu_name}, {vram:.1f} GB VRAM) ✅ Available"
+            
+            # Fetch Nvidia Driver Info
+            driver_info = ""
+            try:
+                # Run nvidia-smi to get system-level driver info
+                # Output example: | NVIDIA-SMI 531.14  Driver Version: 531.14  CUDA Version: 12.1 |
+                res = subprocess.run("nvidia-smi", capture_output=True, text=True)
+                if res.returncode == 0:
+                    import re
+                    driver_match = re.search(r"Driver Version:\s*([\d\.]+)", res.stdout)
+                    cuda_match = re.search(r"CUDA Version:\s*([\d\.]+)", res.stdout)
+                    
+                    parts = []
+                    if driver_match: parts.append(f"NVIDIA Driver {driver_match.group(1)}")
+                    if cuda_match: parts.append(f"CUDA {cuda_match.group(1)}")
+                    
+                    if parts:
+                        # Format on next line with indentation (13 spaces for "🎮 GPU:      ")
+                        indent = " " * 13
+                        driver_info = f"\n{indent}{', '.join(parts)}"
+            
+            except:
+                pass
+            
+            # Fetch Real-time GPU Stats (VRAM & Load)
+            gpu_stats = ""
+            try:
+                # Output: 2569, 24576, 4
+                stat_cmd = "nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits"
+                stat_res = subprocess.run(stat_cmd, capture_output=True, text=True)
+                if stat_res.returncode == 0:
+                    parts = stat_res.stdout.strip().split(',')
+                    if len(parts) >= 3:
+                        used_mb = int(parts[0])
+                        total_mb = int(parts[1])
+                        load_pct = int(parts[2])
+                        
+                        avail_gb = (total_mb - used_mb) / 1024
+                        total_gb = total_mb / 1024
+                        used_pct = (used_mb / total_mb) * 100
+                        
+                        indent = " " * 13
+                        gpu_stats = f"\n{indent}Memory: {avail_gb:.1f} GB Available / {total_gb:.1f} GB Total ({used_pct:.1f}% Used) | Load: {load_pct}%"
+            except:
+                pass
+            
+            gpu_info = f"CUDA ({gpu_name}, {vram:.1f} GB VRAM) ✅ Available{driver_info}{gpu_stats}"
         else:
             gpu_info = "CPU Only (No Acceleration Detected)"
             
