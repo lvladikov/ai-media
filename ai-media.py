@@ -2843,16 +2843,55 @@ def run_interactive(jump_point=None):
         clear_screen()
         show_header("System Information")
         
+        # Display Loading Indicator
+        print("\n⏳ Loading system information...", end="", flush=True)
+        
         import platform
         import psutil
         import torch
         
+        import subprocess
+        
         # OS Info
-        os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
+        os_name = platform.system()
+        os_release = platform.release()
+        os_ver = platform.version()
+        if os_name == "Darwin":
+            mac_ver = platform.mac_ver()[0]
+            os_info = f"macOS {mac_ver} ({platform.machine()})"
+        elif os_name == "Windows":
+             # platform.platform() gives "Windows-10-...", platform.release() gives "10" or "11"
+            os_info = f"{platform.system()} {platform.release()} (Build {platform.version()})"
+        else:
+            os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
         
         # CPU Info
         cpu_count = psutil.cpu_count(logical=True)
         cpu_percent = psutil.cpu_percent(interval=0.1)
+        
+        # CPU Model Name
+        cpu_model = platform.processor()
+        try:
+            if os_name == "Windows":
+                # Windows CPU Name (Registry)
+                import winreg
+                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+                cpu_model = winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
+            elif os_name == "Darwin":
+                # Mac CPU Name (sysctl)
+                result = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True)
+                if result.returncode == 0:
+                    cpu_model = result.stdout.strip()
+            elif os_name == "Linux":
+                # Linux CPU Name (/proc/cpuinfo)
+                if os.path.exists("/proc/cpuinfo"):
+                    with open("/proc/cpuinfo", "r") as f:
+                        for line in f:
+                            if "model name" in line:
+                                cpu_model = line.split(":", 1)[1].strip()
+                                break
+        except:
+            pass
         
         # RAM Info
         mem = psutil.virtual_memory()
@@ -2871,8 +2910,11 @@ def run_interactive(jump_point=None):
         else:
             gpu_info = "CPU Only (No Acceleration Detected)"
             
+        # Clear Loading Indicator (Overwrite line)
+        print("\r" + " " * 50 + "\r", end="", flush=True)
+            
         print(f"💻 OS:       {os_info}")
-        print(f"🧠 CPU:      {cpu_count} Cores (Usage: {cpu_percent}%)")
+        print(f"🧠 CPU:      {cpu_model} | {cpu_count} Cores (Usage: {cpu_percent}%)")
         print(f"💾 RAM:      {ram_avail} Available / {ram_total} Total ({ram_percent} Used)")
         print(f"🎮 GPU:      {gpu_info}")
         print()
