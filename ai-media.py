@@ -1787,7 +1787,7 @@ class ResourceMonitor:
                          vram = self.torch.mps.driver_allocated_memory() / (1024**3)
             self.vram_readings.append(vram)
             
-            # GPU Load Monitoring (nvidia-smi)
+            # GPU Load Monitoring
             gpu_load = 0
             if self.has_cuda:
                 try:
@@ -1798,6 +1798,21 @@ class ResourceMonitor:
                     )
                     if result.returncode == 0:
                         gpu_load = float(result.stdout.strip())
+                except Exception:
+                    pass
+            elif self.has_mps:
+                try:
+                    # Apple Silicon: Query AGXAccelerator via ioreg for GPU utilization
+                    import re
+                    result = subprocess.run(
+                        ['ioreg', '-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'],
+                        capture_output=True, text=True, check=False
+                    )
+                    if result.returncode == 0:
+                        # Extract "Device Utilization %" from PerformanceStatistics
+                        match = re.search(r'"Device Utilization %"=(\d+)', result.stdout)
+                        if match:
+                            gpu_load = float(match.group(1))
                 except Exception:
                     pass
             self.gpu_readings.append(gpu_load)
