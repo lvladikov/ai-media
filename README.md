@@ -18,10 +18,10 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
-    > [!NOTE]
-    > **Performance Reality (2025):** NVIDIA GPUs with CUDA currently deliver the fastest AI processing due to a mature ecosystem refined since 2006. However, **with optimizations in this script, all operations run successfully on Apple Silicon/MPS—just behind NVIDIA performance**. See Mac-specific tweaks in [Image Models](#image-models), [Video Models](#video-models), and [Upscaling](#ai-upscaling-options). Currently, bfloat16 support on MPS is incomplete (causes hangs), so this script enforces float32 precision—doubling memory usage but ensuring stability. Future bfloat16 improvements in PyTorch and Apple Silicon are expected, which would mean less RAM usage while maintaining great precision. Apple's unified memory architecture already provides advantages for memory-heavy tasks and energy efficiency.
-    - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). 
-    - [See details](#performance-tracking).
+    - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). [See details](#performance-tracking).
+
+> [!NOTE]
+> **Performance Reality (2025):** NVIDIA GPUs with CUDA currently deliver the fastest AI processing due to a mature ecosystem refined since 2006. However, **with optimizations in this script, all operations run successfully on Apple Silicon/MPS—just behind NVIDIA performance**. See Mac-specific tweaks in [Image Models](#image-models), [Video Models](#video-models), and [Upscaling](#ai-upscaling-options). Currently, bfloat16 support on MPS is incomplete (causes hangs), so this script enforces float32 precision—doubling memory usage but ensuring stability. Future bfloat16 improvements in PyTorch and Apple Silicon are expected, which would mean less RAM usage while maintaining great precision. Apple's unified memory architecture already provides advantages for memory-heavy tasks and energy efficiency.
 
 ## Prerequisites
 
@@ -43,8 +43,9 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
 
-    > [!CAUTION]
-    > **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
+> [!CAUTION]
+> **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
+
 
     1.  **The Hugging Face CLI will be installed as part of the installation process (requirements.txt)**
     2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
