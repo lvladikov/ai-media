@@ -53,6 +53,11 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["DIFFUSERS_VERBOSITY"] = "error"
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 
+# Suppress "MallocStackLogging: can't turn off..." warning on macOS
+# This allows the "turn off" call to succeed by ensuring it's enabled initially.
+if sys.platform == "darwin":
+    os.environ["MallocStackLogging"] = "1"
+
 # CUDA Memory Optimization - Reduce fragmentation on Windows/NVIDIA
 # This helps prevent "CUDA out of memory" errors even when GPU has free memory
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
