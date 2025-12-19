@@ -43,8 +43,6 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
 
-    Hugging Face authentication steps:
-
     1.  **The Hugging Face CLI will be installed as part of the installation process (requirements.txt)**
     2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
     3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
