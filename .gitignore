@@ -24,6 +24,10 @@ performance.json
 *.mp3
 *.wav
 
+# Allow screenshots folder (README images)
+!screenshots/
+!screenshots/**
+
 # Test Data - ignore outputs (and subfolders), keep inputs
 testData/outputs/**
 
