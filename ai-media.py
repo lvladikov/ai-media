@@ -945,11 +945,11 @@ def generate_edit(input_path, prompt, output_path, model_name="default", guidanc
         
         # Initialize Pipeline
         if "sdxl" in model_id.lower():
-             # SDXL InstructPix2Pix
+            # SDXL InstructPix2Pix
+            # Note: This model uses torch_dtype for precision, not separate variant files
             pipe = StableDiffusionXLInstructPix2PixPipeline.from_pretrained(
                 model_id,
-                torch_dtype=dtype,
-                variant="fp16" if dtype == torch.float16 else None
+                torch_dtype=dtype
             ).to(device)
             # Default scales for SDXL are different
             if guidance_scale == 7.5: guidance_scale = 7.0 
