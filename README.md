@@ -4,21 +4,23 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 
 ## Features
 
-- 🔄 **Media Conversion** - Instantly convert images, videos, and audio between formats (no AI, uses PIL/FFmpeg).
-- 🎨 **Image Generation** - Text-to-Image using models like Flux/SDXL (via `diffusers`).
-- 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Video-with-Audio** (automatic muxing with FFmpeg).
-- 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning). Models: MusicGen, AudioLDM 2.
-- 🪄 **Creative Image Transformations** - Edit images using natural language instructions (InstructPix2Pix) or remove backgrounds (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes).
-- 📈 **Upscaling** - Upscale images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows.
-- 📝 **Description Generation** - Generate a description for an image or video using models like Florence/BLIP (via `transformers`).
-- 🖥️ **Interactive Menus** - Optional guided menu system with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
+- 🎨 **Image Generation** - **Text-to-Image** using models like Flux/SDXL (via `diffusers`). See [Image Options](#image-options), [Examples](#image-generation-examples) and [Models](#image-models).
+- 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Text/Image + Audio (prompt) to Video**. See [Video Options](#video-options), [Examples](#video-generation-examples) and [Models](#video-models).
+- 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning + Audio Generation). Models: MusicGen, AudioLDM 2. See [Audio Options](#audio-options), [Examples](#audio-generation-examples) and [Models](#audio-models).
+- 📝 **Description Generation** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](#description-generation-options), [Examples](#description-generation-examples) and [Models](#description-generation-models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+- 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Creative Image Transformations Options](#creative-image-transformations-options), [Examples](#creative-image-transformation-examples) and [Models](#creative-image-transformation-models).
+- 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](#media-conversion-options) and [Examples](#media-conversion-examples).
+- 📈 **Upscaling** - **Upscale** images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows. See [Upscaling Options](#ai-upscaling-options), [Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
+- 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
-    - 💻 **CPU Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). 
+    > [!NOTE]
+    > **Performance Reality (2025):** NVIDIA GPUs with CUDA currently deliver the fastest AI processing due to a mature ecosystem refined since 2006. However, **with optimizations in this script, all operations run successfully on Apple Silicon/MPS—just behind NVIDIA performance**. See Mac-specific tweaks in [Image Models](#image-models), [Video Models](#video-models), and [Upscaling](#ai-upscaling-options). Currently, bfloat16 support on MPS is incomplete (causes hangs), so this script enforces float32 precision—doubling memory usage but ensuring stability. Future bfloat16 improvements in PyTorch and Apple Silicon are expected, which would mean less RAM usage while maintaining great precision. Apple's unified memory architecture already provides advantages for memory-heavy tasks and energy efficiency.
+    - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). 
     - [See details](#performance-tracking).
 
 ## Prerequisites
@@ -27,37 +29,35 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 2.  **FFmpeg** (Required for video generation, conversion, and proper playback)
     -   macOS: `brew install ffmpeg`
     -   Linux: `apt install ffmpeg`
-    -   Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+    -   Windows: `winget install ffmpeg` or Download from [ffmpeg.org](https://ffmpeg.org/download.html)
 
-### Python Dependencies (installed via requirements.txt)
+3.  **Python Dependencies** (installed automatically via requirements.txt, see [Installation - Step 4](#installation))
 
-- **diffusers**: State-of-the-art Image & Video generation pipelines
-- **transformers**: Audio generation & text processing models
-- **torch**: Core deep learning framework & hardware acceleration (CUDA/MPS)
-- **accelerate**: Optimization for efficient large model loading
-- **opencv-python**: Video frame processing & manipulation
-- **scipy**: Audio signal processing & file handling
+    - **diffusers**: State-of-the-art Image & Video generation pipelines
+    - **transformers**: Audio generation & text processing models
+    - **torch**: Core deep learning framework & hardware acceleration (CUDA/MPS)
+    - **accelerate**: Optimization for efficient large model loading
+    - **opencv-python**: Video frame processing & manipulation
+    - **scipy**: Audio signal processing & file handling
 
-### 🔐 Gated Models (Optional)
-Some state-of-the-art models (like `FLUX.1`) require authentication (but are **free to use**):
+4.  **Gated Models (Optional)**
+    Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
 
-> [!CAUTION]
-> **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
+    > [!CAUTION]
+    > **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
 
-1.  **The CLI will be installed as part of the installation process (requirements.txt)**
-2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
-3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
-    | Model | Accept License |
-    | :--- | :--- |
-    | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
-    | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
-    | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
-4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
-    - **Quick option**: Select **"Read"** token type for simple read access to all repos.
-    - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
-5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
-
-*Note: The default model `sd-1.5` is open and requires no login.*
+    1.  **The Hugging Face CLI will be installed as part of the installation process (requirements.txt)**
+    2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
+    3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
+        | Model | Accept License |
+        | :--- | :--- |
+        | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
+        | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
+        | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
+    4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
+        - **Quick option**: Select **"Read"** token type for simple read access to all repos.
+        - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
+    5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
 
 ---
 
@@ -105,20 +105,146 @@ hf auth login
 
 The script `ai-media.py` is the main entry point.
 
-### AI Upscaling (Standalone)
-You can directly upscale existing images or videos without generating new ones.
+**Example Command:**
 
-```bash
-# Upscale an image to 4K (assuming input is 1920x1080) with 2x factor
-python ai-media.py -ui "my-image.jpg" -uf 2.0
+![Image Generation Example](screenshots/image-gen.png)
 
-# Upscale a video
-python ai-media.py -uv "my-video.mp4" -uf 2.0
 
-# Simple upscale (no AI - uses Lanczos/FFmpeg, very fast)
-python ai-media.py -ui "photo.jpg" -uf 4 -su
-python ai-media.py -uv "clip.mp4" -uf 2 -su
-```
+**Example Output:**
+
+![Image Generation Example Result](screenshots/image-gen-result.png)
+
+
+
+### Generation Modes
+
+- `-i, --generate-image`: Generate an image
+- `-v, --generate-video`: Generate a video
+- `-a, --generate-audio`: Generate audio/music
+- `-gd, --generate-description`: Describe an image or video
+- `-ti, --transform-image`: Creatively transform/edit an image
+- `-ci/-cv/-ca`: Convert media formats
+- `-ui/-uv`: Upscale media
+
+### Common Options
+
+| Option | Description |
+| :--- | :--- |
+| `-p, --prompt` | Text description of content to generate. |
+| `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
+| `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
+| `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
+| `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
+| `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
+
+### Image Options
+
+| Option | Description |
+| :--- | :--- |
+| `--image-model` | Model: `sdxl` (default), `sd-1.5`, `flux`, `flux-dev`. See [Image Models](#image-models-image-model). |
+| `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
+| `--unsafe` | Disable NSFW safety checker (reduces false positives). |
+
+[See Image Generation Examples](#image-generation-examples) and [Models](#image-models).
+
+### Video Options
+
+| Option | Description |
+| :--- | :--- |
+| `--video-model` | Model: `zeroscope` (default), `ms-1.7b`, `cogvideox`, `svd`. |
+| `-l, --length` | Duration. Supports "2s", "5s", "1m", `{m:1, s:30}`. Default: 2s. |
+| `-ii, --input-image` | Source image path for **Image-to-Video** generation (SVD, CogVideoX I2V). |
+| `-ap, --audio-prompt` | **Text prompt** for generating background audio (e.g., "Techno beat"). Automatically muxes with video. Use `-am` to select audio model. |
+
+[See Video Generation Examples](#video-generation-examples) and [Models](#video-models).
+
+### Audio Options
+
+| Option | Description |
+| :--- | :--- |
+| `--audio-model` | Model: `musicgen-medium` (default), `musicgen-small`, `musicgen-large`, `audioldm2`, `stable-audio`, `bark`. See [Audio Models](#audio-models-audio-model). |
+| `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
+| `-ii, --input-image` | Source image/video for **Image-to-Audio** or **Video-to-Audio** (auto-captions then generates audio). |
+| `-m, --sampling-rate` | Sample rate in Hz (e.g. `44100`, `48k`, `32000`). Default: 32000. |
+| `-b, --bit-depth` | Bit depth (16, 24, 32). Default: 16. |
+| `-r, --bit-rate` | Target bitrate (e.g. `128k`, `320kbps`). |
+| `--voice-preset` | Bark voice preset (e.g. `v2/en_speaker_6`, `v2/fr_speaker_1`). Default: v2/en_speaker_6. |
+
+[See Audio Generation Examples](#audio-generation-examples) and [Models](#audio-models).
+
+### Description Generation Options
+
+| Option | Description |
+| :--- | :--- |
+| `-gd, --generate-description` | Generate caption/description for input image/video. For videos, 10 evenly-spaced frames are sampled and described. |
+| `-cm, --caption-model` | Model: `florence` (default), `blip`. See [Caption Models](#caption-models). |
+| `-o, --output` | Output text filename (optional). |
+
+[See Description Generation Examples](#description-generation-examples) and [Models](#description-generation-models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+
+### Creative Image Transformations Options
+
+Edit existing images using AI instructions or remove backgrounds.
+
+| Argument | Description |
+| :--- | :--- |
+| `-ti`, `--transform-image` | Path to the image file to transform. |
+| `-p`, `--prompt` | Edit instruction (works for standalone transformations). |
+| `-tp`, `--transform-prompt` | Edit instruction for chaining with generation (e.g., `-i -p "..." -ti file -tp "..."`). |
+| `--remove-background`, `-rb` | Remove background (outputs transparent PNG). |
+| `--silhouette` | Create a black silhouette (requires `--remove-background`). |
+| `--image-guidance` | Image guidance scale (default: `1.5`). Higher = closer to original structure. |
+
+> [!NOTE]
+> **`-p` vs `-tp`**: For standalone transformations (`-ti` only), use `-p`. When chaining generation (`-i`) with transformation (`-ti`), use `-p` for the **generation prompt** and `-tp` for the **edit instruction**.
+
+
+**Transformation Recipe Book 🪄**
+Here are prompt examples for common editing tasks.
+
+| Goal | Command Pattern |
+| :--- | :--- |
+| **Styles** | |
+| Anime / Manga | `-tp "Turn the subject into an anime character"` |
+| Disney / Pixar | `-tp "Make the subject look like a 3D Pixar character"` |
+| Studio Ghibli | `-tp "Make it look like a Studio Ghibli movie"` |
+| Oil Painting | `-tp "Make it look like an oil painting"` |
+| Watercolor | `-tp "Turn this into a watercolor painting"` |
+| Pencil Sketch | `-tp "Turn this into a pencil sketch"` |
+| Cartoon | `-tp "Turn this into a flat cartoon"` |
+| Coloring Page | `-tp "Make it a black and white coloring page"` |
+| Sticker | `-tp "Turn this into a sticker with a white outline"` |
+| **Photo Manipulations** | |
+| Remove Beard | `-tp "Remove the beard"` |
+| Change Hairstyle | `-tp "Give the subject a mohawk hairstyle"` |
+| Facial Expressions | `-tp "Make the subject smile"`, `-tp "Make the subject look surprised"` |
+| Age / Baby | `-tp "Make the subject look like a baby"` |
+| Caricature | `-tp "Turn this into a funny caricature"` |
+| Recolor | `-tp "Change the red dress to blue"` |
+| Colorize B&W | `-tp "Colorize this photo"` |
+| Sketch to Image | `-tp "Turn this sketch into a photo of an apple"` |
+| **Removal** | |
+| Background | `--remove-background` (No prompt needed) |
+| Silhouette | `--remove-background --silhouette` |
+| Text / Objects | `-tp "Remove the text"`, `-tp "Remove the cup"` (Experimental) |
+
+[See Transformation Examples](#creative-transformation-examples) and [Models](#creative-image-transformation-models).
+
+### Media Conversion Options
+
+| Option | Description |
+| :--- | :--- |
+| `-ci, --convert-image` | Convert image format (e.g., gif→png). |
+| `-cit, --convert-image-to` | Output format (png, .webp, out.jpg). |
+| `-cv, --convert-video` | Convert video (mov→mp4). |
+| `-cvt, --convert-video-to` | Output format (mp4, .webm, out.avi). |
+| `-ca, --convert-audio` | Convert audio (wav→mp3). |
+| `-cat, --convert-audio-to` | Output format (mp3, .flac, out.ogg). |
+| `--convert-image-engine` | pil (default) or ffmpeg. |
+
+[See Conversion Examples](#media-conversion-examples).
+
+### AI Upscaling Options
 
 | Argument | Description | Default |
 | :--- | :--- | :--- |
@@ -139,199 +265,11 @@ python ai-media.py -uv "clip.mp4" -uf 2 -su
 >
 > **Result:** CPU + Float32 uses ~80GB RAM for 12K output and is slow, but is the only stable option.
 
-> [!TIP]
-> **Overwrite Protection:** If the output file already exists, you'll be prompted before processing starts. Use `--force` to skip this check.
-
----
-
-### 🔄 Media Conversion (No AI)
-
-Convert images, videos, and audio between formats using PIL (images) or FFmpeg (all formats).
-
-```bash
-# Image Conversion (PIL default, FFmpeg optional)
-python ai-media.py -ci input.gif -cit png
-python ai-media.py -ci input.png -cit output.webp --convert-image-engine ffmpeg
-
-# Video Conversion (FFmpeg)
-python ai-media.py -cv input.mov -cvt mp4
-python ai-media.py -cv clip.avi -cvt output/converted.webm
-
-# Audio Conversion (FFmpeg)
-python ai-media.py -ca input.wav -cat mp3
-python ai-media.py -ca song.flac -cat output/song.ogg
-```
-
-| Argument | Description |
-| :--- | :--- |
-| `-ci`, `--convert-image` | Source image path. |
-| `-cit`, `--convert-image-to` | Target format/path (`png`, `.webp`, `out.jpg`). |
-| `-cv`, `--convert-video` | Source video path. |
-| `-cvt`, `--convert-video-to` | Target format/path (`mp4`, `.webm`, `out.avi`). |
-| `-ca`, `--convert-audio` | Source audio path. |
-| `-cat`, `--convert-audio-to` | Target format/path (`mp3`, `.flac`, `out.ogg`). |
-| `--convert-image-engine` | Image engine: `pil` (default) or `ffmpeg`. |
-
----
-### AI Upscaling (Chained)
-You can auto-upscale immediately after generation using `--upscale` (Stage 2).
-This preserves your original generation and creates a separate upscaled file.
-
-```bash
-# Generate Image -> Auto-Upscale to 4K (2x)
-python ai-media.py -i -p "Cyberpunk city" -o "city.png" --upscale
-
-# Outputs:
-# 1. city.png (Original 100%)
-# 2. city_upscaled_2.0x.png (High-Res 200%)
-
-# Custom Upscale Filename (-uof)
-python ai-media.py -i -p "Cyberpunk city" --upscale -uof "city_poster.png"
-
-# Video Upscaling
-python ai-media.py -v -p "Robot dance" --upscale -uf 2.0
-```
-
-**Description Generation (Captioning)**
-Analyze images or videos to generate text descriptions (captions).
-```bash
-# Describe an image (prints to console + saves to text file)
-python ai-media.py -gd input.jpg
-
-# Use a specific model (florence or blip)
-python ai-media.py -gd input.jpg -cm blip
-
-# Describe a video (analyzes 10 frames + summary)
-python ai-media.py -gd clip.mp4
-
-# Custom output filename
-python ai-media.py -gd input.jpg -o my_caption.txt
-```
-
----
-### 🎨 Creative Image Transformation / Editing
-Edit existing images using AI instructions or remove backgrounds.
-
-| Argument | Description |
-| :--- | :--- |
-| `-ti`, `--transform-image` | Path to the image file to transform. |
-| `-p`, `--prompt` | Edit instruction (works for standalone transformations). |
-| `-tp`, `--transform-prompt` | Edit instruction for chaining with generation (e.g., `-i -p "..." -ti file -tp "..."`). |
-| `--remove-background`, `-rb` | Remove background (outputs transparent PNG). |
-| `--silhouette` | Create a black silhouette (requires `--remove-background`). |
-| `--image-guidance` | Image guidance scale (default: `1.5`). Higher = closer to original structure. |
-
-> [!NOTE]
-> **`-p` vs `-tp`**: For standalone transformations (`-ti` only), use `-p`. When chaining generation (`-i`) with transformation (`-ti`), use `-p` for the **generation prompt** and `-tp` for the **edit instruction**.
-
-**1. Instructional Editing (InstructPix2Pix)**
-Change style, remove objects, or modify content using natural language.
-```bash
-# Turn into Anime
-python ai-media.py -ti photo.jpg -tp "Make it look like an anime drawing"
-
-# Remove a beard
-python ai-media.py -ti face.jpg -tp "Remove the beard"
-
-# Change style to Oil Painting
-python ai-media.py -ti landscape.jpg -tp "Make it look like an oil painting by Van Gogh"
-```
-
-**2. Background Removal (RMBG-1.4)**
-Create transparent PNGs or silhouettes.
-```bash
-# Remove Background (Transparent PNG)
-python ai-media.py -ti photo.jpg --remove-background
-
-# Create a Silhouette (Black Subject, White Background)
-python ai-media.py -ti dancer.jpg --remove-background --silhouette
-```
-
-**3. Transformation Recipe Book 🪄**
-Here are prompt examples for common editing tasks.
-
-| Goal | Command Pattern |
-| :--- | :--- |
-| **Styles** | |
-| Anime / Manga | `-tp "Turn him into an anime character"` |
-| Disney / Pixar | `-tp "Make it look like a 3D Pixar character"` |
-| Studio Ghibli | `-tp "Make it look like a Studio Ghibli movie"` |
-| Oil Painting | `-tp "Make it look like an oil painting"` |
-| Watercolor | `-tp "Turn this into a watercolor painting"` |
-| Pencil Sketch | `-tp "Turn this into a pencil sketch"` |
-| Cartoon | `-tp "Turn this into a flat cartoon"` |
-| Coloring Page | `-tp "Make it a black and white coloring page"` |
-| Sticker | `-tp "Turn this into a sticker with a white outline"` |
-| **Photo Manipulations** | |
-| Remove Beard | `-tp "Remove the beard"` |
-| Change Hairstyle | `-tp "Give him a mohawk hairstyle"` |
-| Facial Expressions | `-tp "Make him smile"`, `-tp "Make her look surprised"` |
-| Age / Baby | `-tp "Make him look like a baby"` |
-| Caricature | `-tp "Turn this into a funny caricature"` |
-| Recolor | `-tp "Change the red dress to blue"` |
-| Colorize B&W | `-tp "Colorize this photo"` |
-| Sketch to Image | `-tp "Turn this sketch into a photo of an apple"` |
-| **Removal** | |
-| Background | `--remove-background` (No prompt needed) |
-| Silhouette | `--remove-background --silhouette` |
-| Text / Objects | `-tp "Remove the text"`, `-tp "Remove the cup"` (Experimental) |
-
-**4. Chaining Transformations 🔗**
-You can mix commands! The tool automatically executes them in the correct order: **Edit First → Remove Background Second**. This preserves transparency.
-
-```bash
-# 1. Edit Style -> Remove Background
-# Result: A transparent PNG of the anime character
-python ai-media.py -ti photo.jpg -tp "Make it anime" --remove-background
-
-# 2. Modify Subject -> Create Silhouette
-# Result: A black silhouette of the modified subject (e.g. adding a hat)
-python ai-media.py -ti photo.jpg -tp "Put a hat on him" --remove-background --silhouette
-```
-
-**5. Chaining Generations and Transformations 🔗**
-Chain **Image Generation** with **Transformations** in a single command. Use `-ti` without a filename to automatically use the generated output.
-
-```bash
-# Simplified syntax: -ti auto-uses generated output
-python ai-media.py -i -p "Portrait of a knight" -ti -tp "Make him hold a sword"
-
-# With --remove-background (triple chain!)
-python ai-media.py -i -p "Photo of a cat" -ti -tp "Make it anime" --remove-background
-
-# Create silhouette from generated image
-python ai-media.py -i -p "Dancer on stage" -ti -tp "Add dramatic lighting" --remove-background --silhouette
-
-# Explicit filename (traditional syntax still works)
-python ai-media.py -i -p "A knight" -o knight.png -ti knight.png -tp "Add sword"
-```
-
-> [!TIP]
-> Use `-p` for the **generation** prompt and `-tp` for the **edit** instruction. This allows completely different prompts for each stage.
-
-**6. Advanced Options**
-```bash
-# Custom Output Filename
-python ai-media.py -ti photo.jpg -tp "Anime" -o "anime_version.png"
-
-# Save to Subfolder (Dir is auto-created)
-python ai-media.py -ti photo.jpg -tp "Anime" -o "edits/versions/anime_v1.png"
-
-# Control guidance (Higher = Stick closer to original structure)
-python ai-media.py -ti photo.jpg -tp "Cyborg" --image-guidance 1.8
-```
-
----
-### Generation Modes
-
-- `-i, --generate-image`: Generate an image
-- `-v, --generate-video`: Generate a video
-- `-a, --generate-audio`: Generate audio/music
-- `-gd, --generate-description`: Describe an image or video
+[See Upscaling Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
 
 ### Examples
 
-**Image Generation**
+#### Image Generation Examples
 ```bash
 # Standard 720p image
 python ai-media.py -i -p "Cyberpunk city at night" -o city.png -s 720p
@@ -344,14 +282,9 @@ python ai-media.py -i -p "Forest landscape" -o "./outputs/landscapes/forest.jpg"
 
 # Advanced JSON size & Model selection
 python ai-media.py -i -p "Portrait of a wizard" -o wizard.png --size "{w: 512, h: 768}" --image-model sd-1.5
-
-# Different output formats (auto-detected from extension)
-python ai-media.py -i -p "Logo design" -o logo.png           # PNG (lossless, transparency)
-python ai-media.py -i -p "Web banner" -o banner.webp         # WebP (modern, small size)
-python ai-media.py -i -p "Animation frame" -o frame.gif      # GIF
 ```
 
-**Video Generation**
+#### Video Generation Examples
 ```bash
 # Standard 5s clip
 python ai-media.py -v -p "A robot dancing" -l 5s -o robot.mp4
@@ -367,77 +300,82 @@ python ai-media.py -v -p "Cyberpunk dancers" --audio-prompt "Heavy techno beat" 
 
 # Long video (1m 30s) using Zeroscope model
 python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -o flight.mp4 --video-model zeroscope
-
-# Different output formats (auto-detected from extension)
-python ai-media.py -v -p "Nature scene" -l 5s -o nature.mkv    # MKV (H.264)
-python ai-media.py -v -p "Web clip" -l 5s -o clip.webm         # WebM (VP9)
-python ai-media.py -v -p "Legacy format" -l 5s -o old.avi      # AVI (MPEG4)
-python ai-media.py -v -p "Windows format" -l 5s -o win.wmv     # WMV
 ```
 
-**Audio Generation**
+#### Audio Generation Examples
 ```bash
 # 30s MP3 clip
 python ai-media.py -a -p "Smooth jazz saxophone" -l 30s -o jazz.mp3
 
-# Auto-filename from prompt (creates "jazz-piano.mp3")
-python ai-media.py -a -p "Jazz piano solo" -l 30s
-
 # High-Quality WAV (48kHz, 24-bit)
 python ai-media.py -a -p "Rainforest ambience" -l 1m -o rain.wav -m 48000 -b 24 --audio-model audioldm2
 
-# Image-to-Audio plus Prompt (Generate sound matching an image)
-python ai-media.py -a -p "Mystery theme" -ii "./haunted_house.jpg" -o mystery.mp3
-
-# Image-to-Audio (Auto-Caption: No prompt needed)
+# Image-to-Audio (Auto-Caption Image + Audio Gen)
 python ai-media.py -a -ii "./beach.jpg" -o beach_sounds.mp3
 
 # Video-to-Audio (Auto-Caption Video Frames + Audio Gen)
 python ai-media.py -a -ii "./clip.mp4" -l 10s -o soundcheck.mp3
-
-# Image-to-Audio plus Prompt with specific caption model (BLIP)
-python ai-media.py -a -p "Mystery theme" -ii "./haunted.jpg" -cm blip
-
-# Different output formats (auto-detected from extension)
-python ai-media.py -a -p "Epic orchestra" -l 30s -o epic.flac   # FLAC (lossless)
-python ai-media.py -a -p "Game music" -l 30s -o game.ogg        # OGG Vorbis
-python ai-media.py -a -p "Podcast intro" -l 10s -o intro.aac    # AAC
 ```
 
-**AI Upscaling**
+#### Description Generation Examples
 ```bash
-# Standalone Image Upscale (input.jpg -> output_upscaled.png)
-python ai-media.py -ui input.jpg
+# Describe a video (uses Florence by default, samples 10 evenly-spaced frames)
+python ai-media.py -gd -ii video.mp4
 
-# Default (faithful upscaling, less artifacts)
-python ai-media.py -ui original.jpg -uf 4.0
+# Caption an image with simpler model
+python ai-media.py -gd -ii image.jpg -cm blip
 
-# If you want MORE detail generation (real photos, very low-res inputs)
-python ai-media.py -ui photo.jpg -uf 4.0 -us 0.3
+# If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+```
 
-# Maximum creative freedom (may diverge from original)
-python ai-media.py -ui input.jpg -uf 4.0 -us 0.8
+#### Creative Image Transformation Examples
+```bash
+# Instructional Edit (InstructPix2Pix)
+python ai-media.py -ti photo.jpg -tp "Make it look like an anime drawing"
+python ai-media.py -ti face.jpg -tp "Remove the beard"
 
-# Custom Upscale Factor (e.g., 2x, 6x, 8x)
-# Smart multi-stage: 6x = 4x AI + 1.5x Lanczos, 8x = 4x AI + 2x AI
-python ai-media.py -ui input.jpg -uf 6x
+# Background Removal (Transparent PNG)
+python ai-media.py -ti photo.jpg --remove-background
 
-# Upscale Video (Frame-by-Frame, slow but high quality)
-python ai-media.py -uv clip.mp4
+# Create a Silhouette
+python ai-media.py -ti dancer.jpg --remove-background --silhouette
+
+# Chaining: Edit -> Remove Background
+python ai-media.py -ti photo.jpg -tp "Make it anime" --remove-background
+
+# Triple Chain: Generate Image -> Edit Image -> Remove Background
+python ai-media.py -i -p "Knight" -ti -tp "Add sword" --remove-background
+
+# Custom Guidance and Output
+python ai-media.py -ti photo.jpg -tp "Cyborg" --image-guidance 1.8 -o "edit.png"
+```
+
+#### Media Conversion Examples
+```bash
+# Image Conversion
+python ai-media.py -ci photo.gif -cit png
+python ai-media.py -ci input.png -cit output.webp --convert-image-engine ffmpeg
+
+# Video Conversion
+python ai-media.py -cv clip.mov -cvt mp4
+
+# Audio Conversion
+python ai-media.py -ca song.wav -cat mp3
+```
+
+#### AI Upscaling Examples
+```bash
+# Standalone Image Upscale (x4 by default)
+python ai-media.py -ui input.jpg -uf 4.0
+
+# Simple Upscale (Non-AI, Fast)
+python ai-media.py -ui photo.jpg -uf 4 -su
+
+# Video Upscale
+python ai-media.py -uv clip.mp4 -uf 2.0
 
 # Chained Generation (Generate -> Upscale)
-# Generates a 720p image, then immediately upscales it to 5K (4x)
 python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
-
-# High-Resolution Optimization (>4K)
-# Native 4K/5K generation can be slow/unstable. To get 4K result faster:
-# 1. Generate at optimized 3K (e.g. 2688x1536)
-# 2. Auto-Upscale to recover resolution
-# The script will PROACTIVELY suggest this if you request >6MP (4K+).
-python ai-media.py -i -p "Detail test" -s 4k
-# Follow the interactive prompt:
-# 💡 Recommendation: Generate at optimized 3K... + Auto-Upscale...
-# 🔄 Switch to optimized workflow? [Y/n]: Y
 ```
 
 
@@ -451,46 +389,41 @@ python ai-media.py -i -p "Cat" -o cat.jpg      # Generates JPEG
 python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.png"
 ```
 
-### Common Options
+## Supported Models
 
-| Option | Description |
-| :--- | :--- |
-| `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
-| `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
-| `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
-| `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
-| `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. Square effectively crops/forces 1:1 aspect ratio using the smaller dimension. |
-| `-l, --length` | Duration. Supports "15s", "1m", "1h30m", `{m:1, s:30}`. Default: 15s. |
-| `-ii, --image-input` | Source image path for **Image-to-Video** generation. |
-| `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](#performance-tracking). |
-| `--unsafe` | Disable NSFW safety checker (reduces false positives). [Read more](#safety-checker). |
-
-### Audio Options
-
-| Option | Description |
-| :--- | :--- |
-| `-m, --sampling` | Sample rate in Hz (e.g. `44100`, `48k`, `32000`). Default: 32000. |
-| `-b, --bit-depth` | Bit depth (16, 24, 32). Default: 16. |
-| `-r, --bit-rate` | Target bitrate (e.g. `128k`, `320kbps`). |
-
-## Models & Options
-
-### Image Models (`--image-model`)
+### Image Models
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | **Default**. Fast, high quality. Uses float32 on Apple Silicon. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
-| **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
+| **Flux Dev** | `flux-dev` | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 
 > [!NOTE]
 > **Apple Silicon/MPS:** SDXL Turbo uses float32 precision on Mac to avoid black images (float16 produces NaN values in VAE). This doubles memory usage compared to NVIDIA/CUDA.
 >
 > **High Resolution (4K+):** For resolutions larger than 1536x1536 (e.g., 4K), the script automatically enables **VAE Tiling**. This processes the image in chunks to prevent "Out of Memory" errors, though generation will be slightly slower.
 
-### Audio Models (`--audio-model`)
+### Video Models
+
+| Model | Code | Resolution | Download | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
+| **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
+| **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
+| **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
+
+> [!WARNING]
+> **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
+
+> [!IMPORTANT]
+> **MacOS/Apple Silicon - Video Generation:** Text-to-Video models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
+
+> [!NOTE]
+> **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.
+
+### Audio Models
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
@@ -502,7 +435,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | **Bark** | `bark` | ~4GB | ~12GB | Speech (TTS) & creative audio. Transformer-based. |
 
 
-### Bark Configuration (`--audio-model bark`)
+#### Bark Configuration
 
 Bark is a transformer-based model that can generate highly realistic speech as well as other audio (music, background noise, etc.).
 
@@ -537,46 +470,22 @@ By default, the Bark model can only generate ~14 seconds of audio per pass. This
 
 
 
-### Video Models (`--video-model`)
-
-| Model | Code | Resolution | Download | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
-| **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
-| **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
-| **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
-
-> [!WARNING]
-> **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
-
-> [!IMPORTANT]
-> **MacOS/Apple Silicon - Video Generation:** Text-to-Video models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
-
-> [!NOTE]
-> **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.
-
-### Creative Transformation / Editing Models (`-ti`)
+### Creative Image Transformation Models
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **InstructPix2Pix** | `instruct-pix2pix` | ~4GB | ~8GB (High Precision) | Instructional image editing (e.g., "Make it anime"). |
 | **RMBG-1.4** | `remove-bg` | ~0.2GB | ~2GB | Background removal and silhouette creation. |
 
-### Upscaling Models (Auto-selected based on factor)
+### Upscaling Models
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **SD x2 Latent** | `upscaler_x2` | ~4GB | ~8GB | **Factors ≤ 2x**. Fast, preserves original style. |
 | **SD x4 Upscaler** | `upscaler` | ~8GB | ~16GB | **Factors > 2x**. High detail, sharpens textures. |
 
-### Caption Models (`--caption-model` or `-cm`)
 
-| Model | Code | Size | Best For |
-| :--- | :--- | :--- | :--- |
-| **Florence-2 Large** | `florence` | ~1.5GB | **Default**. SOTA details, rich descriptions, "seeing" the scene. |
-| **BLIP Large** | `blip` | ~0.9GB | **Legacy**. Simple, concise captions. Faster but less detailed. |
-
-### AI Upscaling Architecture
+#### AI Upscaling Architecture
 
 The script uses a **Smart Multi-Stage Approach** to balance speed and quality:
 
@@ -604,6 +513,14 @@ The script uses a **Smart Multi-Stage Approach** to balance speed and quality:
 > The upscaler also uses negative prompts internally to reduce blur, noise, and JPEG artifacts.
 
 
+### Description Generation Models
+
+| Model | Code | Size | Best For |
+| :--- | :--- | :--- | :--- |
+| **Florence-2 Large** | `florence` | ~1.5GB | **Default**. SOTA details, rich descriptions, "seeing" the scene. |
+| **BLIP Large** | `blip` | ~0.9GB | **Legacy**. Simple, concise captions. Faster but less detailed. |
+
+
 ## Supported Resolutions & Times
 
 ### Resolution Parsing (`-s` or `--size`)
@@ -628,6 +545,10 @@ python ai-media.py
 python ai-media.py --interactive
 ```
 
+![Interactive Menu](screenshots/interactive-menu.png)
+
+![Video Generation Menu](screenshots/interactive-menu-video-gen.png)
+
 ### Fast Jump Points
 
 You can jump directly to specific submenus or models using shortcut paths with `--interactive`:
@@ -650,21 +571,21 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `3/3` | | `audio/musicgen-large` | MusicGen Large (Quality) |
 | `3/4` | | `audio/audioldm2` | AudioLDM2 (SFX) |
 | `3/5` | | `audio/bark` | Bark (TTS) |
-| `4` | **Edit** | `transform` | Transform Menu |
-| `4/1` | | `transform/edit` | Creative Edit |
-| `4/2` | | `transform/rembg` | Background Removal |
-| `4/3` | | `transform/silhouette` | Silhouette |
-| `5` | **Other** | `upscale` | Upscale Menu |
-| `6` | | `convert` | Convert Menu |
-| `7` | | `caption` | Caption Menu |
-| `8` | | `test` | Run Tests |
-| `9` | | `sysinfo` | System Information |
+| `4` | **Description** | `caption` | Description Generation Menu |
+| `5` | **Edit** | `transform` | Transform Menu |
+| `5/1` | | `transform/edit` | Creative Edit |
+| `5/2` | | `transform/rembg` | Background Removal |
+| `5/3` | | `transform/silhouette` | Silhouette |
+| `6` | **Convert** | `convert` | Convert Menu |
+| `7` | **Upscale** | `upscale` | Upscale Menu |
+| `8` | **Test** | `test` | Run Tests |
+| `9` | **Sysinfo** | `sysinfo` | System Information |
 
 ```bash
 python ai-media.py --interactive "image/sdxl"
 python ai-media.py --interactive "audio/bark"
 python ai-media.py --interactive 9
-python ai-media.py --interactive "4/2"
+python ai-media.py --interactive "5/2"
 python ai-media.py --interactive 3/5
 ```
 
@@ -691,6 +612,10 @@ It **only** records anonymous metrics:
 - ✅ Generation Duration
 - ✅ Average CPU Usage (%)
 - ✅ Average RAM Usage (GB)
+- ✅ Average GPU Load (%) - *NVIDIA (CUDA) only*
+- ✅ Average VRAM Usage (GB) - *NVIDIA (CUDA) and Apple Silicon (MPS)*
+
+You can safely delete `performance.json` at any time to reset estimates.
 
 ### 🚫 Opting Out
 If you prefer not to use this feature, you can completely disable the reading and writing of this file by using the `-npt` or `--no-performance-tracking` flag.
@@ -824,6 +749,7 @@ After reinstalling, you should see:
 ```
 🚀 Detected NVIDIA GPU: Using CUDA
 ```
+
 
 ## Dependencies
 

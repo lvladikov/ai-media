@@ -1,28 +1,23 @@
 {
   "tests": [
     {
-      "name": "Image - SDXL (Default)",
-      "command": "-i -p \"A red apple\" -o testData/outputs/img_sdxl.jpg -s 64x64 --force --unsafe",
+      "name": "Image - Auto Filename",
+      "command": "-i -p \"sunset beach\" -s 64x64 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/img_sdxl.jpg"
-      ]
+        "sunset-beach.jpg"
+      ],
+      "description": "Generate image with auto-generated filename from prompt"
     },
     {
-      "name": "Image - SDXL Explicit",
-      "command": "-i -p \"Orange fruit\" -o testData/outputs/img_sdxl_exp.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "name": "Image - Chained Simple Upscale",
+      "command": "-i -p \"Mountain\" -o testData/outputs/mountain.jpg -s 64x64 --upscale -uf 2x -su --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/img_sdxl_exp.jpg"
-      ]
-    },
-    {
-      "name": "Image - SD 1.5",
-      "command": "-i -p \"A blue car\" -o testData/outputs/img_sd15.jpg -s 64x64 --image-model sd-1.5 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/img_sd15.jpg"
-      ]
+        "testData/outputs/mountain.jpg",
+        "testData/outputs/mountain_simple_upscaled_2.0x.jpg"
+      ],
+      "description": "Chain: Generate image then apply simple upscaling"
     },
     {
       "name": "Image - Flux",
@@ -31,7 +26,8 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/img_flux.jpg"
-      ]
+      ],
+      "description": "Generate image using Flux Schnell model (gated)"
     },
     {
       "name": "Image - Flux Dev",
@@ -40,63 +36,8 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/img_flux_dev.jpg"
-      ]
-    },
-    {
-      "name": "Image - Portrait Orientation",
-      "command": "-i -p \"A tall tree\" -o testData/outputs/img_portrait.jpg -s 64x64 -otn portrait --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/img_portrait.jpg"
-      ]
-    },
-    {
-      "name": "Image - Landscape Orientation",
-      "command": "-i -p \"A tall tree\" -o testData/outputs/img_landscape.jpg -s 64x64 -otn landscape --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/img_landscape.jpg"
-      ]
-    },
-    {
-      "name": "Image - Square Orientation",
-      "command": "-i -p \"A tall tree\" -o testData/outputs/img_square.jpg -s 64x64 -otn square --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/img_square.jpg"
-      ]
-    },
-    {
-      "name": "Image - Auto Filename",
-      "command": "-i -p \"sunset beach\" -s 64x64 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "sunset-beach.jpg"
-      ]
-    },
-    {
-      "name": "Image - PNG Format Flag",
-      "command": "-i -p \"A frog\" -o testData/outputs/frog -f png -s 64x64 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/frog.png"
-      ]
-    },
-    {
-      "name": "Image - JPG Format Flag",
-      "command": "-i -p \"A frog\" -o testData/outputs/frog -f jpg -s 64x64 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/frog.jpg"
-      ]
-    },
-    {
-      "name": "Image - WebP Format Flag",
-      "command": "-i -p \"A frog\" -o testData/outputs/frog -f webp -s 64x64 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/frog.webp"
-      ]
+      ],
+      "description": "Generate image using Flux Dev model (gated)"
     },
     {
       "name": "Image - GIF Format Flag",
@@ -104,31 +45,125 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/frog.gif"
-      ]
+      ],
+      "description": "Generate GIF image using -f flag"
     },
     {
-      "name": "Video - Zeroscope (Default)",
-      "command": "-v -p \"A cat walking\" -o testData/outputs/vid_zeroscope.mp4 -l 1s --force --unsafe",
+      "name": "Image - JPG Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f jpg -s 64x64 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/vid_zeroscope.mp4"
-      ]
+        "testData/outputs/frog.jpg"
+      ],
+      "description": "Generate JPG image using -f flag"
     },
     {
-      "name": "Video - Zeroscope Explicit",
-      "command": "-v -p \"Bird flying\" -o testData/outputs/vid_zeroscope_exp.mp4 -l 1s --video-model zeroscope --force --unsafe",
+      "name": "Image - Landscape Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_landscape.jpg -s 64x64 -otn landscape --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/vid_zeroscope_exp.mp4"
-      ]
+        "testData/outputs/img_landscape.jpg"
+      ],
+      "description": "Generate image with landscape orientation (-otn landscape)"
     },
     {
-      "name": "Video - ModelScope",
-      "command": "-v -p \"A dog running\" -o testData/outputs/vid_ms17b.mp4 -l 1s --video-model ms-1.7b --force --unsafe",
+      "name": "Image - No Performance Tracking",
+      "command": "-i -p \"No track\" -o testData/outputs/no_track.jpg -s 64x64 --no-performance-tracking --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/vid_ms17b.mp4"
-      ]
+        "testData/outputs/no_track.jpg"
+      ],
+      "description": "Generate image with performance tracking disabled (-npt)"
+    },
+    {
+      "name": "Image - PNG Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f png -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.png"
+      ],
+      "description": "Generate PNG image using -f flag"
+    },
+    {
+      "name": "Image - Portrait Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_portrait.jpg -s 64x64 -otn portrait --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_portrait.jpg"
+      ],
+      "description": "Generate image with portrait orientation (-otn portrait)"
+    },
+    {
+      "name": "Image - SD 1.5",
+      "command": "-i -p \"A blue car\" -o testData/outputs/img_sd15.jpg -s 64x64 --image-model sd-1.5 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sd15.jpg"
+      ],
+      "description": "Generate image using Stable Diffusion 1.5 model"
+    },
+    {
+      "name": "Image - SDXL (Default)",
+      "command": "-i -p \"A red apple\" -o testData/outputs/img_sdxl.jpg -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sdxl.jpg"
+      ],
+      "description": "Generate image using SDXL model (default)"
+    },
+    {
+      "name": "Image - SDXL Explicit",
+      "command": "-i -p \"Orange fruit\" -o testData/outputs/img_sdxl_exp.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_sdxl_exp.jpg"
+      ],
+      "description": "Generate image with explicit --image-model sdxl flag"
+    },
+    {
+      "name": "Image - Square Orientation",
+      "command": "-i -p \"A tall tree\" -o testData/outputs/img_square.jpg -s 64x64 -otn square --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/img_square.jpg"
+      ],
+      "description": "Generate image with square orientation (-otn square)"
+    },
+    {
+      "name": "Image - Triple Chain - Generate + Edit + Remove BG",
+      "command": "-i -p \"Portrait\" -o testData/outputs/triple.png -s 64x64 -ti -tp \"Add hat\" --remove-background --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/triple.png"
+      ],
+      "description": "Chain: Generate image, edit it, then remove background"
+    },
+    {
+      "name": "Image - Triple Chain - Generate + Edit + Silhouette",
+      "command": "-i -p \"Dancer\" -o testData/outputs/dancer_sil.png -s 64x64 -ti -tp \"Pose\" --remove-background --silhouette --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/dancer_sil.png"
+      ],
+      "description": "Chain: Generate image, edit it, then create silhouette"
+    },
+    {
+      "name": "Image - WebP Format Flag",
+      "command": "-i -p \"A frog\" -o testData/outputs/frog -f webp -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/frog.webp"
+      ],
+      "description": "Generate WebP image using -f flag"
+    },
+    {
+      "name": "Video - AVI Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.avi -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.avi"
+      ],
+      "description": "Generate video in AVI format"
     },
     {
       "name": "Video - CogVideoX",
@@ -137,7 +172,64 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/vid_cogvideox.mp4"
-      ]
+      ],
+      "description": "Generate video using CogVideoX model (SOTA)"
+    },
+    {
+      "name": "Video - Image-to-Video with Audio",
+      "command": "-v -ii testData/inputs/sample.jpg -o testData/outputs/vid_i2v_audio.mp4 -l 2s -ap \"Ambient drone\" --video-model svd --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/vid_i2v_audio.mp4"
+      ],
+      "description": "Generate video from image with background audio"
+    },
+    {
+      "name": "Video - MKV Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mkv -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.mkv"
+      ],
+      "description": "Generate video in MKV format"
+    },
+    {
+      "name": "Video - MOV Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mov -l 1s --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_format.mov"
+      ],
+      "description": "Generate video in MOV format"
+    },
+    {
+      "name": "Video - ModelScope",
+      "command": "-v -p \"A dog running\" -o testData/outputs/vid_ms17b.mp4 -l 1s --video-model ms-1.7b --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_ms17b.mp4"
+      ],
+      "description": "Generate video using ModelScope 1.7B model"
+    },
+    {
+      "name": "Video - Muxing with Audio",
+      "command": "-v -p \"A dancing robot\" -o testData/outputs/vid_mux.mp4 -l 3s -ap \"Techno music\" --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_mux.mp4"
+      ],
+      "description": "Generate video with background audio (default model)"
+    },
+    {
+      "name": "Video - Muxing with Audio (Custom Model)",
+      "command": "-v -p \"A dancing robot\" -o testData/outputs/vid_mux_small.mp4 -l 3s -ap \"Techno music\" -am musicgen-small --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/vid_mux_small.mp4"
+      ],
+      "description": "Generate video with audio using custom audio model"
     },
     {
       "name": "Video - Stable Video Diffusion (I2V)",
@@ -148,23 +240,20 @@
       ],
       "expectedOutputItems": [
         "testData/outputs/vid_svd.mp4"
-      ]
+      ],
+      "description": "Generate video from image using SVD model"
     },
     {
-      "name": "Video - MKV Format",
-      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mkv -l 1s --force --unsafe",
-      "expectedInputItems": [],
+      "name": "Video - Text Prompt + Image input + Audio Prompt to Video (CogVideoX I2V)",
+      "timeout": 3600,
+      "command": "-v -p \"Camera slowly pans\" -ii testData/inputs/sample.jpg -o testData/outputs/vid_cogx_i2v_audio.mp4 -l 2s -ap \"Cinematic ambience\" --video-model cogvideox --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
       "expectedOutputItems": [
-        "testData/outputs/vid_format.mkv"
-      ]
-    },
-    {
-      "name": "Video - WebM Format",
-      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.webm -l 1s --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/vid_format.webm"
-      ]
+        "testData/outputs/vid_cogx_i2v_audio.mp4"
+      ],
+      "description": "Generate video using CogVideoX I2V with text prompt, input image, and background audio"
     },
     {
       "name": "Video - WMV Format",
@@ -172,47 +261,35 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/vid_format.wmv"
-      ]
+      ],
+      "description": "Generate video in WMV format"
     },
     {
-      "name": "Video - AVI Format",
-      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.avi -l 1s --force --unsafe",
+      "name": "Video - WebM Format",
+      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.webm -l 1s --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/vid_format.avi"
-      ]
+        "testData/outputs/vid_format.webm"
+      ],
+      "description": "Generate video in WebM format"
     },
     {
-      "name": "Video - MOV Format",
-      "command": "-v -p \"Format test\" -o testData/outputs/vid_format.mov -l 1s --force --unsafe",
+      "name": "Video - Zeroscope (Default)",
+      "command": "-v -p \"A cat walking\" -o testData/outputs/vid_zeroscope.mp4 -l 1s --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/vid_format.mov"
-      ]
+        "testData/outputs/vid_zeroscope.mp4"
+      ],
+      "description": "Generate video using Zeroscope model (default)"
     },
     {
-      "name": "Audio - WAV Format",
-      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.wav -l 2s --audio-model musicgen-small --force",
+      "name": "Video - Zeroscope Explicit",
+      "command": "-v -p \"Bird flying\" -o testData/outputs/vid_zeroscope_exp.mp4 -l 1s --video-model zeroscope --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/aud_format.wav"
-      ]
-    },
-    {
-      "name": "Audio - FLAC Format",
-      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.flac -l 2s --audio-model musicgen-small --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_format.flac"
-      ]
-    },
-    {
-      "name": "Audio - OGG Format",
-      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.ogg -l 2s --audio-model musicgen-small --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_format.ogg"
-      ]
+        "testData/outputs/vid_zeroscope_exp.mp4"
+      ],
+      "description": "Generate video with explicit --video-model zeroscope flag"
     },
     {
       "name": "Audio - AAC Format",
@@ -220,39 +297,8 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/aud_format.aac"
-      ]
-    },
-    {
-      "name": "Audio - MusicGen Small",
-      "command": "-a -p \"Piano melody\" -o testData/outputs/aud_musicgen_small.mp3 -l 2s --audio-model musicgen-small --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_musicgen_small.mp3"
-      ]
-    },
-    {
-      "name": "Audio - MusicGen Medium (Default)",
-      "command": "-a -p \"Jazz saxophone\" -o testData/outputs/aud_musicgen_medium.mp3 -l 2s --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_musicgen_medium.mp3"
-      ]
-    },
-    {
-      "name": "Audio - MusicGen Medium Explicit",
-      "command": "-a -p \"Guitar solo\" -o testData/outputs/aud_musicgen_med_exp.mp3 -l 2s --audio-model musicgen-medium --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_musicgen_med_exp.mp3"
-      ]
-    },
-    {
-      "name": "Audio - MusicGen Large",
-      "command": "-a -p \"Orchestra symphony\" -o testData/outputs/aud_musicgen_large.mp3 -l 2s --audio-model musicgen-large --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_musicgen_large.mp3"
-      ]
+      ],
+      "description": "Generate audio in AAC format"
     },
     {
       "name": "Audio - AudioLDM2",
@@ -260,15 +306,8 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/aud_audioldm2.mp3"
-      ]
-    },
-    {
-      "name": "Audio - Bark TTS",
-      "command": "-a -p \"Hello world\" -o testData/outputs/aud_bark.mp3 --audio-model bark --force",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "testData/outputs/aud_bark.mp3"
-      ]
+      ],
+      "description": "Generate audio using AudioLDM2 model"
     },
     {
       "name": "Audio - Bark French Voice",
@@ -276,7 +315,8 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/aud_bark_fr.mp3"
-      ]
+      ],
+      "description": "Generate French speech using Bark"
     },
     {
       "name": "Audio - Bark German Voice",
@@ -284,180 +324,53 @@
       "expectedInputItems": [],
       "expectedOutputItems": [
         "testData/outputs/aud_bark_de.mp3"
-      ]
+      ],
+      "description": "Generate German speech using Bark"
     },
     {
-      "name": "Transform - Anonymous Chain",
-      "command": "-i -p \"A cat\" -o testData/outputs/cat_chain.jpg -s 64x64 -ti -tp \"Make it anime\" --force --unsafe",
+      "name": "Audio - Bark TTS",
+      "command": "-a -p \"Hello world\" -o testData/outputs/aud_bark.mp3 --audio-model bark --force",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/cat_chain.jpg"
-      ]
-    },
-    {
-      "name": "Transform - Standalone with -p",
-      "command": "-ti testData/inputs/sample.jpg -p \"Make it a painting\" -o testData/outputs/painting.png --force --unsafe",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
+        "testData/outputs/aud_bark.mp3"
       ],
-      "expectedOutputItems": [
-        "testData/outputs/painting.png"
-      ]
+      "description": "Generate speech using Bark TTS model"
     },
     {
-      "name": "Transform - Standalone with -tp",
-      "command": "-ti testData/inputs/sample.jpg -tp \"Make it cartoon\" -o testData/outputs/cartoon.png --force --unsafe",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/cartoon.png"
-      ]
-    },
-    {
-      "name": "Transform - Background Removal (RMBG)",
-      "command": "-ti testData/inputs/sample.jpg --remove-background -o testData/outputs/nobg.png --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/nobg.png"
-      ]
-    },
-    {
-      "name": "Transform - Silhouette",
-      "command": "-ti testData/inputs/sample.jpg --remove-background --silhouette -o testData/outputs/silhouette.png --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/silhouette.png"
-      ]
-    },
-    {
-      "name": "Transform - Edit + Remove BG",
-      "command": "-ti testData/inputs/sample.jpg -tp \"Make it neon\" --remove-background -o testData/outputs/neon_nobg.png --force --unsafe",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/neon_nobg.png"
-      ]
-    },
-    {
-      "name": "Transform - Image Guidance",
-      "command": "-ti testData/inputs/sample.jpg -tp \"Vintage look\" --image-guidance 2.0 -o testData/outputs/vintage.png --force --unsafe",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/vintage.png"
-      ]
-    },
-    {
-      "name": "Triple Chain - Generate + Edit + Remove BG",
-      "command": "-i -p \"Portrait\" -o testData/outputs/triple.png -s 64x64 -ti -tp \"Add hat\" --remove-background --force --unsafe",
+      "name": "Audio - Custom Bit Depth",
+      "command": "-a -p \"Bit depth test\" -o testData/outputs/aud_depth.wav -l 2s --bit-depth 24 --force",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/triple.png"
-      ]
+        "testData/outputs/aud_depth.wav"
+      ],
+      "description": "Generate audio with custom bit depth (-b)"
     },
     {
-      "name": "Triple Chain - Generate + Edit + Silhouette",
-      "command": "-i -p \"Dancer\" -o testData/outputs/dancer_sil.png -s 64x64 -ti -tp \"Pose\" --remove-background --silhouette --force --unsafe",
+      "name": "Audio - Custom Bit Rate",
+      "command": "-a -p \"Bit rate test\" -o testData/outputs/aud_bitrate.mp3 -l 2s --bit-rate 192k --force",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/dancer_sil.png"
-      ]
-    },
-    {
-      "name": "Upscale - Simple 2x",
-      "command": "-ui testData/inputs/sample.jpg -uf 2x -su -o testData/outputs/up_simple_2x.png --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
+        "testData/outputs/aud_bitrate.mp3"
       ],
-      "expectedOutputItems": [
-        "testData/outputs/up_simple_2x.png"
-      ]
+      "description": "Generate audio with custom bit rate (-r)"
     },
     {
-      "name": "Upscale - Simple 4x",
-      "command": "-ui testData/inputs/sample.jpg -uf 4x -su -o testData/outputs/up_simple_4x.png --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/up_simple_4x.png"
-      ]
-    },
-    {
-      "name": "Upscale - AI 2x (x2 Latent)",
-      "command": "-ui testData/inputs/sample.jpg -uf 2x -o testData/outputs/up_ai_2x.png --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/up_ai_2x.png"
-      ]
-    },
-    {
-      "name": "Image + Chained Simple Upscale",
-      "command": "-i -p \"Mountain\" -o testData/outputs/mountain.jpg -s 64x64 --upscale -uf 2x -su --force --unsafe",
+      "name": "Audio - Custom Sampling Rate",
+      "command": "-a -p \"Sampling test\" -o testData/outputs/aud_rate.mp3 -l 2s --sampling-rate 44100 --force",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/mountain.jpg",
-        "testData/outputs/mountain_simple_upscaled_2.0x.jpg"
-      ]
+        "testData/outputs/aud_rate.mp3"
+      ],
+      "description": "Generate audio with custom sampling rate (-m)"
     },
     {
-      "name": "Convert - Image PIL",
-      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted.png",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
+      "name": "Audio - FLAC Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.flac -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
       "expectedOutputItems": [
-        "testData/outputs/converted.png"
-      ]
-    },
-    {
-      "name": "Convert - Image FFmpeg",
-      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted_ff.webp --convert-image-engine ffmpeg",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
+        "testData/outputs/aud_format.flac"
       ],
-      "expectedOutputItems": [
-        "testData/outputs/converted_ff.webp"
-      ]
-    },
-    {
-      "name": "Caption - Florence (Default)",
-      "command": "-gd testData/inputs/sample.jpg -o testData/outputs/caption_florence.txt --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/caption_florence.txt"
-      ]
-    },
-    {
-      "name": "Caption - Florence Explicit",
-      "command": "-gd testData/inputs/sample.jpg -cm florence -o testData/outputs/caption_florence_exp.txt --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/caption_florence_exp.txt"
-      ]
-    },
-    {
-      "name": "Caption - BLIP",
-      "command": "-gd testData/inputs/sample.jpg -cm blip -o testData/outputs/caption_blip.txt --force",
-      "expectedInputItems": [
-        "testData/inputs/sample.jpg"
-      ],
-      "expectedOutputItems": [
-        "testData/outputs/caption_blip.txt"
-      ]
+      "description": "Generate audio in FLAC format"
     },
     {
       "name": "Audio - Image-to-Audio",
@@ -467,7 +380,8 @@
       ],
       "expectedOutputItems": [
         "testData/outputs/aud_i2a.mp3"
-      ]
+      ],
+      "description": "Generate audio from image (auto-caption)"
     },
     {
       "name": "Audio - Image-to-Audio with BLIP Caption",
@@ -477,7 +391,323 @@
       ],
       "expectedOutputItems": [
         "testData/outputs/aud_i2a_blip.mp3"
-      ]
+      ],
+      "description": "Generate audio from image using BLIP caption"
+    },
+    {
+      "name": "Audio - MusicGen Large",
+      "command": "-a -p \"Orchestra symphony\" -o testData/outputs/aud_musicgen_large.mp3 -l 2s --audio-model musicgen-large --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_large.mp3"
+      ],
+      "description": "Generate audio using MusicGen Large model"
+    },
+    {
+      "name": "Audio - MusicGen Medium (Default)",
+      "command": "-a -p \"Jazz saxophone\" -o testData/outputs/aud_musicgen_medium.mp3 -l 2s --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_medium.mp3"
+      ],
+      "description": "Generate audio using MusicGen Medium (default)"
+    },
+    {
+      "name": "Audio - MusicGen Medium Explicit",
+      "command": "-a -p \"Guitar solo\" -o testData/outputs/aud_musicgen_med_exp.mp3 -l 2s --audio-model musicgen-medium --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_med_exp.mp3"
+      ],
+      "description": "Generate audio with explicit MusicGen Medium"
+    },
+    {
+      "name": "Audio - MusicGen Small",
+      "command": "-a -p \"Piano melody\" -o testData/outputs/aud_musicgen_small.mp3 -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_musicgen_small.mp3"
+      ],
+      "description": "Generate audio using MusicGen Small model"
+    },
+    {
+      "name": "Audio - OGG Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.ogg -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.ogg"
+      ],
+      "description": "Generate audio in OGG format"
+    },
+    {
+      "name": "Audio - Stable Audio Open",
+      "timeout": 3600,
+      "command": "-a -p \"Drum beat\" -o testData/outputs/aud_stable.mp3 -l 5s --audio-model stable-audio --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_stable.mp3"
+      ],
+      "description": "Generate audio using Stable Audio Open (Gated)"
+    },
+    {
+      "name": "Audio - Video-to-Audio",
+      "command": "-a -ii testData/inputs/sample_video.mov -o testData/outputs/aud_v2a.mp3 -l 3s --force",
+      "expectedInputItems": [
+        "testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/aud_v2a.mp3"
+      ],
+      "description": "Generate audio from video frames"
+    },
+    {
+      "name": "Audio - WAV Format",
+      "command": "-a -p \"Format test\" -o testData/outputs/aud_format.wav -l 2s --audio-model musicgen-small --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/aud_format.wav"
+      ],
+      "description": "Generate audio in WAV format"
+    },
+    {
+      "name": "Caption - BLIP",
+      "command": "-gd testData/inputs/sample.jpg -cm blip -o testData/outputs/caption_blip.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_blip.txt"
+      ],
+      "description": "Generate caption using BLIP model"
+    },
+    {
+      "name": "Caption - Florence (Default)",
+      "command": "-gd testData/inputs/sample.jpg -o testData/outputs/caption_florence.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_florence.txt"
+      ],
+      "description": "Generate caption using Florence model (default)"
+    },
+    {
+      "name": "Caption - Florence Explicit",
+      "command": "-gd testData/inputs/sample.jpg -cm florence -o testData/outputs/caption_florence_exp.txt --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/caption_florence_exp.txt"
+      ],
+      "description": "Generate caption with explicit Florence model"
+    },
+    {
+      "name": "Transform - Anonymous Chain",
+      "command": "-i -p \"A cat\" -o testData/outputs/cat_chain.jpg -s 64x64 -ti -tp \"Make it anime\" --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "testData/outputs/cat_chain.jpg"
+      ],
+      "description": "Chain: generate image then transform it"
+    },
+    {
+      "name": "Transform - Background Removal (RMBG)",
+      "command": "-ti testData/inputs/sample.jpg --remove-background -o testData/outputs/nobg.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/nobg.png"
+      ],
+      "description": "Remove background from image"
+    },
+    {
+      "name": "Transform - Edit (SDXL)",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Turn into sketches\" -o testData/outputs/sketch_sdxl.png --image-model sdxl --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/sketch_sdxl.png"
+      ],
+      "description": "Transform image using InstructPix2Pix SDXL model"
+    },
+    {
+      "name": "Transform - Edit + Remove BG",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Make it neon\" --remove-background -o testData/outputs/neon_nobg.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/neon_nobg.png"
+      ],
+      "description": "Chain: edit image then remove background"
+    },
+    {
+      "name": "Transform - Image Guidance",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Vintage look\" --image-guidance 2.0 -o testData/outputs/vintage.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/vintage.png"
+      ],
+      "description": "Transform with custom image guidance scale"
+    },
+    {
+      "name": "Transform - Silhouette",
+      "command": "-ti testData/inputs/sample.jpg --remove-background --silhouette -o testData/outputs/silhouette.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/silhouette.png"
+      ],
+      "description": "Create silhouette from image"
+    },
+    {
+      "name": "Transform - Standalone with -p",
+      "command": "-ti testData/inputs/sample.jpg -p \"Make it a painting\" -o testData/outputs/painting.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/painting.png"
+      ],
+      "description": "Transform existing image using -p prompt"
+    },
+    {
+      "name": "Transform - Standalone with -tp",
+      "command": "-ti testData/inputs/sample.jpg -tp \"Make it cartoon\" -o testData/outputs/cartoon.png --force --unsafe",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/cartoon.png"
+      ],
+      "description": "Transform existing image using -tp prompt"
+    },
+    {
+      "name": "Convert - Audio (WAV to MP3)",
+      "command": "-ca testData/inputs/sample_audio.wav -cat testData/outputs/sample_audio.mp3 --force",
+      "expectedInputItems": [
+        "testData/inputs/sample_audio.wav"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/sample_audio.mp3"
+      ],
+      "description": "Convert audio from WAV to MP3"
+    },
+    {
+      "name": "Convert - Image FFmpeg",
+      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted_ff.webp --convert-image-engine ffmpeg",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/converted_ff.webp"
+      ],
+      "description": "Convert image format using FFmpeg"
+    },
+    {
+      "name": "Convert - Image PIL",
+      "command": "-ci testData/inputs/sample.jpg -cit testData/outputs/converted.png",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/converted.png"
+      ],
+      "description": "Convert image format using PIL"
+    },
+    {
+      "name": "Convert - Video (MOV to MP4)",
+      "command": "-cv testData/inputs/sample_video.mov -cvt testData/outputs/sample_video.mp4 --force",
+      "expectedInputItems": [
+        "testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/sample_video.mp4"
+      ],
+      "description": "Convert video from MOV to MP4"
+    },
+    {
+      "name": "Upscale Image - AI 2x (x2 Latent)",
+      "command": "-ui testData/inputs/sample.jpg -uf 2x -o testData/outputs/up_ai_2x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_ai_2x.png"
+      ],
+      "description": "Upscale image 2x using AI (Latent Diffusion)"
+    },
+    {
+      "name": "Upscale Image - Custom Output File",
+      "command": "-ui testData/inputs/sample.jpg -uf 2x -uof testData/outputs/custom_name_upscaled.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/custom_name_upscaled.png"
+      ],
+      "description": "Upscale image with custom output filename (-uof)"
+    },
+    {
+      "name": "Upscale Image - Custom Strength",
+      "command": "-ui testData/inputs/sample.jpg -uf 4x -us 0.5 -o testData/outputs/strength_test.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/strength_test.png"
+      ],
+      "description": "Upscale image with custom strength (-us)"
+    },
+    {
+      "name": "Upscale Image - Simple 2x",
+      "command": "-ui testData/inputs/sample.jpg -uf 2x -su -o testData/outputs/up_simple_2x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_simple_2x.png"
+      ],
+      "description": "Upscale image 2x using simple Lanczos method"
+    },
+    {
+      "name": "Upscale Image - Simple 4x",
+      "command": "-ui testData/inputs/sample.jpg -uf 4x -su -o testData/outputs/up_simple_4x.png --force",
+      "expectedInputItems": [
+        "testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_simple_4x.png"
+      ],
+      "description": "Upscale image 4x using simple Lanczos method"
+    },
+    {
+      "name": "Upscale Video - Default",
+      "command": "-uv testData/inputs/sample_video.mov -uf 2x -o testData/outputs/up_video.mp4 --force",
+      "expectedInputItems": [
+        "testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_video.mp4"
+      ],
+      "description": "Upscale video 2x using default settings (-uv)"
+    },
+    {
+      "name": "Upscale Video - Simple 2x",
+      "command": "-uv testData/inputs/sample_video.mov -uf 2x -su -o testData/outputs/up_video_simple.mp4 --force",
+      "expectedInputItems": [
+        "testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "testData/outputs/up_video_simple.mp4"
+      ],
+      "description": "Upscale video 2x using simple FFmpeg method"
     },
     {
       "name": "Interactive - Jump 1 (Image)",
@@ -486,7 +716,8 @@
       "expectedStdoutItems": [
         "Image Generation",
         "Select Model"
-      ]
+      ],
+      "description": "Test interactive menu jump to Image Generation"
     },
     {
       "name": "Interactive - Jump 1/1 (SDXL)",
@@ -495,7 +726,8 @@
       "expectedStdoutItems": [
         "Image Generation",
         "Model: sdxl"
-      ]
+      ],
+      "description": "Test interactive menu jump with model preset"
     },
     {
       "name": "Interactive - Jump 2 (Video)",
@@ -503,7 +735,8 @@
       "interactive": true,
       "expectedStdoutItems": [
         "Video Generation"
-      ]
+      ],
+      "description": "Test interactive menu jump to Video Generation"
     },
     {
       "name": "Interactive - Jump 3 (Audio)",
@@ -512,7 +745,8 @@
       "expectedStdoutItems": [
         "Audio Generation",
         "Select Model"
-      ]
+      ],
+      "description": "Test interactive menu jump to Audio Generation"
     },
     {
       "name": "Interactive - Jump 3/5 (Bark)",
@@ -521,23 +755,35 @@
       "expectedStdoutItems": [
         "Audio Generation",
         "Model: bark"
-      ]
+      ],
+      "description": "Test interactive menu jump with Bark preset"
     },
     {
-      "name": "Interactive - Jump 5 (Upscale)",
+      "name": "Interactive - Jump 4 (Description)",
+      "command": "--interactive 4",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Description"
+      ],
+      "description": "Test interactive menu jump to Caption"
+    },
+    {
+      "name": "Interactive - Jump 5 (Transform)",
       "command": "--interactive 5",
       "interactive": true,
       "expectedStdoutItems": [
-        "Upscale Media"
-      ]
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump to Transform Media"
     },
     {
-      "name": "Interactive - Jump 7 (Caption)",
+      "name": "Interactive - Jump 7 (Upscale)",
       "command": "--interactive 7",
       "interactive": true,
       "expectedStdoutItems": [
-        "Generate Caption"
-      ]
+        "Upscale Media"
+      ],
+      "description": "Test interactive menu jump to Upscale"
     },
     {
       "name": "Interactive - Jump 8 (Run Tests)",
@@ -546,7 +792,8 @@
       "expectedStdoutItems": [
         "Run Tests",
         "Select a test to run"
-      ]
+      ],
+      "description": "Test interactive menu jump to Run Tests"
     },
     {
       "name": "Interactive - Jump 9 (SysInfo)",
@@ -559,16 +806,8 @@
         "CPU:",
         "RAM:",
         "GPU:"
-      ]
-    },
-    {
-      "name": "Interactive - Jump sysinfo",
-      "command": "--interactive sysinfo",
-      "interactive": true,
-      "interactiveWait": 5.0,
-      "expectedStdoutItems": [
-        "System Information"
-      ]
+      ],
+      "description": "Test interactive menu jump to System Info"
     },
     {
       "name": "Interactive - Jump image/sdxl",
@@ -577,7 +816,18 @@
       "expectedStdoutItems": [
         "Image Generation",
         "Model: sdxl"
-      ]
+      ],
+      "description": "Test interactive menu jump by path (image/sdxl)"
+    },
+    {
+      "name": "Interactive - Jump sysinfo",
+      "command": "--interactive sysinfo",
+      "interactive": true,
+      "interactiveWait": 5.0,
+      "expectedStdoutItems": [
+        "System Information"
+      ],
+      "description": "Test interactive menu jump by name (sysinfo)"
     }
   ]
 }

@@ -31,6 +31,7 @@ import sys
 import signal
 import shutil
 import time
+import subprocess
 try:
     import psutil  # For resource checking
 except ImportError:
@@ -605,17 +606,36 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             else:
                 pipe.enable_vae_tiling()
         
+        # --- Performance Tracking & Estimate ---
+        tracker = PerformanceTracker()
+        est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_image(model_id, width, height, device)
+        if est_time > 0:
+            print(f"   ⏱️  Est. Time: {format_time(est_time)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+        
         print(f"🎨 Generating {width}x{height} image... (This may take a moment)")
+        
         # Suppress RuntimeWarning from diffusers image_processor during NSFW filtering
-        # (It throws "invalid value encountered in cast" when processing black images)
+        start_time = time.time()
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in cast")
-            output = pipe(
-                prompt, 
-                height=height, 
-                width=width,
-                **extra_kwargs
-            )
+            
+            # Start Resource Monitoring
+            with ResourceMonitor() as monitor:
+                output = pipe(
+                    prompt, 
+                    height=height, 
+                    width=width,
+                    **extra_kwargs
+                )
+            
+            # Collect metrics
+            duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            
+            # Record Performance
+            tracker.record_image(model_id, width, height, device, duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+            print(f"   ✓ Generated in {format_time(duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            
         image = output.images[0]
         
         # Check for NSFW content interception
@@ -1171,7 +1191,22 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             # MusicGen: ~50 tokens per sec estimate, strict max_new_tokens
             max_tokens = int(duration * 50) 
             print(f"🎵 Synthesizing audio... (MusicGen)")
-            music = synthesizer(prompt, forward_params={"max_new_tokens": max_tokens})
+            
+            # --- Performance Tracking & Estimate ---
+            tracker = PerformanceTracker()
+            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
+            if est_duration > 0:
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+
+            start_time = time.time()
+            with ResourceMonitor() as monitor:
+                music = synthesizer(prompt, forward_params={"max_new_tokens": max_tokens})
+            
+            # Collect & Record
+            gen_duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
             
             rate = music["sampling_rate"]
             audio_data = music["audio"]
@@ -1195,7 +1230,22 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             pipe.to(device)
             
             print(f"🎵 Synthesizing audio... (AudioLDM2)")
-            audio = pipe(prompt, audio_length_in_s=duration).audios[0]
+            
+            # --- Performance Tracking & Estimate ---
+            tracker = PerformanceTracker()
+            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
+            if est_duration > 0:
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+
+            start_time = time.time()
+            with ResourceMonitor() as monitor:
+                audio = pipe(prompt, audio_length_in_s=duration).audios[0]
+            
+            # Collect & Record
+            gen_duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
             rate = 16000 # AudioLDM default usually
             
             scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio.T)
@@ -1214,8 +1264,23 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
             
             print(f"🎵 Synthesizing audio... (Stable Audio)")
-            # Stable Audio takes 'audio_end_in_s'
-            audio = pipe(prompt, audio_start_in_s=0.0, audio_end_in_s=duration, num_inference_steps=50).audios[0]
+            
+            # --- Performance Tracking & Estimate ---
+            tracker = PerformanceTracker()
+            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
+            if est_duration > 0:
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+
+            start_time = time.time()
+            with ResourceMonitor() as monitor:
+                # Stable Audio takes 'audio_end_in_s'
+                audio = pipe(prompt, audio_start_in_s=0.0, audio_end_in_s=duration, num_inference_steps=50).audios[0]
+
+            # Collect & Record
+            gen_duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
             rate = 44100 # Standard for Stable Audio Open
             
             # Ensure numpy
@@ -1254,15 +1319,29 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             # Bark roughly does ~14s max.
             is_long = len(prompt) > 150 or duration > 15.0
             
-            if is_long:
-                print(f"   📜 Long text detected. Using chunked generation.")
-                audio_array = generate_long_bark(prompt, processor, model, device, voice_preset)
-            else:
-                # Use user-specified voice preset
-                inputs = processor(prompt, voice_preset=voice_preset).to(device)
-                # Bark output shape: [1, length]
-                audio_array = model.generate(**inputs) 
-                audio_array = audio_array.cpu().numpy().squeeze()
+            # --- Performance Tracking & Estimate ---
+            tracker = PerformanceTracker()
+            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
+            if est_duration > 0:
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+            
+            start_time = time.time()
+            with ResourceMonitor() as monitor:
+                if is_long:
+                    print(f"   📜 Long text detected. Using chunked generation.")
+                    audio_array = generate_long_bark(prompt, processor, model, device, voice_preset)
+                else:
+                    # Use user-specified voice preset
+                    inputs = processor(prompt, voice_preset=voice_preset).to(device)
+                    # Bark output shape: [1, length]
+                    audio_array = model.generate(**inputs) 
+                    audio_array = audio_array.cpu().numpy().squeeze()
+            
+            # Collect & Record
+            gen_duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
             
             rate = model.generation_config.sample_rate # 24000
             
@@ -1327,7 +1406,7 @@ def get_video_encoding_params(output_path):
         return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
 
 
-def generate_video(prompt, output_path, duration, width, height, model_name="default", image_input=None, audio_prompt=None):
+def generate_video(prompt, output_path, duration, width, height, model_name="default", image_input=None, audio_prompt=None, audio_model="default"):
     """Generate video (Text-to-Video or Image-to-Video) with optional Audio."""
     
     # Resolve Model ID
@@ -1363,6 +1442,14 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     video_out = output_path
     if audio_prompt:
         video_out = output_path + ".temp_video.mp4"
+        audio_out = output_path + ".temp_audio.wav"
+        # Clean up any leftover temp files from previous runs
+        for temp_file in [video_out, audio_out, audio_out + ".tmp.wav"]:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except OSError:
+                    pass  # Ignore if can't delete
     
     try:
         import torch
@@ -1431,18 +1518,33 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 pipe.enable_attention_slicing()
         
         # Generate Frames
+        # --- Performance Tracking & Estimate ---
+        tracker = PerformanceTracker()
+        est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("video", model_id, device, duration, width, height)
+        if est_duration > 0:
+            print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+        
         print(f"🎬 Rendering video frames... (This will be slow)")
-        if is_i2v:
-            init_image = load_image(image_input)
-            init_image = init_image.resize((width, height))
-            
-            if "stable-video-diffusion" in model_id.lower():
-                video_frames = pipe(init_image).frames[0]
+        
+        start_time = time.time()
+        with ResourceMonitor() as monitor:
+            if is_i2v:
+                init_image = load_image(image_input)
+                init_image = init_image.resize((width, height))
+                
+                if "stable-video-diffusion" in model_id.lower():
+                    video_frames = pipe(init_image).frames[0]
+                else:
+                    video_frames = pipe(prompt=prompt, image=init_image, num_frames=49).frames[0]
             else:
-                video_frames = pipe(prompt=prompt, image=init_image, num_frames=49).frames[0]
-        else:
-            num_frames = int(duration * 16)
-            video_frames = pipe(prompt, num_inference_steps=25, num_frames=num_frames).frames[0]
+                num_frames = int(duration * 16)
+                video_frames = pipe(prompt, num_inference_steps=25, num_frames=num_frames).frames[0]
+        
+        # Collect & Record
+        gen_duration = time.time() - start_time
+        avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+        tracker.record_linear("video", model_id, device, duration, gen_duration, width, height, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+        print(f"   ✓ Rendered in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
         
         # Save Video (raw export - may need re-encoding for compatibility)
         temp_raw_video = video_out + ".raw.mp4"
@@ -1471,7 +1573,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             # Use default music model or let user specify? Use default for now or expose args if needed.
             # We reuse generate_audio function!
             # Note: We need to pass sampling rate, let's default to standard 32k or use global default
-            audio_success = generate_audio(audio_prompt, audio_out, duration, 32000, model_name="default")
+            audio_success = generate_audio(audio_prompt, audio_out, duration, 32000, model_name=audio_model)
             
             if audio_success:
                 print("🔗 Muxing Video and Audio...")
@@ -1493,11 +1595,20 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 try:
                     subprocess.run(cmd, check=True)
                     print(f"✅ Final merged video saved to {output_path}")
+                    # Cleanup temp files after successful mux
+                    for temp_file in [video_out, audio_out]:
+                        if os.path.exists(temp_file):
+                            try: os.remove(temp_file)
+                            except: pass
                 except subprocess.CalledProcessError:
                     print(f"❌ Muxing failed. Check FFmpeg.")
             else:
                 print("❌ Audio generation failed. Returning silent video (renaming temp).")
                 os.rename(video_out, output_path)
+                # Cleanup audio temp if it exists
+                if os.path.exists(audio_out):
+                    try: os.remove(audio_out)
+                    except: pass
                 
         return True
         
@@ -1538,7 +1649,7 @@ class PerformanceTracker:
         with open(self.filepath, 'w') as f:
             json.dump(self.data, f, indent=2)
 
-    def record_image(self, model, width, height, device, time_taken, cpu=0, ram=0):
+    def record_image(self, model, width, height, device, time_taken, cpu=0, ram=0, vram=0, gpu=0):
         dev_str = device.type if hasattr(device, 'type') else str(device)
         key = f"{model}|{dev_str}|{width}x{height}"
         if "image" not in self.data: self.data["image"] = {}
@@ -1549,17 +1660,27 @@ class PerformanceTracker:
         
         if "average_time" in entry:
             new_avg = (entry["average_time"] + time_taken) / 2.0
-            entry["average_time"] = new_avg
-            # Rolling average for resources too (optional, but good for stability)
-            entry["average_cpu"] = (entry.get("average_cpu", cpu) + cpu) / 2.0
-            entry["average_ram"] = (entry.get("average_ram", ram) + ram) / 2.0
+            # Reconstruct to ensure order: Time -> RAM -> VRAM -> CPU -> GPU
+            entry = {
+                "average_time": new_avg,
+                "average_ram": (entry.get("average_ram", ram) + ram) / 2.0,
+                "average_vram": (entry.get("average_vram", vram) + vram) / 2.0,
+                "average_cpu": (entry.get("average_cpu", cpu) + cpu) / 2.0,
+                "average_gpu": (entry.get("average_gpu", gpu) + gpu) / 2.0
+            }
         else:
-            entry = {"average_time": time_taken, "average_cpu": cpu, "average_ram": ram}
+            entry = {
+                "average_time": time_taken,
+                "average_ram": ram,
+                "average_vram": vram,
+                "average_cpu": cpu,
+                "average_gpu": gpu
+            }
             
         self.data["image"][key] = entry
         self._save()
 
-    def record_linear(self, category, model, device, duration, time_taken, width=None, height=None, cpu=0, ram=0):
+    def record_linear(self, category, model, device, duration, time_taken, width=None, height=None, cpu=0, ram=0, vram=0, gpu=0):
         """Record Audio/Video generation using rolling average rate (seconds to gen / seconds of content)."""
         dev_str = device.type if hasattr(device, 'type') else str(device)
         # For video, resolution also matters, so we include it in key
@@ -1575,11 +1696,22 @@ class PerformanceTracker:
         
         if "average_rate" in entry:
             new_rate = (entry["average_rate"] + current_rate) / 2.0
-            entry["average_rate"] = new_rate
-            entry["average_cpu"] = (entry.get("average_cpu", cpu) + cpu) / 2.0
-            entry["average_ram"] = (entry.get("average_ram", ram) + ram) / 2.0
+            # Reconstruct to ensure order: Rate -> RAM -> VRAM -> CPU -> GPU
+            entry = {
+                "average_rate": new_rate,
+                "average_ram": (entry.get("average_ram", ram) + ram) / 2.0,
+                "average_vram": (entry.get("average_vram", vram) + vram) / 2.0,
+                "average_cpu": (entry.get("average_cpu", cpu) + cpu) / 2.0,
+                "average_gpu": (entry.get("average_gpu", gpu) + gpu) / 2.0
+            }
         else:
-            entry = {"average_rate": current_rate, "average_cpu": cpu, "average_ram": ram}
+            entry = {
+                "average_rate": current_rate, 
+                "average_ram": ram, 
+                "average_vram": vram, 
+                "average_cpu": cpu, 
+                "average_gpu": gpu
+            }
             
         self.data[category][key] = entry
         self._save()
@@ -1589,8 +1721,8 @@ class PerformanceTracker:
         key = f"{model}|{dev_str}|{width}x{height}"
         stats = self.data.get("image", {}).get(key)
         if stats and "average_time" in stats:
-            return stats["average_time"], stats.get("average_cpu", 0), stats.get("average_ram", 0)
-        return None, 0, 0
+            return stats["average_time"], stats.get("average_cpu", 0), stats.get("average_ram", 0), stats.get("average_vram", 0), stats.get("average_gpu", 0)
+        return 0, 0, 0, 0, 0
 
     def estimate_linear(self, category, model, device, duration, width=None, height=None):
         dev_str = device.type if hasattr(device, 'type') else str(device)
@@ -1601,17 +1733,19 @@ class PerformanceTracker:
             
         stats = self.data.get(category, {}).get(key)
         if stats and "average_rate" in stats:
-            return stats["average_rate"] * duration, stats.get("average_cpu", 0), stats.get("average_ram", 0)
-        return None, 0, 0
+            return stats["average_rate"] * duration, stats.get("average_cpu", 0), stats.get("average_ram", 0), stats.get("average_vram", 0), stats.get("average_gpu", 0)
+        return 0, 0, 0, 0, 0
 
 class ResourceMonitor:
-    """Monitors CPU and RAM usage in a background thread."""
+    """Monitors CPU, RAM, and GPU VRAM/Load usage in a background thread."""
     def __init__(self, interval=0.5):
         self.interval = interval
         self.running = False
         self.thread = None
         self.cpu_readings = []
         self.ram_readings = []
+        self.vram_readings = []
+        self.gpu_readings = [] # GPU Load %
         
         try:
             import psutil
@@ -1619,25 +1753,60 @@ class ResourceMonitor:
         except ImportError:
             self.psutil = None
             print("⚠️  'psutil' not found. Resource monitoring disabled.")
+            
+        # Check for torch to monitor VRAM
+        try:
+            import torch
+            self.torch = torch
+            self.has_cuda = torch.cuda.is_available()
+            self.has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+        except ImportError:
+            self.torch = None
+            self.has_cuda = False
+            self.has_mps = False
 
     def _monitor(self):
         import time
+        
         while self.running:
             if self.psutil:
-                # CPU percent (blocking for interval? No, we set interval=None for non-blocking since we sleep manually)
-                # But psutil.cpu_percent with interval=None is instantaneous since last call.
-                # Better to use interval=0.1 inside the blocking call or manage it. 
-                # We will sleep manually.
                 cpu = self.psutil.cpu_percent(interval=None)
                 ram = self.psutil.virtual_memory().used / (1024**3) # GB
                 self.cpu_readings.append(cpu)
                 self.ram_readings.append(ram)
+                
+            # VRAM Monitoring
+            vram = 0
+            if self.torch:
+                if self.has_cuda:
+                    vram = self.torch.cuda.memory_allocated() / (1024**3) # GB
+                elif self.has_mps:
+                     if hasattr(self.torch, 'mps') and hasattr(self.torch.mps, 'current_allocated_memory'):
+                         vram = self.torch.mps.current_allocated_memory() / (1024**3)
+                     elif hasattr(self.torch.mps, 'driver_allocated_memory'):
+                         vram = self.torch.mps.driver_allocated_memory() / (1024**3)
+            self.vram_readings.append(vram)
+            
+            # GPU Load Monitoring (nvidia-smi)
+            gpu_load = 0
+            if self.has_cuda:
+                try:
+                    # Windows/Linux with NVIDIA drivers
+                    result = subprocess.run(
+                        ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+                        capture_output=True, text=True, check=False
+                    )
+                    if result.returncode == 0:
+                        gpu_load = float(result.stdout.strip())
+                except Exception:
+                    pass
+            self.gpu_readings.append(gpu_load)
+            
             time.sleep(self.interval)
 
     def __enter__(self):
         if self.psutil:
-            # Prime CPU counter
-            self.psutil.cpu_percent(interval=None)
+            self.psutil.cpu_percent(interval=None) # Prime CPU
             self.running = True
             import threading
             self.thread = threading.Thread(target=self._monitor, daemon=True)
@@ -1650,10 +1819,11 @@ class ResourceMonitor:
             self.thread.join(timeout=1.0)
             
     def get_averages(self):
-        if not self.cpu_readings: return 0, 0
-        avg_cpu = sum(self.cpu_readings) / len(self.cpu_readings)
-        avg_ram = sum(self.ram_readings) / len(self.ram_readings)
-        return avg_cpu, avg_ram
+        avg_cpu = sum(self.cpu_readings) / len(self.cpu_readings) if self.cpu_readings else 0
+        avg_ram = sum(self.ram_readings) / len(self.ram_readings) if self.ram_readings else 0
+        avg_vram = sum(self.vram_readings) / len(self.vram_readings) if self.vram_readings else 0
+        avg_gpu = sum(self.gpu_readings) / len(self.gpu_readings) if self.gpu_readings else 0
+        return avg_cpu, avg_ram, avg_vram, avg_gpu
 
 # --- Upscaling Logic ---
 
@@ -2850,13 +3020,13 @@ def run_interactive(jump_point=None):
         '3/3': ('audio', 'musicgen-large'),
         '3/4': ('audio', 'audioldm2'),
         '3/5': ('audio', 'bark'),
-        '4': ('transform', None),
-        '4/1': ('transform', 'edit'),
-        '4/2': ('transform', 'rembg'),
-        '4/3': ('transform', 'silhouette'),
-        '5': ('upscale', None),
+        '4': ('caption', None),
+        '5': ('transform', None),
+        '5/1': ('transform', 'edit'),
+        '5/2': ('transform', 'rembg'),
+        '5/3': ('transform', 'silhouette'),
         '6': ('convert', None),
-        '7': ('caption', None),
+        '7': ('upscale', None),
         '8': ('test', None),
         '9': ('sysinfo', None),
     }
@@ -3021,10 +3191,10 @@ def run_interactive(jump_point=None):
             ("🖼️   Generate Image", "image"),
             ("🎬  Generate Video", "video"),
             ("🎵  Generate Audio", "audio"),
+            ("📝  Generate Description", "caption"),
             ("✨  Transform/Edit Image", "transform"),
-            ("📈  Upscale Media", "upscale"),
             ("🔄  Convert Media", "convert"),
-            ("📝  Generate Caption", "caption"),
+            ("📈  Upscale Media", "upscale"),
             ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
             ("❌  Exit", None)
@@ -3168,16 +3338,40 @@ def run_interactive(jump_point=None):
             if not length:
                 return
 
+        # Input Image (Optional - for non-SVD models to enable Image-to-Video)
+        if model != 'svd':
+            print()
+            add_image = input("📂 Add input image for Image-to-Video? [y/N]: ").strip().lower()
+            if add_image in ['y', 'yes']:
+                input_image = prompt_file("Input Image")
+
+        # Audio Prompt (Optional - for Video-with-Audio, available for ALL models)
+        print()
+        audio_prompt = prompt_text("🎵 Audio prompt (for background music, Optional)", required=False)
+        audio_model = None
+        if audio_prompt:
+             print("\n📦 Select Audio Model for Background:\n")
+             audio_model_options = [
+                ("MusicGen Medium (Default)", "musicgen-medium"),
+                ("MusicGen Small (Fast)", "musicgen-small"),
+                ("AudioLDM2 (Sound Effects)", "audioldm2"),
+             ]
+             audio_model = prompt_choice("Audio Model", audio_model_options)
+
         # Output
         print()
         output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
         
         # Build Command
-        cmd = f"-v -s {length} --video-model {model}"
+        cmd = f"-v -l {length} --video-model {model}"
         if prompt:
             cmd += f" -p \"{prompt}\""
         if input_image:
             cmd += f" -ii \"{input_image}\""
+        if audio_prompt:
+            cmd += f" -ap \"{audio_prompt}\""
+            if audio_model:
+                cmd += f" -am {audio_model}"
         if output:
              cmd += f" -o \"{output}\""
              
@@ -3413,7 +3607,7 @@ def run_interactive(jump_point=None):
     def caption_menu(preset_model=None):
         """Generate caption submenu."""
         clear_screen()
-        show_header("Generate Caption")
+        show_header("Generate Description")
         
         # Input file
         print("📂 Select input image or video:\n")
@@ -3466,17 +3660,26 @@ def run_interactive(jump_point=None):
 
         # Build options
         options = []
+        max_desc_len = 40  # Truncate descriptions to this length
         for t in tests:
             name = t.get("name", "Unnamed Test")
-            options.append((name, name))
+            desc = t.get("description", "")
+            if desc:
+                if len(desc) > max_desc_len:
+                    desc = desc[:max_desc_len-3] + "..."
+                display = f"{name} ({desc})"
+            else:
+                display = name
+            options.append((display, name))
         
         # Add 'Run All' as first option? or prompt user?
         # User request was specifically for a menu list like browser files.
         # Let's stick to listing individual tests for now, maybe add "Run All" at top.
         
         # Prepend 'Run All' options
-        options.insert(0, ("📜  Run All Tests (Verbose)", "ALL_VERBOSE"))
-        options.insert(0, ("🚀  Run All Tests (Summary)", "ALL_QUIET"))
+        count = len(tests)
+        options.insert(0, (f"📜  Run All {count} Tests (Verbose)", "ALL_VERBOSE"))
+        options.insert(0, (f"🚀  Run All {count} Tests (Summary)", "ALL_QUIET"))
 
         while True:
             clear_screen()
@@ -3629,6 +3832,9 @@ def run_tests(verbose=False, test_filter=None):
         
         print(f"\n{'-'*50}")
         print(f"📋 Test {i+1}/{len(tests)}: {test_name}")
+        description = test.get("description", "")
+        if description:
+            print(f"   {description}")
         print(f"{'-'*50}")
         
         test_passed = True
@@ -3824,25 +4030,9 @@ def main():
         formatter_class=CleanHelpFormatter,
         epilog="""
 Examples:
-  -- Media Conversion --
-  python ai-media.py -ci photo.gif -cit png
-  python ai-media.py -cv clip.mov -cvt mp4
-  python ai-media.py -ca song.wav -cat mp3
-  
-  -- Transforming & Editing --
-  python ai-media.py -ti "photo.jpg" -p "Make it look like an anime drawing"
-  python ai-media.py -ti "photo.jpg" -p "Make it anime" -o "edits/anime_version.png"
-  python ai-media.py -ti "photo.jpg" --remove-background
-  python ai-media.py -ti "photo.jpg" --remove-background -o "no_bg/photo_clean.png"
-
   -- Image Generation --
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
-  
-  -- AI Upscaling --
-  python ai-media.py -ui input.jpg -uf 2x
-  python ai-media.py -ui input.jpg -uf 4x
-  python ai-media.py -ui input.jpg -uf 4x -su (Simple Upscale)
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -3862,6 +4052,22 @@ Examples:
   python ai-media.py -gd -ii video.mp4
   python ai-media.py -gd -ii image.jpg -cm blip (Use simpler model)
 
+  -- Creative Image Transformation --
+  python ai-media.py -ti "photo.jpg" -p "Make it look like an anime drawing"
+  python ai-media.py -ti "photo.jpg" -p "Make it anime" -o "edits/anime_version.png"
+  python ai-media.py -ti "photo.jpg" --remove-background
+  python ai-media.py -ti "photo.jpg" --remove-background -o "no_bg/photo_clean.png"
+
+  -- Media Conversion --
+  python ai-media.py -ci photo.gif -cit png
+  python ai-media.py -cv clip.mov -cvt mp4
+  python ai-media.py -ca song.wav -cat mp3
+  
+  -- AI Upscaling --
+  python ai-media.py -ui input.jpg -uf 2x
+  python ai-media.py -ui input.jpg -uf 4x
+  python ai-media.py -ui input.jpg -uf 4x -su (Simple Upscale)
+
 
 Supported Models:
   Images:
@@ -3870,6 +4076,12 @@ Supported Models:
     - flux              : ~24GB | black-forest-labs/FLUX.1-schnell (🔒 Gated - Free Login Required)
     - flux-dev          : ~24GB | black-forest-labs/FLUX.1-dev (🔒 Gated - Free Login Required)
   
+  Video:
+    - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
+    - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
+    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (Open)
+    - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
+    
   Audio:
     - musicgen-small           : ~2GB  | Fast, good for music sketches
     - musicgen-medium (default): ~6GB  | Better composition & fidelity
@@ -3878,29 +4090,77 @@ Supported Models:
     - stable-audio             : ~10GB | 🔒 Gated. Best for Sound Effects (SFX), Drums, Ambient.
     - bark                     : ~4GB  | Speech (TTS) & creative audio. Transformer-based
     
-  Video:
-    - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
-    - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
-    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (Open)
-    - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
-    
-  Upscaling:
-    - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
-    - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
-    
-  Captioning:
+  Description Generation:
     - florence (default) : ~1.5GB | microsoft/Florence-2-large (SOTA Details)
     - blip               : ~1GB   | Salesforce/blip-image-captioning-large (Simple)
 
-  Creative Transforming & Editing:
+  Creative Image Transformation:
     - instruct-pix2pix     : ~4GB  | timbrooks/instruct-pix2pix (Edit via prompts)
     - instruct-pix2pix-sdxl: ~8GB  | diffusers/sdxl-instructpix2pix-768 (High Quality)
     - remove-bg            : ~1GB  | briaai/RMBG-1.4 (State of the art BG Removal)
+
+  Upscaling:
+    - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
+    - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
         """
     )
     
+    # Generation Mode (First - what do you want to create?)
+    mode_group = parser.add_argument_group("Generation Mode")
+    mode_group.add_argument("-i", "--generate-image", action="store_true", help="Generate Image")
+    mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
+    mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
+    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video.")
+    mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
+    
+    # Common Parameters (applies to most modes)
+    common_group = parser.add_argument_group("Common Parameters")
+    common_group.add_argument("-p", "--prompt", required=False, help="Text prompt description (Required for generation modes)")
+    common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
+    common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
+    common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3).")
+    common_group.add_argument("-s", "--size", help="Resolution for Image/Video: '720p', '1080p', '4k', '8k', 'HD', '1280x720'. Default: 720p")
+    common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
+    
+
+    
+    # Specific options
+    image_group = parser.add_argument_group("Image Options")
+    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(IMAGE_MODELS.keys())}")
+    image_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
+                              help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
+    image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
+    
+    video_group = parser.add_argument_group("Video Options")
+    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())}")
+    video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
+    video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
+    video_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")
+    
+    audio_group = parser.add_argument_group("Audio Options")
+    audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
+    audio_group.add_argument("--voice-preset", default="v2/en_speaker_6", help="Bark Voice Preset (e.g. 'v2/en_speaker_6', 'v2/fr_speaker_1'). Default: v2/en_speaker_6")
+    audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k, 48k). Default: 32000.")
+    audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
+    audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
+    
+    # Description Generation Options
+    caption_group = parser.add_argument_group("Description Generation Options")
+    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip"], help="Model for description generation: 'florence' (default, SOTA) or 'blip'.")
+    
+    
+    # Safety Checker
+    # common_group.add_argument("--unsafe", action="store_true",
+    #                           help="Disable NSFW safety checker (reduces false positives but allows adult content).")
+
+    transform_group = parser.add_argument_group("Creative Image Transformation Options")
+    transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
+    transform_group.add_argument("--remove-background", "-rb", action="store_true", help="Remove background (Transparent PNG).")
+    transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
+    transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
+
     # Media Conversion (Standalone - No AI)
-    convert_group = parser.add_argument_group("Media Conversion")
+    convert_group = parser.add_argument_group("Media Conversion Options")
     convert_group.add_argument("-ci", "--convert-image", metavar="FILE", help="Convert image format (e.g., gif→png)")
     convert_group.add_argument("-cit", "--convert-image-to", metavar="FMT", help="Output format (png, .webp, out.jpg)")
     convert_group.add_argument("-cv", "--convert-video", metavar="FILE", help="Convert video (mov→mp4)")
@@ -3910,67 +4170,9 @@ Supported Models:
     convert_group.add_argument("--convert-image-engine", choices=["pil", "ffmpeg"], default="pil", help="pil (default) or ffmpeg")
     
     # AI Upscaling (Standalone Mode)
-    upscale_mode_group = parser.add_argument_group("AI Upscaling")
+    upscale_mode_group = parser.add_argument_group("AI Upscaling Options")
     upscale_mode_group.add_argument("-ui", "--upscale-image", metavar="FILE", help="Upscale an existing image")
     upscale_mode_group.add_argument("-uv", "--upscale-video", metavar="FILE", help="Upscale an existing video")
-    
-    # Modes
-    mode_group = parser.add_argument_group("Generation Mode")
-    mode_group.add_argument("-i", "--generate-image", action="store_true", help="Generate Image")
-    mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
-    mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
-    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video.")
-    mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
-    
-    # Common
-    common_group = parser.add_argument_group("Common Parameters")
-    common_group.add_argument("-p", "--prompt", required=False, help="Text prompt description (Required for generation modes)")
-    common_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")
-    common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
-    common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
-    common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3).")
-    
-    # Shared -s
-    common_group.add_argument("-s", "--size",
-                              help="Resolution for Image/Video: '720p', '1080p', '4k', '8k', 'HD', '1280x720'. Default: 720p")
-    
-    # Orientation (swaps w/h for portrait mode)
-    common_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
-                              help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
-    
-    # Specific options
-    image_group = parser.add_argument_group("Image Options")
-    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(IMAGE_MODELS.keys())}")
-    image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
-    
-    video_group = parser.add_argument_group("Video Options")
-    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())}")
-    video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
-    video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
-    
-    audio_group = parser.add_argument_group("Audio Options")
-    audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
-    audio_group.add_argument("--voice-preset", default="v2/en_speaker_6", help="Bark Voice Preset (e.g. 'v2/en_speaker_6', 'v2/fr_speaker_1'). Default: v2/en_speaker_6")
-    audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k, 48k). Default: 32000.")
-    audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
-    audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
-    
-    # Captioning Options
-    caption_group = parser.add_argument_group("Captioning Options")
-    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip"], help="Model for description generation: 'florence' (default, SOTA) or 'blip'.")
-    
-    # Performance Tracking
-    common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
-    
-    # Safety Checker
-    # common_group.add_argument("--unsafe", action="store_true",
-    #                           help="Disable NSFW safety checker (reduces false positives but allows adult content).")
-
-    transform_group = parser.add_argument_group("Transformation Options (-ti)")
-    transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
-    transform_group.add_argument("--remove-background", "-rb", action="store_true", help="Remove background (Transparent PNG).")
-    transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
-    transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
     # transform_group.add_argument("--vignette", action="store_true", help="Add a vignette effect.")
     # transform_group.add_argument("--add-noise", type=float, help="Add noise strength (0.0-1.0).")
 
@@ -4288,9 +4490,9 @@ Supported Models:
             
             # Estimate
             if tracker:
-                est_time, est_cpu, est_ram = tracker.estimate_image(model_key, w, h, device)
+                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_image(model_key, w, h, device)
                 if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
                 else:
                     print(f"⏱️  Estimated Resources: (Calibrating... first run for {w}x{h})")
                 print("") # Spacer
@@ -4312,10 +4514,10 @@ Supported Models:
             
             if success and tracker:
                 elapsed = time.time() - start_time
-                avg_cpu, avg_ram = mon_ctx.get_averages()
+                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
                 print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-                tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram)
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
         
         elif args.generate_video:
             # Resolve model ID for consistent tracking
@@ -4359,9 +4561,9 @@ Supported Models:
             check_resources_and_warn(model_key, width=w, height=h, duration=duration_sec, force=args.force)
                 
             if tracker:
-                est_time, est_cpu, est_ram = tracker.estimate_linear("video", model_key, device, duration_sec, w, h)
+                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("video", model_key, device, duration_sec, w, h)
                 if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
                 else:
                     print(f"⏱️  Estimated Resources: (Calibrating... first run)")
                 print("") # Spacer
@@ -4384,16 +4586,17 @@ Supported Models:
                 h, 
                 model_name=args.video_model,
                 image_input=args.input_image,
-                audio_prompt=args.audio_prompt
+                audio_prompt=args.audio_prompt,
+                audio_model=args.audio_model
             )
             if mon_ctx: mon_ctx.__exit__(None, None, None)
 
             if success and tracker:
                 elapsed = time.time() - start_time
-                avg_cpu, avg_ram = mon_ctx.get_averages()
+                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
                 print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-                tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram)
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
         
         elif args.generate_audio:
             # Resolve model ID for consistent tracking
@@ -4405,9 +4608,9 @@ Supported Models:
             check_resources_and_warn(model_key, duration=duration_sec, force=args.force)
             
             if tracker:
-                est_time, est_cpu, est_ram = tracker.estimate_linear("audio", model_key, device, duration_sec)
+                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_key, device, duration_sec)
                 if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | CPU: {est_cpu:.1f}%")
+                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
                     print("") # Spacer
                 else:
                     print(f"⏱️  Estimated Resources: (Calibrating... first run)")
@@ -4426,10 +4629,10 @@ Supported Models:
             
             if success and tracker:
                 elapsed = time.time() - start_time
-                avg_cpu, avg_ram = mon_ctx.get_averages()
+                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
                 print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | CPU: {avg_cpu:.1f}%")
-                tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram)
+                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
 
         # X. Transform Image (-ti) - Chained or Standalone
         if args.transform_image:
