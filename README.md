@@ -657,12 +657,13 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `5` | **Other** | `upscale` | Upscale Menu |
 | `6` | | `convert` | Convert Menu |
 | `7` | | `caption` | Caption Menu |
-| `8` | | `sysinfo` | System Information |
+| `8` | | `test` | Run Tests |
+| `9` | | `sysinfo` | System Information |
 
 ```bash
 python ai-media.py --interactive "image/sdxl"
 python ai-media.py --interactive "audio/bark"
-python ai-media.py --interactive 8
+python ai-media.py --interactive 9
 python ai-media.py --interactive "4/2"
 python ai-media.py --interactive 3/5
 ```
@@ -867,13 +868,28 @@ This project uses the following open-source libraries:
 
 This project includes an automated test suite for development and verification. It's primarily for internal use, but if you want to see everything in action, you're welcome to run it.
 
+### Running Tests
 ```bash
-# Run tests (quiet mode)
+# Run all tests (Quiet Mode)
 python ai-media.py --test
 
-# Run tests with full output
+# Run all tests (Verbose Mode - shows output)
 python ai-media.py --test-verbose
 ```
+
+### Single Test Execution
+You can run a specific test by providing its name (exact match):
+
+```bash
+# Run specific test
+python ai-media.py --test "Image - SDXL (Default)"
+
+# Run specific test with verbose output
+python ai-media.py --test-verbose "Image - Auto Filename"
+```
+
+> [!NOTE]
+> The test name must match exactly what is defined in `testing.json`. If the name is not found, the script will list all available tests.
 
 | File/Folder | Description |
 | :--- | :--- |

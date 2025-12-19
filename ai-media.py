@@ -1415,9 +1415,12 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         
         # Scheduler Optimization
         if hasattr(pipe, "scheduler"):
-            try:
-                pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-            except: pass 
+            # SVD works best with its default EulerDiscreteScheduler. DPMSolver is problematic.
+            is_svd = "stable-video-diffusion" in model_id.lower()
+            if not is_svd:
+                try:
+                    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+                except: pass 
         
         # Device/Memory Optimization
         if device.type == "cpu":
@@ -1434,7 +1437,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             init_image = init_image.resize((width, height))
             
             if "stable-video-diffusion" in model_id.lower():
-                video_frames = pipe(init_image, decode_chunk_size=8).frames[0]
+                video_frames = pipe(init_image).frames[0]
             else:
                 video_frames = pipe(prompt=prompt, image=init_image, num_frames=49).frames[0]
         else:
@@ -2556,9 +2559,9 @@ def get_key():
         if ch == '\x03': raise KeyboardInterrupt  # CTRL+C
         return ch
 
-def prompt_menu(prompt, options, allow_back=True, default_index=0):
+def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15):
     """
-    Show interactive menu with arrow key navigation.
+    Show interactive menu with arrow key navigation and pagination.
     Returns: value of selected option or None (if Back/Exit)
     """
     # ... (header omitted, unchanged)
@@ -2571,6 +2574,7 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0):
         return None
 
     current_idx = default_index if 0 <= default_index < len(items) else 0
+    start_idx = 0
 
     # Hide cursor
     print("\033[?25l", end="")
@@ -2585,35 +2589,65 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0):
     RESET = "\033[0m"
     DIM = "\033[90m"
 
-    # Reserve space for menu
-    for _ in items:
+    # Reserve space for menu (Max visible lines)
+    # We reserve space for: page_size + 2 (indicators) + 1 (hint footer)
+    max_view_lines = min(len(items), page_size) + 3
+    for _ in range(max_view_lines):
         print()
     
     # Move cursor back up to start of menu
-    print(UP * len(items), end="")
+    print(UP * max_view_lines, end="")
 
     try:
         while True:
-            # Render Menu
-            for i, (label, val) in enumerate(items):
-                # Alignment logic
-                is_selected = (i == current_idx)
+            # Pagination Logic
+            if current_idx < start_idx:
+                start_idx = current_idx
+            elif current_idx >= start_idx + page_size:
+                start_idx = current_idx - page_size + 1
+            
+            end_idx = min(len(items), start_idx + page_size)
+            visible_items = items[start_idx:end_idx]
+            
+            lines_printed = 0
+            
+            # Render Up Indicator
+            if start_idx > 0:
+                print(f"{DIM}   ⬆️  ... ({start_idx} more above){RESET}{CLEAR_LINE}")
+                lines_printed += 1
+            
+            # Render Menu Items
+            for i, (label, val) in enumerate(visible_items):
+                abs_index = start_idx + i
+                is_selected = (abs_index == current_idx)
                 prefix = " > " if is_selected else "   "
-                number = f"{i+1}." if i < len(options) else "0."
+                number = f"{abs_index+1}." if abs_index < len(options) else "0."
                 
-                # Ensure label spacing is consistent
-                display_label = label
-                
-                # Formatting
                 if is_selected:
-                    line = f"{CYAN}{prefix}{number:<4}  {display_label}{RESET}"
+                    line = f"{CYAN}{prefix}{number:<4}  {label}{RESET}"
                 else:
-                    line = f"{prefix}{number:<4}  {display_label}"
+                    line = f"{prefix}{number:<4}  {label}"
                 
                 print(f"{line}{CLEAR_LINE}")
+                lines_printed += 1
             
-            # Move cursor back up to start for next redraw
-            print(UP * len(items), end="", flush=True)
+            # Render Down Indicator
+            if end_idx < len(items):
+                remaining = len(items) - end_idx
+                print(f"{DIM}   ⬇️  ... ({remaining} more below){RESET}{CLEAR_LINE}")
+                lines_printed += 1
+                
+            # Clear remaining reserved lines (leave 1 for hint)
+            extra_lines = (max_view_lines - 1) - lines_printed
+            for _ in range(extra_lines):
+                print(f"{CLEAR_LINE}")
+            
+            # Render Hint Footer
+            hint_back = ", '0' for Back" if allow_back else ""
+            print(f"{DIM}(Tip: 'Home'/'End' for top/bottom{hint_back}){RESET}{CLEAR_LINE}")
+            
+            # Move cursor back up
+            print(UP * max_view_lines, end="", flush=True)
 
             # Handle Input
             key = get_key()
@@ -2623,9 +2657,9 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0):
             elif key == 'DOWN':
                 current_idx = (current_idx + 1) % len(items)
             elif key == 'PAGE_UP' or key == '[':
-                current_idx = (current_idx - 3) % len(items)
+                current_idx = max(0, current_idx - page_size)
             elif key == 'PAGE_DOWN' or key == ']':
-                current_idx = (current_idx + 3) % len(items)
+                current_idx = min(len(items) - 1, current_idx + page_size)
             elif key == 'HOME':
                 current_idx = 0
             elif key == 'END':
@@ -2634,25 +2668,23 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0):
                 # Confirm selection
                 break
             elif key in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
-                # Direct numeric jump (0-9)
                 num = int(key)
                 if 1 <= num <= len(options):
                     current_idx = num - 1
                     continue
             elif key == '0' and allow_back:
-                 current_idx = len(items) - 1 # Jump to last item (Back)
+                 current_idx = len(items) - 1 
                  
     except KeyboardInterrupt:
         # Clean exit on CTRL+C
-        print(RESET + "\n" * len(items)) # Move past menu
+        print(RESET + "\n" * max_view_lines) # Move past menu
         print("\033[?25h", end="") # Show cursor
         return None
     finally:
         # Restore cursor
-        print(RESET + "\n" * len(items)) # Move past menu
+        print(RESET + "\n" * max_view_lines) # Move past menu
         print("\033[?25h", end="") # Show cursor
 
-    # Re-print selection statically for history
     selected_label, selected_val = items[current_idx]
     return selected_val
 
@@ -2799,6 +2831,7 @@ def run_interactive(jump_point=None):
         'upscale': ('upscale', None),
         'convert': ('convert', None),
         'caption': ('caption', None),
+        'test': ('test', None),
         'sysinfo': ('sysinfo', None),
         # By number (matching menu order)
         '1': ('image', None),
@@ -2824,7 +2857,8 @@ def run_interactive(jump_point=None):
         '5': ('upscale', None),
         '6': ('convert', None),
         '7': ('caption', None),
-        '8': ('sysinfo', None),
+        '8': ('test', None),
+        '9': ('sysinfo', None),
     }
     
     # Parse jump point
@@ -2990,6 +3024,7 @@ def run_interactive(jump_point=None):
             ("📈  Upscale Media", "upscale"),
             ("🔄  Convert Media", "convert"),
             ("📝  Generate Caption", "caption"),
+            ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
             ("❌  Exit", None)
         ]
@@ -3403,7 +3438,65 @@ def run_interactive(jump_point=None):
         cmd = f"-gd \"{input_file}\" -cm {model}"
         
         run_self_command(cmd)
+        run_self_command(cmd)
         input("\nPress Enter to continue...")
+    
+    def test_menu():
+        """Test selection submenu."""
+        clear_screen()
+        show_header("Run Tests")
+        
+        # Load tests
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        test_file = os.path.join(script_dir, "testing.json")
+        try:
+            with open(test_file, "r") as f:
+                data = json.load(f)
+            tests = data.get("tests", [])
+        except Exception as e:
+            print(f"❌ Error loading tests: {e}")
+            input("Press Enter...")
+            return
+
+        if not tests:
+            print("❌ No tests found.")
+            input("Press Enter...")
+            return
+
+        # Build options
+        options = []
+        for t in tests:
+            name = t.get("name", "Unnamed Test")
+            options.append((name, name))
+        
+        # Add 'Run All' as first option? or prompt user?
+        # User request was specifically for a menu list like browser files.
+        # Let's stick to listing individual tests for now, maybe add "Run All" at top.
+        
+        # Prepend 'Run All' options
+        options.insert(0, ("📜  Run All Tests (Verbose)", "ALL_VERBOSE"))
+        options.insert(0, ("🚀  Run All Tests (Summary)", "ALL_QUIET"))
+
+        while True:
+            clear_screen()
+            show_header("Run Tests")
+            choice = prompt_menu("Select a test to run:\n\nℹ️  Individual tests are always run in VERBOSE mode\n", options)
+            
+            if choice is None: return
+            
+            if choice == "ALL_QUIET":
+                # Run all tests (quiet/summary mode)
+                run_self_command("--test")
+            elif choice == "ALL_VERBOSE":
+                # Run all tests (verbose mode)
+                run_self_command("--test-verbose")
+            else:
+                # Run specific test
+                # Always use verbose for single test as requested
+                run_self_command(f"--test-verbose \"{choice}\"")
+                
+            input("\nPress Enter to continue...")
+
     
     # Main loop
     first_run = True
@@ -3437,13 +3530,15 @@ def run_interactive(jump_point=None):
         elif action == "caption":
             caption_menu(initial_model if first_run or initial_action == 'caption' else None)
             initial_model = None
+        elif action == "test":
+            test_menu()
         elif action == "sysinfo":
             system_info_menu()
 
 # --- Test Runner ---
 
 
-def run_tests(verbose=False):
+def run_tests(verbose=False, test_filter=None):
     """Run test suite from testing.json."""
     import shlex
     import subprocess
@@ -3466,6 +3561,27 @@ def run_tests(verbose=False):
         print("❌ No tests found in testing.json")
         sys.exit(1)
     
+    # Filter tests if requested
+    if test_filter:
+        print(f"🔎 Single Test Mode: Searching for '{test_filter}'...")
+        original_count = len(tests)
+        tests = [t for t in tests if t.get("name") == test_filter]
+        
+        if not tests:
+            print(f"❌ Error: No test found with name: '{test_filter}'")
+            print("   Available tests are listed in the ID list, or:")
+            print("\n👉 Redirecting to Interactive Test Menu in ", end="", flush=True)
+            for i in range(3, 0, -1):
+                print(f"{i}...", end="", flush=True)
+                time.sleep(1)
+            print()
+            # Call interactive mode jumping to 'test' menu
+            # We need to access run_interactive. It is defined in the same global scope.
+            run_interactive(jump_point="test")
+            return
+        
+        print(f"✅ Found test: '{test_filter}'\n")
+
     # Warning prompt
     print(f"\n{'='*60}")
     print(f"⚠️  WARNING: Test Suite")
@@ -3495,12 +3611,14 @@ def run_tests(verbose=False):
     failed = 0
     results = []
     
+
+    
     # Set global test state for CTRL+C handler
     _test_state['active'] = True
     _test_state['total'] = len(tests)
     _test_state['passed'] = 0
     _test_state['failed'] = 0
-    
+
     for i, test in enumerate(tests):
         test_name = test.get("name", f"Test {i+1}")
         command = test.get("command", "")
@@ -3875,8 +3993,8 @@ Supported Models:
     
     # Testing
     test_group = parser.add_argument_group("Testing")
-    test_group.add_argument("--test", action="store_true", help="Run test suite from testing.json (quiet mode).")
-    test_group.add_argument("--test-verbose", action="store_true", help="Run test suite with full output (errors, warnings, details).")
+    test_group.add_argument("--test", nargs="?", const=True, help="Run test suite from testing.json (quiet mode). Optional: Test Name.")
+    test_group.add_argument("--test-verbose", nargs="?", const=True, help="Run test suite with full output (errors, warnings, details). Optional: Test Name.")
     
     # Interactive Mode
     parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
@@ -3886,7 +4004,14 @@ Supported Models:
     
     # Run test suite if --test or --test-verbose is provided
     if args.test or args.test_verbose:
-        run_tests(verbose=args.test_verbose)
+        # Determine test filter
+        test_filter = None
+        if isinstance(args.test, str):
+            test_filter = args.test
+        elif isinstance(args.test_verbose, str):
+            test_filter = args.test_verbose
+
+        run_tests(verbose=bool(args.test_verbose), test_filter=test_filter)
         return  # run_tests calls sys.exit
     
     # Run interactive mode if --interactive is provided OR no arguments given
