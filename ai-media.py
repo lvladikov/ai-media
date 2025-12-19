@@ -1482,6 +1482,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         
         print("⚠️  Video generation is resource intensive.")
         
+        # cuDNN workaround: Disable cuDNN for video generation to prevent "GET was unable to find an engine" errors
+        # This is more reliable but slightly slower. The error occurs during VAE decoding with certain CUDA versions.
+        cudnn_was_enabled = None
+        if torch.cuda.is_available():
+            cudnn_was_enabled = torch.backends.cudnn.enabled
+            torch.backends.cudnn.enabled = False
+        
         # --- Stage 1: Video Generation ---
         
         # Load Pipeline
@@ -1567,6 +1574,18 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             print(f"⚠️  Video saved (may require VLC to play): {video_out}")
         
         # --- Stage 2 & 3: Audio Generation & Muxing ---
+        # Free video model memory before loading audio model
+        del pipe
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            # Restore cuDNN state
+            if cudnn_was_enabled is not None:
+                torch.backends.cudnn.enabled = cudnn_was_enabled
+        elif hasattr(torch.mps, 'empty_cache'):
+            torch.mps.empty_cache()
+        import gc
+        gc.collect()
+        
         if audio_prompt:
             print("🔊 Generating Audio track...")
             audio_out = output_path + ".temp_audio.wav"
