@@ -1451,6 +1451,11 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 except OSError:
                     pass  # Ignore if can't delete
     
+    # Ensure a clean slate
+    clear_gpu_memory()
+    pipe = None
+    cuda_was_enabled = None
+    
     try:
         import torch
         from diffusers import (
@@ -1484,9 +1489,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         
         # cuDNN workaround: Disable cuDNN for video generation to prevent "GET was unable to find an engine" errors
         # This is more reliable but slightly slower. The error occurs during VAE decoding with certain CUDA versions.
-        cudnn_was_enabled = None
         if torch.cuda.is_available():
-            cudnn_was_enabled = torch.backends.cudnn.enabled
+            cuda_was_enabled = torch.backends.cudnn.enabled
             torch.backends.cudnn.enabled = False
         
         # --- Stage 1: Video Generation ---
@@ -1494,6 +1498,21 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Load Pipeline
         if "cogvideox" in model_id.lower() and is_i2v:
             pipe = CogVideoXImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            
+            # --- CogVideoX Memory Optimizations ---
+            print(f"   ℹ️  Applying Memory Optimizations for CogVideoX...")
+            # 1. Sequential CPU Offload (Drastic VRAM reduction, offloads modules to CPU)
+            pipe.enable_sequential_cpu_offload() 
+            print(f"   ✓ Sequential CPU Offload: Enabled")
+            
+            # 2. VAE Tiling (Splits VAE decode into small tiles)
+            pipe.vae.enable_tiling()
+            print(f"   ✓ VAE Tiling: Enabled")
+            
+            # 3. VAE Slicing (Processes VAE tiles sequentially)
+            pipe.vae.enable_slicing()
+            print(f"   ✓ VAE Slicing: Enabled")
+            
         elif "stable-video-diffusion" in model_id.lower():
             pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16" if dtype == torch.float16 else None)
         else:
@@ -1517,12 +1536,14 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 except: pass 
         
         # Device/Memory Optimization
-        if device.type == "cpu":
-            pipe.to(device)
-        else:
-            pipe.enable_model_cpu_offload()
-            if device.type == "mps":
-                pipe.enable_attention_slicing()
+        # (CogVideoX already handled above with sequential_cpu_offload)
+        if "cogvideox" not in model_id.lower():
+            if device.type == "cpu":
+                pipe.to(device)
+            else:
+                pipe.enable_model_cpu_offload()
+                if device.type == "mps":
+                    pipe.enable_attention_slicing()
         
         # Generate Frames
         # --- Performance Tracking & Estimate ---
@@ -1542,7 +1563,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 if "stable-video-diffusion" in model_id.lower():
                     video_frames = pipe(init_image).frames[0]
                 else:
-                    video_frames = pipe(prompt=prompt, image=init_image, num_frames=49).frames[0]
+                    # CogVideoX
+                    video_frames = pipe(prompt=prompt, image=init_image, num_frames=49, guidance_scale=6.0, num_inference_steps=50).frames[0]
             else:
                 num_frames = int(duration * 16)
                 video_frames = pipe(prompt, num_inference_steps=25, num_frames=num_frames).frames[0]
@@ -1555,7 +1577,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         
         # Save Video (raw export - may need re-encoding for compatibility)
         temp_raw_video = video_out + ".raw.mp4"
-        export_to_video(video_frames, temp_raw_video, fps=7 if "stable-video-diffusion" in model_id.lower() else 16) 
+        export_to_video(video_frames, temp_raw_video, fps=7 if "stable-video-diffusion" in model_id.lower() else 8) # CogVideoX is usually 8fps
         
         # Re-encode with FFmpeg for universal playback (format-aware)
         import subprocess
@@ -1574,17 +1596,11 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             print(f"⚠️  Video saved (may require VLC to play): {video_out}")
         
         # --- Stage 2 & 3: Audio Generation & Muxing ---
-        # Free video model memory before loading audio model
+        
+        # FORCE CLEANUP of Video Model before Audio Model loads
         del pipe
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            # Restore cuDNN state
-            if cudnn_was_enabled is not None:
-                torch.backends.cudnn.enabled = cudnn_was_enabled
-        elif hasattr(torch.mps, 'empty_cache'):
-            torch.mps.empty_cache()
-        import gc
-        gc.collect()
+        pipe = None
+        clear_gpu_memory()
         
         if audio_prompt:
             print("🔊 Generating Audio track...")
@@ -1638,6 +1654,16 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             try: os.remove(video_out)
             except: pass
         return False
+        
+    finally:
+        # --- Final Cleanup (Crucial for VRAM) ---
+        if pipe is not None:
+            del pipe
+        
+        if cuda_was_enabled is not None:
+             torch.backends.cudnn.enabled = cuda_was_enabled
+             
+        clear_gpu_memory()
 
 
 def ensure_paths(output_path):
