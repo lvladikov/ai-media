@@ -43,23 +43,20 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
 
-> [!CAUTION]
-> **Mac Users:** `FLUX.1` is extremely resource-intensive (~70GB+ RAM/Swap) and slow on Apple Silicon. It is **not recommended** for most Mac users.
+    Hugging Face authentication steps:
 
-Hugging Face authentication steps:
-
-1.  **The Hugging Face CLI will be installed as part of the installation process (requirements.txt)**
-2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
-3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
-    | Model | Accept License |
-    | :--- | :--- |
-    | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
-    | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
-    | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
-4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
-    - **Quick option**: Select **"Read"** token type for simple read access to all repos.
-    - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
-5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
+    1.  **The Hugging Face CLI will be installed as part of the installation process (requirements.txt)**
+    2.  Create a **Free** [Hugging Face Account](https://huggingface.co/join).
+    3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
+        | Model | Accept License |
+        | :--- | :--- |
+        | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
+        | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
+        | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
+    4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
+        - **Quick option**: Select **"Read"** token type for simple read access to all repos.
+        - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
+    5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
 
 ---
 
