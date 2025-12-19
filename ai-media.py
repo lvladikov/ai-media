@@ -2943,7 +2943,8 @@ def run_interactive(jump_point=None):
                 mem_driver = torch.mps.driver_allocated_memory() / (1024**3)
                 
                 indent = " " * 13
-                gpu_info += f"\n{indent}Allocs: {mem_curr:.2f} GB Current | {mem_driver:.2f} GB Driver"
+                if mem_curr > 0.05 or mem_driver > 0.05:
+                    gpu_info += f"\n{indent}Allocs: {mem_curr:.2f} GB Current | {mem_driver:.2f} GB Driver"
             except:
                 pass
         elif torch.cuda.is_available():
@@ -3619,6 +3620,7 @@ def run_tests(verbose=False, test_filter=None):
     _test_state['passed'] = 0
     _test_state['failed'] = 0
 
+    suite_start_time = time.time()
     for i, test in enumerate(tests):
         test_name = test.get("name", f"Test {i+1}")
         command = test.get("command", "")
@@ -3778,6 +3780,8 @@ def run_tests(verbose=False, test_filter=None):
     # Mark test as no longer active
     _test_state['active'] = False
     
+    total_duration = time.time() - suite_start_time
+
     # Print summary
     print(f"\n{'='*60}")
     print(f"📊 TEST SUMMARY")
@@ -3785,6 +3789,7 @@ def run_tests(verbose=False, test_filter=None):
     print(f"   Total:  {len(tests)}")
     print(f"   Passed: {passed} ✅")
     print(f"   Failed: {failed} ❌")
+    print(f"   Duration: {format_time(total_duration)}")
     print(f"{'='*60}")
     
     if failed > 0:
@@ -3793,7 +3798,7 @@ def run_tests(verbose=False, test_filter=None):
             if not success:
                 print(f"   - {name}: {reason}")
     
-    print(f"\n📁 Results saved to: testing.json")
+    print(f"\n✅ Test Run Complete")
     
     sys.exit(0 if failed == 0 else 1)
 
