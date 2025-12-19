@@ -3801,12 +3801,15 @@ def run_tests(verbose=False, test_filter=None):
     
     # Filter tests if requested
     if test_filter:
-        print(f"🔎 Single Test Mode: Searching for '{test_filter}'...")
-        original_count = len(tests)
-        tests = [t for t in tests if t.get("name") == test_filter]
+        if isinstance(test_filter, list):
+            print(f"🔎 Test Filter Mode: Searching for {len(test_filter)} specific tests...")
+            tests = [t for t in tests if t.get("name") in test_filter]
+        else:
+             print(f"🔎 Single Test Mode: Searching for '{test_filter}'...")
+             tests = [t for t in tests if t.get("name") == test_filter]
         
         if not tests:
-            print(f"❌ Error: No test found with name: '{test_filter}'")
+            print(f"❌ Error: No tests found matching filter: {test_filter}")
             print("   Available tests are listed in the ID list, or:")
             print("\n👉 Redirecting to Interactive Test Menu in ", end="", flush=True)
             for i in range(3, 0, -1):
@@ -3818,7 +3821,7 @@ def run_tests(verbose=False, test_filter=None):
             run_interactive(jump_point="test")
             return
         
-        print(f"✅ Found test: '{test_filter}'\n")
+        print(f"✅ Found {len(tests)} test(s) matching filter.\n")
 
     # Warning prompt
     print(f"\n{'='*60}")
@@ -4234,8 +4237,8 @@ Supported Models:
     
     # Testing
     test_group = parser.add_argument_group("Testing")
-    test_group.add_argument("--test", nargs="?", const=True, help="Run test suite from testing.json (quiet mode). Optional: Test Name.")
-    test_group.add_argument("--test-verbose", nargs="?", const=True, help="Run test suite with full output (errors, warnings, details). Optional: Test Name.")
+    test_group.add_argument("--test", nargs="*", help="Run test suite from testing.json (quiet mode). Optional: Space-separated list of Test Names.")
+    test_group.add_argument("--test-verbose", nargs="*", help="Run test suite with full output. Optional: Space-separated list of Test Names.")
     
     # Interactive Mode
     parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
@@ -4244,15 +4247,21 @@ Supported Models:
     args = parser.parse_args()
     
     # Run test suite if --test or --test-verbose is provided
-    if args.test or args.test_verbose:
+    # Note: with nargs='*', presence is indicated by not None. Empty list [] means flag present but no values (Run All).
+    if args.test is not None or args.test_verbose is not None:
         # Determine test filter
-        test_filter = None
-        if isinstance(args.test, str):
-            test_filter = args.test
-        elif isinstance(args.test_verbose, str):
-            test_filter = args.test_verbose
-
-        run_tests(verbose=bool(args.test_verbose), test_filter=test_filter)
+        test_filter = []
+        # Merge lists if both provided (though unlikely)
+        if args.test: test_filter.extend(args.test)
+        if args.test_verbose: test_filter.extend(args.test_verbose)
+        
+        # If test_filter is empty here, it means flags were provided but no names -> Run All.
+        # However, our run_tests logic expects None for "Run All", and a list/string for filtering.
+        # Let's normalize.
+        if not test_filter:
+            test_filter = None # Run All
+        
+        run_tests(verbose=bool(args.test_verbose is not None), test_filter=test_filter)
         return  # run_tests calls sys.exit
     
     # Run interactive mode if --interactive is provided OR no arguments given

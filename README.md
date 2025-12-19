@@ -824,6 +824,15 @@ python ai-media.py --test "Image - SDXL (Default)"
 python ai-media.py --test-verbose "Image - Auto Filename"
 ```
 
+### Multiple Test Execution
+You can run a specific subset of tests by passing them as a space-separated list:
+
+```bash
+# Run multiple specific tests
+python ai-media.py --test "Validation - Image Generation" "Validation - Video Generation"
+python ai-media.py --test-verbose "Validation - Image Generation" "Validation - Video Generation" "Validation - Audio Generation"
+```
+
 > [!NOTE]
 > The test name must match exactly what is defined in `testing.json`. If the name is not found, the script will list all available tests.
 
