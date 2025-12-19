@@ -610,7 +610,7 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
         tracker = PerformanceTracker()
         est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_image(model_id, width, height, device)
         if est_time > 0:
-            print(f"   ⏱️  Est. Time: {format_time(est_time)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+            print(f"   ⏱️  Est. Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
         
         print(f"🎨 Generating {width}x{height} image... (This may take a moment)")
         
@@ -1196,7 +1196,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             tracker = PerformanceTracker()
             est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
             if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1235,7 +1235,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             tracker = PerformanceTracker()
             est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
             if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1269,7 +1269,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             tracker = PerformanceTracker()
             est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
             if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1323,7 +1323,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             tracker = PerformanceTracker()
             est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
             if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
             
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1529,7 +1529,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         tracker = PerformanceTracker()
         est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("video", model_id, device, duration, width, height)
         if est_duration > 0:
-            print(f"   ⏱️  Est. Time: {format_time(est_duration)} | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}% | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB")
+            print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
         
         print(f"🎬 Rendering video frames... (This will be slow)")
         

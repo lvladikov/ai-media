@@ -689,6 +689,7 @@
     },
     {
       "name": "Upscale Video - Default",
+      "timeout": 1800,
       "command": "-uv testData/inputs/sample_video.mov -uf 2x -o testData/outputs/up_video.mp4 --force",
       "expectedInputItems": [
         "testData/inputs/sample_video.mov"

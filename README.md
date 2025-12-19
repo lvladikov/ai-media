@@ -250,7 +250,12 @@ Here are prompt examples for common editing tasks.
 | `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
 | `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
 | `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Higher values allow the model to generate more texture/detail but may diverge from the original. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
-| `-su`, `--simple-upscale` | Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). Very fast, preserves original quality. | `False` |
+| `-su`, `--simple-upscale` | Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). **Video:** Extremely fast (skips frame extraction). **Image:** Instant. | `False` |
+
+> [!NOTE]
+> **Video Upscaling Modes:**
+> *   **Default (AI)**: Extracts every frame, runs AI upscaling on each, then stitches them back. **Slow** but adds detail.
+> *   **Simple (`-su`)**: Uses FFmpeg to scale the video stream directly. **Instant** but no new detail.
 
 > [!NOTE]
 > **Resource Safety Check:** Before starting, the script calculates the target resolution (e.g., 8K = 33MP) and estimated RAM usage. If it detects a risk of massive swapping or system freeze ("Billboard Sizing"), it will warn you and ask for confirmation. Use `--force` to bypass this.
@@ -368,12 +373,20 @@ python ai-media.py -ui input.jpg -uf 4.0
 # Simple Upscale (Non-AI, Fast)
 python ai-media.py -ui photo.jpg -uf 4 -su
 
-# Video Upscale
+# Video Upscale (AI - Slow, Frame-by-Frame)
 python ai-media.py -uv clip.mp4 -uf 2.0
+
+# Video Upscale (Simple/Fast - Native FFmpeg)
+python ai-media.py -uv clip.mp4 -uf 2.0 -su
 
 # Chained Generation (Generate -> Upscale)
 python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
 ```
+
+> [!NOTE]
+> **Video Upscaling Process:** 
+> *   **AI Upscaling**: Works by (1) extracting all frames, (2) upscaling each frame individually with the AI model, (3) stitching them back. This is slow (~10s/frame) but high quality. Dedicated video super-resolution models may be added in the future.
+> *   **Simple Upscaling (`-su`)**: Uses FFmpeg's built-in Lanczos scaling directly on the video stream. This is **extremely fast** and doesn't require extracting frames, but doesn't add new details like AI does.
 
 
 **Smart Format Handling**
