@@ -803,9 +803,9 @@ This project uses the following open-source libraries:
 
 ---
 
-## 🧪 Testing
+## Testing
 
-The included test suite covers unit tests (Python logic) and integration tests (full generation pipelines).
+🧪 The included test suite covers unit tests (Python logic) and integration tests (full generation pipelines).
 
 ### Unit Tests
 Run the Python unit test suite to verify internal logic.
