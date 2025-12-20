@@ -849,7 +849,9 @@ python ai-media.py --test-verbose "Validation - Image Generation" "Validation - 
 > - Press `CTRL+C` at any time to interrupt
 
 > [!NOTE]
-> **Output Buffering:** The test runner captures standard output and only displays it *after* each test completes (or fails). If a test involves a long operation (like downloading a large model for the first time), the script may appear to hang or show no output for several minutes. This is normal behavior.
+> **Output Buffering:** In default quiet mode (`--test`), the runner buffers output and detects "hanging" behavior during long operations (downloads). Using `--test-verbose` streams output in real-time, allowing you to monitor progress immediately.
+>
+> **Temporary Files:** During test execution, temporary JSON files (e.g., `*-temp-performance.json`) are created to robustly track resource usage for each test. These files are automatically deleted as each test completes. This JSON IPC approach is used because tests run in isolated subprocesses where shared memory/global variables are not accessible by the parent runner.
 
 ## Disclaimer
 

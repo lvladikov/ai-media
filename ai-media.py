@@ -26,11 +26,13 @@ import ast
 import json
 import logging
 import os
-import re
-import sys
 import signal
-import shutil
+import sys
+import re
+import argparse
 import time
+from datetime import datetime
+import shutil
 import subprocess
 try:
     import psutil  # For resource checking
@@ -57,6 +59,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 # This helps prevent "CUDA out of memory" errors even when GPU has free memory
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
+
+# Global arguments holder for JSON reporting
+args = None
 
 # --- Constants ---
 DEFAULT_IMAGE_SIZE = "720p"  # Maps to 1280x720
@@ -514,7 +519,16 @@ def parse_bitrate(value):
 
 # --- Generation Logic Wrappers ---
 
-def generate_image(prompt, output_path, width, height, model_name="default", unsafe=False):
+def write_report_json(path, stats):
+    """Write generation stats to a JSON file."""
+    try:
+        import json
+        with open(path, 'w') as f:
+            json.dump(stats, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Failed to write report JSON: {e}")
+
+def generate_image(prompt, output_file, width, height, model_name="default", steps=30, guidance_scale=7.5, unsafe=False):
     """Generate image using Diffusers (Flux/SDXL)."""
     
     # Resolve Model ID
@@ -525,7 +539,7 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
     print(f"   Model:  {model_id}")
     print(f"   Prompt: '{prompt}'")
     print(f"   Size:   {width}x{height}")
-    print(f"   Output: {output_path}")
+    print(f"   Output: {output_file}")
     print("") # Spacer
     
     try:
@@ -606,11 +620,8 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             else:
                 pipe.enable_vae_tiling()
         
-        # --- Performance Tracking & Estimate ---
+        # --- Performance Tracking ---
         tracker = PerformanceTracker()
-        est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_image(model_id, width, height, device)
-        if est_time > 0:
-            print(f"   ⏱️  Est. Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
         
         print(f"🎨 Generating {width}x{height} image... (This may take a moment)")
         
@@ -634,7 +645,20 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
             
             # Record Performance
             tracker.record_image(model_id, width, height, device, duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-            print(f"   ✓ Generated in {format_time(duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            print(f"   ✓ Generated in {format_time(duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            
+            # Write JSON report if requested
+            if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
+                 stats = {
+                     "time": duration,
+                     "ram": avg_ram,
+                     "vram": avg_vram,
+                     "cpu": avg_cpu,
+                     "gpu": avg_gpu,
+                     "width": width,
+                     "height": height
+                 }
+                 write_report_json(globals()['args'].report_json, stats)
             
         image = output.images[0]
         
@@ -647,8 +671,8 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
                 print(f"👉 Please modify your prompt and try again.")
                 print(f"💡 If your prompt is appropriate, try again with --unsafe to disable the safety checker.\n")
         
-        image.save(output_path)
-        print(f"✅ Image saved to {output_path}")
+        image.save(output_file)
+        print(f"✅ Image saved to {output_file}")
         return True
         
     except ImportError as e:
@@ -674,7 +698,7 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
                 choice = input(f"   🔄 Retry with {new_w}x{new_h}? [y/N]: ").lower().strip()
                 if choice in ['y', 'yes']:
                     print("") # Spacer
-                    return generate_image(prompt, output_path, new_w, new_h, model_name=model_name, unsafe=unsafe)
+                    return generate_image(prompt, output_file, new_w, new_h, model_name=model_name, unsafe=unsafe)
             except KeyboardInterrupt:
                 pass
             print("")
@@ -699,11 +723,11 @@ def generate_image(prompt, output_path, width, height, model_name="default", uns
                 if choice in ['y', 'yes']:
                     print("\n📉 Switching to base resolution: 1280x720...")
                     # 1. Generate Base Image
-                    success = generate_image(prompt, output_path, 1280, 720, model_name=model_name, unsafe=unsafe)
+                    success = generate_image(prompt, output_file, 1280, 720, model_name=model_name, unsafe=unsafe)
                     if success:
                         # 2. Upscale Result
                         print("")
-                        return upscale_image_file(output_path, output_path, strength=0.0, factor=4.0) # Overwrite
+                        return upscale_image_file(output_file, output_file, strength=0.0, factor=4.0) # Overwrite
             except KeyboardInterrupt:
                 pass
             print("")
@@ -1192,11 +1216,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             max_tokens = int(duration * 50) 
             print(f"🎵 Synthesizing audio... (MusicGen)")
             
-            # --- Performance Tracking & Estimate ---
+            # --- Performance Tracking ---
             tracker = PerformanceTracker()
-            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
-            if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1206,7 +1227,17 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            
+            if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
+                 stats = {
+                     "time": gen_duration,
+                     "ram": avg_ram,
+                     "vram": avg_vram,
+                     "cpu": avg_cpu,
+                     "gpu": avg_gpu
+                 }
+                 write_report_json(globals()['args'].report_json, stats)
             
             rate = music["sampling_rate"]
             audio_data = music["audio"]
@@ -1231,11 +1262,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
             print(f"🎵 Synthesizing audio... (AudioLDM2)")
             
-            # --- Performance Tracking & Estimate ---
+            # --- Performance Tracking ---
             tracker = PerformanceTracker()
-            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
-            if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1245,7 +1273,17 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            
+            if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
+                 stats = {
+                     "time": gen_duration,
+                     "ram": avg_ram,
+                     "vram": avg_vram,
+                     "cpu": avg_cpu,
+                     "gpu": avg_gpu
+                 }
+                 write_report_json(globals()['args'].report_json, stats)
             rate = 16000 # AudioLDM default usually
             
             scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio.T)
@@ -1265,11 +1303,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
             print(f"🎵 Synthesizing audio... (Stable Audio)")
             
-            # --- Performance Tracking & Estimate ---
+            # --- Performance Tracking ---
             tracker = PerformanceTracker()
-            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
-            if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1280,7 +1315,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             rate = 44100 # Standard for Stable Audio Open
             
             # Ensure numpy
@@ -1319,11 +1354,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             # Bark roughly does ~14s max.
             is_long = len(prompt) > 150 or duration > 15.0
             
-            # --- Performance Tracking & Estimate ---
+            # --- Performance Tracking ---
             tracker = PerformanceTracker()
-            est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_id, device, duration)
-            if est_duration > 0:
-                print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
             
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -1341,7 +1373,17 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-            print(f"   ✓ Generated in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+            print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            
+            if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
+                 stats = {
+                     "time": gen_duration,
+                     "ram": avg_ram,
+                     "vram": avg_vram,
+                     "cpu": avg_cpu,
+                     "gpu": avg_gpu
+                 }
+                 write_report_json(globals()['args'].report_json, stats)
             
             rate = model.generation_config.sample_rate # 24000
             
@@ -1546,11 +1588,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                     pipe.enable_attention_slicing()
         
         # Generate Frames
-        # --- Performance Tracking & Estimate ---
+        # --- Performance Tracking ---
         tracker = PerformanceTracker()
-        est_duration, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("video", model_id, device, duration, width, height)
-        if est_duration > 0:
-            print(f"   ⏱️  Est. Time: {format_time(est_duration)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
         
         print(f"🎬 Rendering video frames... (This will be slow)")
         
@@ -1573,7 +1612,19 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         gen_duration = time.time() - start_time
         avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
         tracker.record_linear("video", model_id, device, duration, gen_duration, width, height, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-        print(f"   ✓ Rendered in {format_time(gen_duration)} (VRAM: {avg_vram:.1f}GB | GPU: {avg_gpu:.1f}%)")
+        print(f"   ✓ Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+        
+        if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
+                stats = {
+                    "time": gen_duration,
+                    "ram": avg_ram,
+                    "vram": avg_vram,
+                    "cpu": avg_cpu,
+                    "gpu": avg_gpu,
+                    "width": width,
+                    "height": height
+                }
+                write_report_json(globals()['args'].report_json, stats)
         
         # Save Video (raw export - may need re-encoding for compatibility)
         temp_raw_video = video_out + ".raw.mp4"
@@ -1934,7 +1985,7 @@ def check_resources_and_confirm(w, h, f, dev):
              print("   🟠 WARNING: This resolution is extremely high (Billboard size).")
         
         if os.environ.get("AI_MEDIA_FORCE", "0") == "1":
-             print("   (Proceeding due to Force flag)")
+             print("   (Proceeding due to --force flag)")
              return True
              
         confirm = input("\n   Do you want to proceed? [y/N]: ").strip().lower()
@@ -2215,7 +2266,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
                         pipe_x4.enable_model_cpu_offload()
                     else:
                         pipe_x4.to(device)
-                    if hasattr(pipe_x4, 'vae') and hasattr(pipe_x4.vae, 'enable_tiling'):
+                    if hasattr(pipe_x4, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
                         pipe_x4.vae.enable_tiling()
                 return pipe_x4, 8  # alignment requirement
         
@@ -3035,10 +3086,10 @@ def prompt_file(prompt, must_exist=True):
             return None
 
 def run_interactive(jump_point=None):
-    """Run interactive menu mode.
+    """Run interactive mode.
     
     Args:
-        jump_point: Optional jump path (e.g., 'image/sdxl', '1/2', 'audio/bark')
+        jump_point: Optional jump path (e.g., 'image/sdxl', 'audio/bark')
     """
     
     # Jump point mappings: name -> (menu_action, submenu_value)
@@ -3514,7 +3565,7 @@ def run_interactive(jump_point=None):
         
         # Input file
         print("📂 Select input image:\n")
-        input_file = prompt_file("Enter image path")
+        input_file = prompt_file("Input Image")
         if input_file is None:
             return
         
@@ -3884,7 +3935,12 @@ def run_tests(verbose=False, test_filter=None):
     failed = 0
     results = []
     
-
+    # Resource aggregation variables
+    total_ram = 0.0
+    total_vram = 0.0
+    total_cpu = 0.0
+    total_gpu = 0.0
+    resource_count = 0
     
     # Set global test state for CTRL+C handler
     _test_state['active'] = True
@@ -3893,6 +3949,11 @@ def run_tests(verbose=False, test_filter=None):
     _test_state['failed'] = 0
 
     suite_start_time = time.time()
+    suite_start_time = time.time()
+    # timestamp with milliseconds
+    start_dt = datetime.fromtimestamp(suite_start_time)
+    suite_timestamp = start_dt.strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    
     for i, test in enumerate(tests):
         test_name = test.get("name", f"Test {i+1}")
         command = test.get("command", "")
@@ -3925,15 +3986,26 @@ def run_tests(verbose=False, test_filter=None):
             continue
         
         # 2. Delete expected outputs before run (clean slate)
+        # 2. Delete expected outputs before run (clean slate)
         for output_item in expected_outputs:
             output_path = os.path.join(script_dir, output_item)
             if os.path.exists(output_path):
                 os.remove(output_path)
                 print(f"🗑️  Deleted: {output_item}")
         
-        # 3. Run the command
-        full_command = [sys.executable, os.path.join(script_dir, 'ai-media.py')] + shlex.split(command)
-        print(f"🚀 Running: python ai-media.py {command}")
+        # Prepare JSON Report Path
+        import tempfile
+        # Use suite-wide timestamp for better file grouping
+        json_report_path = os.path.join(script_dir, f"{suite_timestamp}-{i+1:03d}-temp-performance.json")
+        
+        # Add --report-json arg if command supports it (assuming all ai-media commands do)
+        full_command = [sys.executable, os.path.join(script_dir, 'ai-media.py')] + shlex.split(command) + ["--report-json", json_report_path]
+        
+        # For logging, show command without the hidden report arg
+        cmd_display = f"python ai-media.py {command}"
+        print(f"🚀 Running: {cmd_display}")
+            
+            # ... rest of subprocess creation ...
         
         is_interactive = test.get("interactive", False)
         interactive_wait = test.get("interactiveWait", 2.0)
@@ -4062,6 +4134,10 @@ def run_tests(verbose=False, test_filter=None):
         
         # 4. Check expected output items exist
         if test_passed:
+            # Parse Resource Usage from stdout -> DEPRECATED/REMOVED in favor of JSON IPC
+            # (Old regex parsing block removed)
+            pass
+
             for output_item in expected_outputs:
                 output_path = os.path.join(script_dir, output_item)
                 if not os.path.exists(output_path):
@@ -4072,12 +4148,45 @@ def run_tests(verbose=False, test_filter=None):
                 else:
                     print(f"✓ Output exists: {output_item}")
         
-        # 5. Update test results
         if test_passed:
+            # 5. Read JSON Report if available
+            if json_report_path and os.path.exists(json_report_path):
+                try:
+                    with open(json_report_path, 'r') as f:
+                        stats = json.load(f)
+                        
+                    # Extract Data
+                    r_time = stats.get("time", 0)
+                    r_ram = stats.get("ram", 0)
+                    r_vram = stats.get("vram", 0)
+                    r_cpu = stats.get("cpu", 0)
+                    r_gpu = stats.get("gpu", 0)
+                    
+                    total_ram += r_ram
+                    total_vram += r_vram
+                    total_cpu += r_cpu
+                    total_gpu += r_gpu
+                    resource_count += 1
+                    
+                    # Store exact generation time in results if available
+                    results.append((test_name, True, f"{r_time:.1f}s"))
+                    
+                    # Cleanup report file
+                    try:
+                        os.remove(json_report_path)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    print(f"⚠️ Failed to read stats JSON: {e}")
+                    results.append((test_name, True, f"{elapsed:.1f}s"))
+            else:
+                # Fallback to elapsed time if no JSON report
+                results.append((test_name, True, f"{elapsed:.1f}s"))
+
             print(f"✅ PASSED ({elapsed:.1f}s)")
             passed += 1
             _test_state['passed'] = passed
-            results.append((test_name, True, f"{elapsed:.1f}s"))
         else:
             print(f"❌ FAILED ({elapsed:.1f}s)")
             failed += 1
@@ -4095,8 +4204,28 @@ def run_tests(verbose=False, test_filter=None):
     print(f"{'='*60}")
     print(f"   Total:  {len(tests)}")
     print(f"   Passed: {passed} ✅")
-    print(f"   Failed: {failed} ❌")
+    
+    if failed > 0:
+        print(f"   Failed: {failed} ❌")
+    else:
+        print(f"   Failed: {failed}")
+        
     print(f"   Duration: {format_time(total_duration)}")
+    
+    if resource_count > 0:
+        avg_ram = total_ram / resource_count
+        avg_vram = total_vram / resource_count
+        avg_cpu = total_cpu / resource_count
+        avg_gpu = total_gpu / resource_count
+        
+        if len(tests) >= 2:
+             print(f"\n   ⚖️  Averages:\n")
+        
+        print(f"   RAM: {avg_ram:.1f} GB")
+        print(f"   VRAM: {avg_vram:.1f} GB")
+        print(f"   CPU: {avg_cpu:.1f} %")
+        print(f"   GPU: {avg_gpu:.1f} %")
+        
     print(f"{'='*60}")
     
     if failed > 0:
@@ -4308,6 +4437,9 @@ Supported Models:
     parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
                         help="Run in interactive mode. Optional: Jump point (e.g., 'image/sdxl', 'audio/bark').")
     
+    parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
+    
+    global args
     args = parser.parse_args()
     
     # Run test suite if --test or --test-verbose is provided
@@ -4622,8 +4754,8 @@ Supported Models:
             if success and tracker:
                 elapsed = time.time() - start_time
                 avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                # print("")  # Spacer
+                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
                 tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
         
         elif args.generate_video:
@@ -4701,8 +4833,8 @@ Supported Models:
             if success and tracker:
                 elapsed = time.time() - start_time
                 avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                # print("")  # Spacer
+                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
                 tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
         
         elif args.generate_audio:
@@ -4737,8 +4869,8 @@ Supported Models:
             if success and tracker:
                 elapsed = time.time() - start_time
                 avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                print("")  # Spacer
-                print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
+                # print("")  # Spacer
+                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
                 tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
 
         # X. Transform Image (-ti) - Chained or Standalone
