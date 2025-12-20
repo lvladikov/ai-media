@@ -3841,36 +3841,49 @@ def run_interactive(jump_point=None):
         # Build options
         options = []
         class_count = len(test_classes)
-        options.append((f"🚀  Run All ({class_count} classes, {test_method_count} tests)", "ALL"))
+        options.append((f"🚀  Run All ({class_count} classes, {test_method_count} tests) [Summary]", "ALL_QUIET"))
+        options.append((f"📜  Run All ({class_count} classes, {test_method_count} tests) [Verbose]", "ALL_VERBOSE"))
         
         for cls in sorted(test_classes.keys()):
-            count = test_classes[cls]
-            # Format: TestParseSize -> Parse Size
-            display_name = cls.replace("Test", "", 1)
-            # Add space before capitals
-            display_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', display_name)
-            options.append((f"{cls} ({count} tests)", cls))
-        
+            # Get method count for this class
+            try:
+                # We can inspect the class directly since we imported the module
+                cls_obj = getattr(module, cls)
+                method_count = len([m for m in dir(cls_obj) if m.startswith('test_')])
+                options.append((f"{cls} ({method_count} tests)", cls))
+            except:
+                 options.append((f"{cls}", cls))
+
         while True:
             clear_screen()
             show_header("Unit Tests")
-            choice = prompt_menu(f"Select a test class to run:\n\nℹ️  {class_count} test classes ({test_method_count} tests) found in tests/ai-media_test.py\n", options)
-            
+            prompt_text = (
+                 f"Select a test class to run:\n\n"
+                 f"ℹ️  Individual tests are always run in VERBOSE mode\n\n"
+                 f"ℹ️  {class_count} test classes ({test_method_count} tests) found in tests/ai-media_test.py\n"
+            )
+            choice = prompt_choice(prompt_text, options, allow_back=True)
+
             if choice is None: return
-            
-            if choice == "ALL":
-                # Run all unit tests
-                print("\n🧪 Running all unit tests...\n")
+
+            if choice == "ALL_QUIET":
+                # Run all unit tests (Quiet)
+                print("\n🧪 Running all unit tests (Summary)...\n")
+                print("=" * 60)
+                os.system(f'"{sys.executable}" -m unittest tests.ai-media_test')
+            elif choice == "ALL_VERBOSE":
+                # Run all unit tests (Verbose)
+                print("\n🧪 Running all unit tests (Verbose)...\n")
                 print("=" * 60)
                 os.system(f'"{sys.executable}" -m unittest tests.ai-media_test -v')
             else:
-                # Run specific test class
+                # Run specific test class (Always Verbose)
                 print(f"\n🧪 Running {choice}...\n")
                 print("=" * 60)
                 os.system(f'"{sys.executable}" -m unittest tests.ai-media_test.{choice} -v')
-            
+
             input("\nPress Enter to continue...")
-    
+
     def integration_test_menu():
         """Integration Tests submenu - tests from tests/integration-tests.json."""
         # Load tests
@@ -4563,7 +4576,9 @@ Supported Models:
     test_group.add_argument("--test", nargs="*", help="Run integration tests from tests/integration-tests.json (quiet mode). Optional: Space-separated list of Test Names.")
     test_group.add_argument("--test-verbose", nargs="*", help="Run integration tests with full output. Optional: Space-separated list of Test Names.")
     test_group.add_argument("--unittests", nargs="?", const="tests.ai-media_test", metavar="MODULE",
-                            help="Run Python unit tests. Default: all tests. Examples: tests.ai-media_test.TestParseSize, tests.ai-media_test.TestParseSize.test_resolution_presets")
+                            help="Run Python unit tests (Quiet/Summary mode). Default: all tests. Examples: tests.ai-media_test.TestParseSize")
+    test_group.add_argument("--unittests-verbose", nargs="?", const="tests.ai-media_test", metavar="MODULE",
+                            help="Run Python unit tests (Verbose mode). Default: all tests.")
     
     # Interactive Mode
     parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
@@ -4574,11 +4589,19 @@ Supported Models:
     global args
     args = parser.parse_args()
     
-    # Run unit tests if --unittests is provided
-    if args.unittests is not None:
+    # Run unit tests if --unittests or --unittests-verbose is provided
+    if args.unittests is not None or args.unittests_verbose is not None:
         import subprocess
-        cmd = [sys.executable, "-m", "unittest", args.unittests, "-v"]
-        print(f"Running: python -m unittest {args.unittests} -v\n")
+        
+        # Determine target and verbosity
+        target = args.unittests if args.unittests else args.unittests_verbose
+        is_verbose = args.unittests_verbose is not None
+        
+        cmd = [sys.executable, "-m", "unittest", target]
+        if is_verbose:
+            cmd.append("-v")
+            
+        print(f"Running: {' '.join(cmd)}\n")
         print("=" * 60)
         result = subprocess.run(cmd)
         sys.exit(result.returncode)

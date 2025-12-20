@@ -44,12 +44,16 @@ sys.modules['accelerate'] = MagicMock()
 sys.modules['scipy'] = MagicMock()
 sys.modules['scipy.io'] = MagicMock()
 sys.modules['scipy.io.wavfile'] = MagicMock()
+sys.modules['PIL'] = MagicMock()
+sys.modules['PIL.Image'] = MagicMock()
+sys.modules['PIL.ImageOps'] = MagicMock()
 
 # Import the module
 import importlib.util
 spec = importlib.util.spec_from_file_location("ai_media", "ai-media.py")
 ai_media = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ai_media)
+sys.modules['ai_media'] = ai_media
 
 
 # =============================================================================
@@ -922,6 +926,192 @@ class TestTestState(unittest.TestCase):
         ai_media._test_state['active'] = False
         self.assertFalse(ai_media._test_state['active'])
 
+
+# =============================================================================
+# Resource Helper Tests
+# =============================================================================
+
+class TestResourceHelpers(unittest.TestCase):
+    """Tests for resource management and hardware detection functions."""
+    
+    def setUp(self):
+        self.orig_psutil = getattr(ai_media, 'psutil', None)
+        ai_media.psutil = MagicMock()
+        
+    def tearDown(self):
+        ai_media.psutil = self.orig_psutil
+
+    def test_get_system_resources(self):
+        """Test RAM and VRAM detection."""
+        # Setup mocks
+        mock_mem = MagicMock()
+        mock_mem.available = 16 * (1024**3) # 16GB
+        ai_media.psutil.virtual_memory.return_value = mock_mem
+        
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_properties.return_value.total_memory = 8 * (1024**3)
+        mock_torch.cuda.memory_allocated.return_value = 2 * (1024**3)
+        
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            # Run
+            ram, vram = ai_media.get_system_resources()
+            
+            # Verify
+            self.assertEqual(ram, 16.0)
+            self.assertEqual(vram, 6.0) # 8 - 2
+    
+    @patch('ai_media.get_system_resources')
+    def test_check_resources_strict_warnings(self, mock_get_resources):
+        """Test strict warnings for low resources."""
+        # Low RAM/VRAM
+        mock_get_resources.return_value = (4.0, 2.0)
+        
+        # Redirect stdout
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            # Simulate user saying 'n' (abort)
+            with patch('builtins.input', return_value='n'):
+                # We need to simulate MODEL_REQUIREMENTS lookup
+                # Since MODEL_REQUIREMENTS is a constant, we can patch the dict lookup or use a known key
+                # "stabilityai/sdxl-turbo" is in the default dict
+                with self.assertRaises(SystemExit):
+                    ai_media.check_resources_and_warn("stabilityai/sdxl-turbo")
+
+            output = mock_stdout.getvalue()
+            self.assertIn("RAM: 4.0GB available", output)
+            self.assertIn("VRAM: 2.0GB available", output)
+
+    @patch('ai_media.get_system_resources')
+    def test_check_resources_force_override(self, mock_get_resources):
+        """Test force flag overrides warnings."""
+        mock_get_resources.return_value = (4.0, 2.0)
+        
+        with patch('sys.stdout', new_callable=io.StringIO):
+            result = ai_media.check_resources_and_warn("stabilityai/sdxl-turbo", force=True)
+            self.assertTrue(result)
+
+    def test_get_optimal_device_cuda(self):
+        """Test CUDA detection."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.device.return_value = 'cuda'
+        mock_torch.float16 = 'float16'
+        
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            device, dtype = ai_media.get_optimal_device_and_dtype(quiet=True)
+            self.assertEqual(device, 'cuda')
+            self.assertEqual(dtype, 'float16')
+
+    def test_get_optimal_device_cpu(self):
+        """Test CPU fallback."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+        mock_torch.backends.mps.is_available.return_value = False
+        mock_torch.device.return_value = 'cpu'
+        mock_torch.float32 = 'float32'
+        
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            device, dtype = ai_media.get_optimal_device_and_dtype(quiet=True)
+            self.assertEqual(device, 'cpu')
+            self.assertEqual(dtype, 'float32')
+
+
+# =============================================================================
+# Generation Wrapper Tests
+# =============================================================================
+
+class TestGenerationWrappers(unittest.TestCase):
+    """Tests for main generation wrapper functions."""
+    
+    @patch('ai_media.generate_image')
+    def test_generate_image_call(self, mock_gen):
+        """Test generate_image wrapper arguments."""
+        ai_media.generate_image("prompt", "out.png", 512, 512)
+        mock_gen.assert_called_once()
+    
+    @patch('ai_media.get_optimal_device_and_dtype')
+    def test_generate_image_logic(self, mock_get_device):
+        """Test internal logic of generate_image (mocking diffusers)."""
+        # mocks
+        mock_diffusers = MagicMock()
+        mock_pipeline = mock_diffusers.AutoPipelineForText2Image.from_pretrained.return_value
+        mock_pipeline.to.return_value = mock_pipeline
+        
+        # Setup output mock
+        mock_output = MagicMock()
+        mock_output.images = [MagicMock()]
+        mock_pipeline.return_value = mock_output
+        
+        # Setup device
+        mock_device = MagicMock()
+        mock_device.type = 'cuda'
+        mock_get_device.return_value = (mock_device, MagicMock())
+        
+        # We need to block ai_media.PerformanceTracker logging or it might fail if not mocked
+        # Also patch stdout to avoid UnicodeError on Windows
+        with patch.dict('sys.modules', {'diffusers': mock_diffusers, 'torch': MagicMock()}):
+            with patch('ai_media.PerformanceTracker') as MockTracker:
+                with patch('ai_media.ResourceMonitor') as MockMonitor:
+                    # Configure ResourceMonitor instance
+                    monitor_instance = MockMonitor.return_value
+                    monitor_instance.__enter__.return_value = monitor_instance
+                    monitor_instance.get_averages.return_value = (10.0, 4.0, 2.0, 50.0)
+                    
+                    with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+                        # Run
+                        result = ai_media.generate_image("test prompt", "test.png", 512, 512, model_name="sdxl")
+                
+                        self.assertTrue(result)
+                        mock_diffusers.AutoPipelineForText2Image.from_pretrained.assert_called()
+                        mock_pipeline.assert_called() # The inference call
+
+    @patch('ai_media.generate_video')
+    def test_generate_video_call(self, mock_gen):
+        """Test generate_video wrapper arguments."""
+        ai_media.generate_video("prompt", "out.mp4", 2.0, 512, 512)
+        mock_gen.assert_called_once()
+
+    @patch('ai_media.generate_audio')
+    def test_generate_audio_call(self, mock_gen):
+        """Test generate_audio wrapper arguments."""
+        ai_media.generate_audio("prompt", "out.mp3", 10.0, 32000)
+        mock_gen.assert_called_once()
+
+
+
+# =============================================================================
+# Edit Wrapper Tests
+# =============================================================================
+
+class TestEditWrappers(unittest.TestCase):
+    """Tests for editing and manipulation functions."""
+    
+    @patch('ai_media.generate_edit')
+    def test_generate_edit_call(self, mock_gen):
+        """Test generate_edit wrapper arguments."""
+        ai_media.generate_edit("in.png", "prompt", "out.png")
+        mock_gen.assert_called_once()
+        
+    @patch('ai_media.remove_background')
+    def test_remove_background_call(self, mock_gen):
+        """Test remove_background wrapper arguments."""
+        ai_media.remove_background("in.png", "out.png")
+        mock_gen.assert_called_once()
+        
+
+# =============================================================================
+# Captioning Tests
+# =============================================================================
+
+class TestCaptioning(unittest.TestCase):
+    """Tests for captioning functions."""
+    
+    @patch('ai_media.generate_caption')
+    def test_generate_caption_call(self, mock_gen):
+        """Test generate_caption wrapper arguments."""
+        device = MagicMock()
+        ai_media.generate_caption("in.png", device)
+        mock_gen.assert_called_once()
 
 # =============================================================================
 # Main

@@ -803,36 +803,53 @@ This project uses the following open-source libraries:
 ---
 
 ## Testing (Internal)
+## 🧪 Testing
 
-This project includes two types of testing:
+The included test suite covers unit tests (Python logic) and integration tests (full generation pipelines).
 
-### Unit Tests (Code Logic)
-
-Python unit tests for verifying parsing functions, helper functions, and classes. Uses Python's built-in `unittest` module (no installation required).
+### Unit Tests
+Run the Python unit test suite to verify internal logic.
 
 ```bash
-# Run all unit tests via ai-media.py
+# Run all unit tests (Quiet/Summary mode - Default)
 python ai-media.py --unittests
+
+# Run all unit tests (Verbose mode - details for every test)
+python ai-media.py --unittests-verbose
 
 # Run a specific test class
 python ai-media.py --unittests tests.ai-media_test.TestParseSize
 
+# Run a specific test class (Verbose)
+python ai-media.py --unittests-verbose tests.ai-media_test.TestParseSize
+
 # Run a specific test method
-python ai-media.py --unittests tests.ai-media_test.TestParseSize.test_resolution_presets
+python ai-media.py --unittests tests.ai-media_test.TestParseSize.test_resolution_presets_standard
+
+# Run a specific test method (Verbose)
+python ai-media.py --unittests-verbose tests.ai-media_test.TestParseSize.test_resolution_presets_standard
 ```
 
-Or use Python's unittest module directly:
+### Integration Tests
+Run integration tests defined in `tests/integration-tests.json`.
 
 ```bash
-python -m unittest tests.ai-media_test -v
-python -m unittest tests.ai-media_test.TestParseSize -v
+# Run all integration tests (Summary)
+python ai-media.py --test
+
+# Run all integration tests (Verbose real-time output)
+python ai-media.py --test-verbose
+
+# Run specific tests
+python ai-media.py --test "Image - SDXL"
 ```
+
+> **Note**: Test output is buffered to prevent console spam. For long-running tests (like downloading models), use `--test-verbose` to see progress in real-time.
 
 | File | Description |
 | :--- | :--- |
 | `tests/ai-media_test.py` | Unit tests for parsing, helpers, and classes |
 
-You can also run unit tests from the **Interactive Mode** → **Run Tests** → **Unit Tests**.
 
 ---
 
