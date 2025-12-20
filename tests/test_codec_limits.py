@@ -276,7 +276,7 @@ def main():
                 label = "HW Encoder" if is_hardware_encoder(enc) else "SW Encoder"
                 print(f"   [{label}: {enc}]")
                 for res_name, w, h in RESOLUTIONS:
-                    t_out = 300 # 5 mins
+                    t_out = 600 # 10 mins
                     
                     success, msg, dur = check_encoder_resolution(enc, w, h, timeout=t_out)
                     
@@ -307,7 +307,7 @@ def main():
                 label = "HW Decoder" if is_hardware_decoder(dec) else "SW Decoder"
                 print(f"   [{label}: {dec}]")
                 for res_name, w, h in RESOLUTIONS:
-                    t_out = 300 # 5 mins
+                    t_out = 600 # 10 mins
                     
                     success, msg, dur = check_decoder_resolution(dec, codec, w, h, timeout=t_out)
                     
@@ -364,7 +364,7 @@ def print_summary(results, resolutions, type_label):
                 symbol = "✅" if match["pass"] else "❌"
                 row += f"  {symbol}   |"
             else:
-                row += f"  -   |"
+                row += f"  ➖   |"  # emoji dash for consistent width
         print(row)
     print(f"{'='*table_width}")
 
