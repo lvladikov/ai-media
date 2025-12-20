@@ -634,15 +634,15 @@
       "description": "Convert video from MOV to MP4"
     },
     {
-      "name": "Upscale Image - AI 2x (x2 Latent)",
-      "command": "-ui tests/testData/inputs/sample.jpg -uf 2x -o tests/testData/outputs/up_ai_2x.png --force",
+      "name": "Upscale Image - Real-ESRGAN 2x",
+      "command": "-ui tests/testData/inputs/sample.jpg -uf 2x -o tests/testData/outputs/up_realesrgan_2x.png --force",
       "expectedInputItems": [
         "tests/testData/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "tests/testData/outputs/up_ai_2x.png"
+        "tests/testData/outputs/up_realesrgan_2x.png"
       ],
-      "description": "Upscale image 2x using AI (Latent Diffusion)"
+      "description": "Upscale image 2x using Real-ESRGAN (default AI upscaler)"
     },
     {
       "name": "Upscale Image - Custom Output File",
@@ -656,15 +656,15 @@
       "description": "Upscale image with custom output filename (-uof)"
     },
     {
-      "name": "Upscale Image - Custom Strength",
-      "command": "-ui tests/testData/inputs/sample.jpg -uf 4x -us 0.5 -o tests/testData/outputs/strength_test.png --force",
+      "name": "Upscale Image - Stable Diffusion 4x",
+      "command": "-ui tests/testData/inputs/sample.jpg -uf 4x -iu sd -us 0.5 -o tests/testData/outputs/up_sd_4x.png --force",
       "expectedInputItems": [
         "tests/testData/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "tests/testData/outputs/strength_test.png"
+        "tests/testData/outputs/up_sd_4x.png"
       ],
-      "description": "Upscale image with custom strength (-us)"
+      "description": "Upscale image 4x using Stable Diffusion (slower, creative) with custom strength"
     },
     {
       "name": "Upscale Image - Simple 2x",
@@ -689,7 +689,29 @@
       "description": "Upscale image 4x using simple Lanczos method"
     },
     {
-      "name": "Upscale Video - Default",
+      "name": "Upscale Image - Real-ESRGAN 4x",
+      "command": "-ui tests/testData/inputs/sample.jpg -uf 4x -o tests/testData/outputs/up_realesrgan_4x.png --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_realesrgan_4x.png"
+      ],
+      "description": "Upscale image 4x using Real-ESRGAN (Fast Mode)"
+    },
+    {
+      "name": "Upscale Image - Stable Diffusion 2x",
+      "command": "-ui tests/testData/inputs/sample.jpg -uf 2x -iu sd -o tests/testData/outputs/up_sd_2x.png --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_sd_2x.png"
+      ],
+      "description": "Upscale image 2x using Stable Diffusion (slower, creative)"
+    },
+    {
+      "name": "Upscale Video - 2x (Real-ESRGAN)",
       "timeout": 1800,
       "command": "-uv tests/testData/inputs/sample_video.mov -uf 2x -o tests/testData/outputs/up_video.mp4 --force",
       "expectedInputItems": [
@@ -698,7 +720,90 @@
       "expectedOutputItems": [
         "tests/testData/outputs/up_video.mp4"
       ],
-      "description": "Upscale video 2x using default settings (-uv)"
+      "description": "Upscale video 2x using Real-ESRGAN (default AI upscaler)"
+    },
+    {
+      "name": "Upscale Video - 4x (Real-ESRGAN)",
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 4.0 -o tests/testData/outputs/up_video_realesrgan.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_realesrgan.mp4"
+      ],
+      "description": "Upscale video 4x using Real-ESRGAN (default AI upscaler)"
+    },
+    {
+      "name": "Upscale Video - 10K Stress Test",
+      "timeout": 2400,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 8.0 -o tests/testData/outputs/up_video_10k.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_10k.mp4"
+      ],
+      "description": "Upscale video to 10K (8x) using Real-ESRGAN to verify extreme resolution stability"
+    },
+    {
+      "name": "Upscale Video - 5K Test",
+      "timeout": 1200,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 4.0 -o tests/testData/outputs/up_video_5k.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_5k.mp4"
+      ],
+      "description": "Upscale video to 5K (4x) to test codec boundary/fallback"
+    },
+    {
+      "name": "Upscale Video - 8K HEVC Test",
+      "timeout": 1200,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 6.0 -vc hevc -o tests/testData/outputs/up_video_8k_hevc.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_8k_hevc.mp4"
+      ],
+      "description": "Upscale video to 8K using Real-ESRGAN with HEVC/H.265 Codec"
+    },
+    {
+      "name": "Upscale Video - 8K H264 Test",
+      "timeout": 1200,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 6.0 -vc h264 -o tests/testData/outputs/up_video_8k_h264.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_8k_h264.mp4"
+      ],
+      "description": "Upscale video to 8K using Real-ESRGAN with H.264 Codec"
+    },
+    {
+      "name": "Upscale Video - 4K AV1 Test",
+      "timeout": 1200,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 4.0 -vc av1 -o tests/testData/outputs/up_video_4k_av1.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_4k_av1.mp4"
+      ],
+      "description": "Upscale video to 4K using Real-ESRGAN with AV1 Codec (hardware accelerated)"
+    },
+    {
+      "name": "Upscale Video - Stable Diffusion 2x",
+      "timeout": 3600,
+      "command": "-uv tests/testData/inputs/sample_video.mov -uf 2x -vu sd -o tests/testData/outputs/up_video_sd.mp4 --force",
+      "expectedInputItems": [
+        "tests/testData/inputs/sample_video.mov"
+      ],
+      "expectedOutputItems": [
+        "tests/testData/outputs/up_video_sd.mp4"
+      ],
+      "description": "Upscale video 2x using Stable Diffusion (slower, creative details)"
     },
     {
       "name": "Upscale Video - Simple 2x",

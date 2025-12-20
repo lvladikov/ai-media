@@ -43,6 +43,50 @@ from datetime import datetime
 import PIL.Image
 import PIL.ImageOps
 
+# --- Monkey Patch for basicsr/torchvision compatibility ---
+try:
+    from torchvision.transforms import functional_tensor
+except ImportError:
+    try:
+        import torchvision.transforms.functional as F
+        import sys
+        from types import ModuleType
+        sys.modules['torchvision.transforms.functional_tensor'] = ModuleType('torchvision.transforms.functional_tensor')
+        sys.modules['torchvision.transforms.functional_tensor'].rgb_to_grayscale = F.rgb_to_grayscale
+    except Exception:
+        pass
+# ----------------------------------------------------------
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
+
+def _check_ffmpeg_encoder(encoder_name, w=256, h=256):
+    """
+    Check if FFmpeg can actually initialize the given encoder at target resolution.
+    Used for probing hardware limits (e.g. NVENC max resolution).
+    """
+    try:
+        # Run a tiny 1-frame test encoding to null at target resolution
+        cmd = [
+            'ffmpeg', '-y', '-f', 'lavfi', '-i', f'nullsrc=s={w}x{h}', 
+            '-c:v', encoder_name, '-t', '0.1', '-f', 'null', '-'
+        ]
+        
+        # Suppress output unless verbose debugging is needed
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=5)
+        return True
+    except:
+        return False
+
+try:
+    from basicsr.archs.rrdbnet_arch import RRDBNet
+    from realesrgan import RealESRGANer
+    HAS_REALESRGAN = True
+except ImportError:
+    HAS_REALESRGAN = False
+
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
@@ -286,6 +330,7 @@ _test_state = {
     'failed': 0,
     'total': 0
 }
+_interrupted = False
 
 def signal_handler(sig, frame):
     if _test_state['active']:
@@ -303,6 +348,8 @@ def signal_handler(sig, frame):
         print(f"{'='*60}")
         sys.exit(130)
     else:
+        global _interrupted
+        _interrupted = True
         print("\n\n⚠️  Interrupted! Cleaning up...")
         sys.exit(0)
 
@@ -1429,26 +1476,47 @@ def get_video_encoding_params(output_path):
     """Get FFmpeg encoding parameters based on output file extension.
     
     Returns a list of FFmpeg arguments for video codec, pixel format, and audio codec.
-    Supports: mp4, mkv, mov, webm, wmv, avi
+    Supports: mp4, mkv, mov, webm, wmv, avi.
+    Utilizes hardware acceleration (NVENC/VideoToolbox) if available.
     """
+    import torch
     ext = os.path.splitext(output_path)[1].lower()
     
-    # Default: H.264 for broad compatibility
-    if ext in ['.mp4', '.m4v']:
-        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
-    elif ext == '.mkv':
-        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
-    elif ext == '.mov':
-        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+    # Platform detection
+    has_cuda = torch.cuda.is_available()
+    has_mps = torch.backends.mps.is_available()
+    
+    # 1. Video Codec Selection (Default to H.264 for widest compatibility)
+    vcodec = "libx264"
+    if ext in ['.mp4', '.m4v', '.mkv', '.mov']:
+        if has_cuda:
+            vcodec = "h264_nvenc"
+        elif has_mps:
+            vcodec = "h264_videotoolbox"
     elif ext == '.webm':
-        return ["-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:v", "2M"]
+        vcodec = "libvpx-vp9"
     elif ext == '.wmv':
-        return ["-c:v", "wmv2", "-c:a", "wmav2", "-b:v", "2M"]
+        vcodec = "wmv2"
     elif ext == '.avi':
-        return ["-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-c:a", "mp3", "-b:v", "2M"]
-    else:
-        # Fallback to H.264
-        return ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+        vcodec = "mpeg4"
+        
+    # 2. Audio Codec Selection
+    acodec = "aac"
+    if ext == '.webm':
+        acodec = "libopus"
+    elif ext == '.wmv':
+        acodec = "wmav2"
+    elif ext == '.avi':
+        acodec = "mp3"
+        
+    # 3. Parameters
+    params = ["-c:v", vcodec, "-pix_fmt", "yuv420p", "-c:a", acodec]
+    
+    # Add bitrate for less efficient formats
+    if ext in ['.webm', '.wmv', '.avi']:
+        params.extend(["-b:v", "2M"])
+        
+    return params
 
 
 def generate_video(prompt, output_path, duration, width, height, model_name="default", image_input=None, audio_prompt=None, audio_model="default"):
@@ -1893,7 +1961,7 @@ class ResourceMonitor:
                     # Windows/Linux with NVIDIA drivers
                     result = subprocess.run(
                         ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
-                        capture_output=True, text=True, check=False
+                        capture_output=True, text=True, check=False, timeout=1.0
                     )
                     if result.returncode == 0:
                         gpu_load = float(result.stdout.strip())
@@ -1911,7 +1979,7 @@ class ResourceMonitor:
                     result = subprocess.run(
                         ['ioreg', '-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'],
                         capture_output=True, text=True, check=False,
-                        env=env
+                        env=env, timeout=1.0
                     )
                     if result.returncode == 0:
                         # Extract "Device Utilization %" from PerformanceStatistics
@@ -2179,6 +2247,10 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         from diffusers import StableDiffusionUpscalePipeline, StableDiffusionLatentUpscalePipeline
         from PIL import Image
         import torch
+        import time 
+        
+        start_time = time.time()
+
 
         device, dtype = get_optimal_device_and_dtype()
         
@@ -2269,7 +2341,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
                         pipe_x4.enable_model_cpu_offload()
                     else:
                         pipe_x4.to(device)
-                    if hasattr(pipe_x4, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
+                    if hasattr(pipe_x4, 'vae') and hasattr(pipe_x4.vae, 'enable_tiling'):
                         pipe_x4.vae.enable_tiling()
                 return pipe_x4, 8  # alignment requirement
         
@@ -2279,6 +2351,8 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         
         current_image = image
         
+        monitor = ResourceMonitor()
+        monitor.__enter__()
         for pass_idx, (model_type, step_scale) in enumerate(passes, 1):
             print("")
             print("=" * 60)
@@ -2313,21 +2387,24 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
                 padded_image = current_image
             
             # Run upscaling with model-specific parameters
+            print(f"   ⏳ Rendering Pass {pass_idx}...", flush=True)
             if model_type == 'x2':
                 # x2 Latent Upscaler: doesn't support noise_level or negative_prompt
                 upscaled_result = pipe(
                     prompt=upscale_prompt, 
                     image=padded_image, 
                     num_inference_steps=50,
+                    show_progress_bar=True # Explicitly show progress for Step 2
                 ).images[0]
             else:
                 # x4 Upscaler: supports noise_level and negative_prompt
                 upscaled_result = pipe(
                     prompt=upscale_prompt, 
-                    negative_prompt=negative_prompt,
                     image=padded_image, 
-                    num_inference_steps=50,
+                    negative_prompt=negative_prompt,
                     noise_level=noise_level,
+                    num_inference_steps=75,
+                    show_progress_bar=True # Explicitly show progress for Step 2
                 ).images[0]
             
             # Crop back to target dimensions (remove padding effect)
@@ -2353,10 +2430,736 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         current_image.save(output_path)
         print(f"\n✅ Upscaled image saved to {output_path}")
+        
+        # Performance Summary
+        monitor.__exit__(None, None, None)
+        duration = time.time() - start_time
+        cpu_p, ram_avail, vram_avail, gpu_p = monitor.get_averages()
+        
+        mem = (ram_avail, vram_avail, cpu_p, gpu_p)
+        print(f"   ✓ Processed in {duration:.1f}s (RAM: {mem[0]:.1f}GB | VRAM: {mem[1]:.1f}GB | CPU: {mem[2]:.1f}% | GPU: {mem[3]:.1f}%)")
+        
+        # Write JSON Report if requested
+        try:
+            g_args = globals().get("args")
+            if g_args and hasattr(g_args, "report_json") and g_args.report_json:
+                import json
+                stats = {
+                    "time": duration,
+                    "ram": mem[0],
+                    "vram": mem[1],
+                    "cpu": mem[2],
+                    "gpu": mem[3]
+                }
+                with open(g_args.report_json, 'w') as f:
+                    json.dump(stats, f)
+        except Exception as e:
+            print(f"   ⚠️  Failed to write report JSON: {e}")
+
         return True
         
     except Exception as e:
         print(f"❌ Upscaling failed: {e}")
+        return False
+
+def upscale_image_fast(input_path, output_path, factor=4.0):
+    """Upscale image using Real-ESRGAN (Fast, single pass)."""
+    if not HAS_REALESRGAN:
+        print("❌ Real-ESRGAN not installed. Cannot run fast upscale.")
+        print("   Please install: pip install realesrgan")
+        return False
+
+    print(f"🚀 Upscaling Image (Fast Mode): {input_path}", flush=True)
+    print(f"   Factor: {factor}x", flush=True)
+    
+    try:
+        import cv2
+        from PIL import Image
+        import numpy as np
+        import time
+        
+        start_time = time.time()
+        
+        if not os.path.exists(input_path):
+            print(f"❌ Input file not found: {input_path}")
+            return False
+
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Check for CUDA/MPS availability
+        device, _ = get_optimal_device_and_dtype(quiet=True)
+        print(f"   Device: {device}", flush=True)
+
+        # Load default model (RealESRGAN_x4plus)
+        model_name = 'RealESRGAN_x4plus'
+        
+        # Model configuration
+        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+        netscale = 4
+
+        # Determine model path
+        weights_dir = Path("weights")
+        weights_dir.mkdir(exist_ok=True)
+        model_path = weights_dir / f"{model_name}.pth"
+        
+        if not model_path.exists():
+            print(f"   ⬇️  Downloading model: {model_name}...")
+            model_path_str = f'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/{model_name}.pth'
+        else:
+            model_path_str = str(model_path)
+
+        upsampler = RealESRGANer(
+            scale=netscale,
+            model_path=model_path_str,
+            model=model,
+            tile=0,
+            tile_pad=10,
+            pre_pad=0,
+            half=True if device.type != 'cpu' else False,
+            device=device,
+        )
+
+        # Load image with OpenCV (BGR format)
+        img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            print(f"❌ Failed to load image: {input_path}")
+            return False
+
+        orig_h, orig_w = img.shape[:2]
+        print(f"   Input: {orig_w}x{orig_h}")
+
+        # Start resource monitoring
+        monitor = ResourceMonitor()
+        monitor.__enter__()
+        
+        try:
+            # Upscale with Real-ESRGAN
+            print(f"   🎨 Enhancing details with Real-ESRGAN...", flush=True)
+            
+            # Since Real-ESRGAN's .enhance() is a single atomic call, we show a waiting indicator
+            # or a synthetic progress message for high resolutions.
+            if factor > 4.0 or orig_w > 4000:
+                print(f"   ⏳ This is a very high resolution upscale. GPU is working...", flush=True)
+                
+            output, _ = upsampler.enhance(img, outscale=factor)
+            
+            out_h, out_w = output.shape[:2]
+            print(f"   ✅ Enhancement complete. Final size: {out_w}x{out_h}", flush=True)
+            
+            # Save output
+            cv2.imwrite(output_path, output)
+            print(f"\n✅ Fast upscaled image saved to {output_path}")
+            
+        finally:
+            monitor.__exit__(None, None, None)
+
+        # Performance Summary
+        duration = time.time() - start_time
+        cpu_p, ram_avail, vram_avail, gpu_p = monitor.get_averages()
+        
+        mem = (ram_avail, vram_avail, cpu_p, gpu_p)
+        print(f"   ✓ Processed in {duration:.1f}s (RAM: {mem[0]:.1f}GB | VRAM: {mem[1]:.1f}GB | CPU: {mem[2]:.1f}% | GPU: {mem[3]:.1f}%)")
+        
+        # Write JSON Report if requested
+        try:
+            g_args = globals().get("args")
+            if g_args and hasattr(g_args, "report_json") and g_args.report_json:
+                import json
+                stats = {
+                    "time": duration,
+                    "ram": mem[0],
+                    "vram": mem[1],
+                    "cpu": mem[2],
+                    "gpu": mem[3]
+                }
+                with open(g_args.report_json, 'w') as f:
+                    json.dump(stats, f)
+        except Exception as e:
+            print(f"   ⚠️  Failed to write report JSON: {e}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Fast upscaling failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def upscale_video_fast(video_path, output_path, factor=4.0, device=None, model_name=None, force_realesrgan=False, upscale_half=False, video_upscaler=None, codec="auto"):
+    """Upscale video using Real-ESRGAN (Fast, single pass per frame)."""
+    if not HAS_REALESRGAN:
+        print("❌ Real-ESRGAN not installed. Cannot run fast upscale.")
+        print("   Please install: pip install realesrgan")
+        return False
+
+    print(f"🚀 Upscaling Video (Fast Mode): {video_path}", flush=True)
+    print(f"   Factor: {factor}x (fixed or scaled)", flush=True)
+    
+    # Real-ESRGAN typically uses x4 models. If factor != 4, we might need resizing.
+    # But usually x4plus is a 4x model.
+    # If user asks for 2x, we could upscale 4x then downscale 0.5x, or find a 2x model.
+    # For now, we will use the standard x4 model and Lanczos resize final output if needed, 
+    # OR rely on RealESRGANer's outscale param if it supports arbitrary scaling (it does).
+    
+    try:
+        # --- OpenH264 DLL Setup (Windows) - BEFORE cv2 import ---
+        # Python 3.8+ requires explicit DLL directory registration
+        # The DLL must be in place BEFORE cv2 is imported
+        if os.name == 'nt':
+            dll_name = "openh264-1.8.0-win64.dll"
+            install_dir = os.path.join(sys.prefix, 'Scripts')
+            if not os.path.exists(install_dir):
+                install_dir = os.getcwd()
+            
+            # Determine cv2 package directory (without importing cv2)
+            cv2_dir = os.path.join(sys.prefix, 'Lib', 'site-packages', 'cv2')
+            cv2_dll_path = os.path.join(cv2_dir, dll_name) if os.path.isdir(cv2_dir) else None
+            
+            dll_path = os.path.join(install_dir, dll_name)
+            cwd_dll = os.path.join(os.getcwd(), dll_name)
+            
+            # Download DLL if not present anywhere
+            if not os.path.exists(dll_path) and not os.path.exists(cwd_dll) and (not cv2_dll_path or not os.path.exists(cv2_dll_path)):
+                try:
+                    print(f"   ⬇️  Downloading OpenH264 library for H.264 support...")
+                    import urllib.request
+                    import bz2
+                    import shutil
+                    
+                    url = "https://github.com/cisco/openh264/releases/download/v1.8.0/openh264-1.8.0-win64.dll.bz2"
+                    bz2_path = dll_path + ".bz2"
+                    
+                    urllib.request.urlretrieve(url, bz2_path)
+                    
+                    with bz2.BZ2File(bz2_path, 'rb') as fr, open(dll_path, 'wb') as fw:
+                        shutil.copyfileobj(fr, fw)
+                    
+                    os.remove(bz2_path)
+                    print(f"   ✅ OpenH264 downloaded: {dll_name}")
+                except Exception as e:
+                    print(f"   ⚠️  Failed to download OpenH264: {e}")
+            
+            # Copy DLL to cv2 package directory (where OpenCV looks for it)
+            if cv2_dll_path and not os.path.exists(cv2_dll_path):
+                src_dll = dll_path if os.path.exists(dll_path) else cwd_dll
+                if os.path.exists(src_dll):
+                    try:
+                        import shutil
+                        shutil.copy2(src_dll, cv2_dll_path)
+                        print(f"   ✅ OpenH264 installed to cv2 package")
+                    except Exception:
+                        pass
+            
+            # Register DLL directory as fallback
+            if hasattr(os, 'add_dll_directory'):
+                try:
+                    os.add_dll_directory(install_dir)
+                    if cv2_dll_path:
+                        os.add_dll_directory(os.path.dirname(cv2_dll_path))
+                except Exception:
+                    pass
+            os.environ['PATH'] = install_dir + os.pathsep + os.environ.get('PATH', '')
+        # ----------------------------------------------------
+        
+        import cv2
+        import torch
+        
+        if not os.path.exists(video_path):
+            print(f"❌ Input file not found: {video_path}")
+            return False
+
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Check for CUDA/MPS availability
+        device, _ = get_optimal_device_and_dtype(quiet=True)
+        # RealESRGANer expects device object
+        
+        print(f"   Device: {device}", flush=True)
+
+        # Load default model (RealESRGAN_x4plus)
+        model_name = 'RealESRGAN_x4plus'
+        
+        # Model configuration
+        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+        netscale = 4
+
+        # Determine model path
+        # Check standard weights folder or download
+        weights_dir = Path("weights")
+        weights_dir.mkdir(exist_ok=True)
+        model_path = weights_dir / f"{model_name}.pth"
+        
+        if not model_path.exists():
+            print(f"   ⬇️  Downloading model: {model_name}...")
+            model_url = f'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/{model_name}.pth'
+            # We pass the URL string to RealESRGANer if file doesn't exist? 
+            # Actually RealESRGANer takes 'model_path' as string. If it's a local path it uses it.
+            # If we want auto-download, we might need to do it ourselves or rely on library.
+            # The library logic usually downloads if we pass a name, but main class takes path.
+            # Let's provide the URL to a downloader helper or just pass the path and hope user has it?
+            # Prototype succeeded, but prototype printed "Downloading...". 
+            # In prototype we set model_path to URL if local file missing?
+            # Let's check prototype code logic again.
+            # Ah, checked previous turn: 
+            # if not os.path.isfile(model_path): model_path = f'https...'. 
+            # So RealESRGANer handles URL download if passed as path!
+            model_path_str = str(model_path) if model_path.exists() else f'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/{model_name}.pth'
+        else:
+            model_path_str = str(model_path)
+
+        upsampler = RealESRGANer(
+            scale=netscale,
+            model_path=model_path_str,
+            model=model,
+            tile=0, # Auto-tile? 0 means no tile. Use >0 for low VRAM but checks needed.
+            tile_pad=10,
+            pre_pad=0,
+            half=True if device.type != 'cpu' else False, # fp16 on GPU
+            device=device,
+        )
+
+        # Video Capture
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"❌ Failed to open input video.")
+            return False
+
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # (OpenH264 DLL setup is handled before cv2 import above)
+
+        print(f"   Input: {width}x{height} @ {fps}fps")
+        
+        # Calculate Output dimensions
+        target_w = int(width * factor)
+        target_h = int(height * factor)
+        
+        # FFmpeg requires even dimensions
+        if target_w % 2 != 0: target_w += 1
+        if target_h % 2 != 0: target_h += 1
+
+        print(f"   Output: {target_w}x{target_h} (Target Codec: {codec.upper()})")
+        
+        # Resolution limit check - HEVC Level 6.2 maxes out at 8192x4320
+        # libx265 can handle higher but may fail on extreme resolutions
+        # Maximum practical limit is around 16K (16384x16384)
+        # Beyond that, we auto-switch to AV1
+        # HARD LIMIT: 15K max - tested on Windows, 16K (432MB/frame) exceeds OS pipe buffer limits
+        # 15K (380MB/frame) works reliably
+        MAX_DIMENSION = 15360
+        if target_w > MAX_DIMENSION or target_h > MAX_DIMENSION:
+            print(f"   ❌ Target Resolution {target_w}x{target_h} exceeds the stable 15K limit ({MAX_DIMENSION}px).")
+            print(f"   ℹ️  The input video is {width}x{height}. A factor of {factor}x results in ~{max(target_w, target_h)/1024:.1f}K.")
+            print(f"   ℹ️  At 16K+, frames exceed the Windows pipe buffer (432MB+), causing FFmpeg to crash.")
+            print(f"   ℹ️  Maximum safe upscale factor for this video: {MAX_DIMENSION / max(width, height):.1f}x (to reach 15K).")
+            return False
+
+
+        # We will write to a temp file first (no audio), then mux audio
+        temp_video_out = output_path + ".temp.mp4"
+        
+        # Video Writer
+        # Try prioritized list of codecs for 8K Support
+        # 1. avc1 (H.264) - Best compatibility, but needs OpenH264 on Windows
+        # 2. hevc (H.265) - Best efficiency, high-res
+        # 3. mp4v (MPEG-4) - Fallback, but size limit at 4K/8K?
+        
+        codecs_to_try = []
+        if target_w > 4096 or target_h > 2304:
+             codecs_to_try = ['avc1', 'hevc', 'mp4v']
+        else:
+             codecs_to_try = ['mp4v', 'avc1'] # Default behavior
+        # Try to suppress OpenCV/FFmpeg backend errors during this probe
+        from contextlib import contextmanager
+        # os and sys are already imported globally
+
+
+        @contextmanager
+        def suppress_stderr():
+            with open(os.devnull, "w") as devnull:
+                old_stderr = os.dup(2)
+                sys.stderr.flush()
+                try:
+                    os.dup2(devnull.fileno(), 2)
+                    yield
+                finally:
+                    os.dup2(old_stderr, 2)
+                    os.close(old_stderr)
+
+        # Determine OpenCV backend preference
+        api_preference = cv2.CAP_ANY # Default
+        if sys.platform == 'win32':
+            api_preference = cv2.CAP_DSHOW # DirectShow for Windows
+        elif sys.platform == 'darwin':
+            api_preference = cv2.CAP_AVFOUNDATION # AVFoundation for macOS
+        else: # Linux and others
+            api_preference = cv2.CAP_FFMPEG
+    
+        # 4. Initialize Video Writer
+        # Try native OpenCV writers first (faster if they work), fallback to Pipe.
+        # HEVC is preferred for 8K but harder to get working natively.
+        
+        fourcc = None
+        fallback_pipe = False
+        
+        # Determine preferred codec based on arg and resolution
+        target_codecs = []
+        
+        if codec == 'hevc':
+             target_codecs = ['hevc', 'hvc1'] # Try HEVC variants
+        elif codec == 'av1':
+             target_codecs = ['av01'] # Rare in OpenCV, but try anyway
+        elif codec == 'h264':
+             # H.264 max is 8K (8192x4320). Force HEVC if user requests h264 but resolution exceeds spec.
+             if target_w > 8192 or target_h > 4320:
+                 print(f"   ℹ️  Resolution {target_w}x{target_h} exceeds H.264 limits. Using HEVC instead.")
+                 target_codecs = ['hevc', 'hvc1']
+             else:
+                 target_codecs = ['avc1']
+        else: # auto
+            # Auto-select codec based on resolution
+            if target_w > 8192 or target_h > 4320:
+                # 8K+ requires HEVC
+                target_codecs = ['hevc', 'hvc1', 'mp4v']
+            elif target_w > 3840 or target_h > 2160:
+                # 4K-8K: try H.264 first, fallback to HEVC
+                target_codecs = ['avc1', 'hevc', 'mp4v']
+            else:
+                # Standard resolutions
+                target_codecs = ['mp4v', 'avc1']
+                
+        # Add fail-safes
+        if 'mp4v' not in target_codecs: target_codecs.append('mp4v')
+        
+        out = None
+        active_codec = "unknown"
+        
+        # Attempt native initialization
+        with suppress_stderr():
+            for c in target_codecs:
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*c)
+                    out = cv2.VideoWriter(temp_video_out, api_preference, fourcc, fps, (target_w, target_h))
+                    if out.isOpened():
+                        active_codec = c
+                        # Basic check if it accepts frames of this size?
+                        # Some writers open but fail on write. Hard to test without writing.
+                        # We will assume success and catch write errors in the loop.
+                        break
+                except Exception:
+                    pass # Try next codec
+        
+        if not out or not out.isOpened():
+             print(f"   ℹ️  OpenCV writers failed. Falling back to robust FFmpeg Pipe...")
+             fallback_pipe = True
+             out = "FFMPEG_PIPE"
+        else:
+             print(f"   🎥 Video Writer initialized with codec: '{active_codec}'")
+             
+        if out == "FFMPEG_PIPE":
+            # Raw Pipe Fallback
+            # Determine encoder lib based on request
+            vcodec_lib = "libx264"
+            
+            if codec == 'hevc':
+                 # Try hardware HEVC first at target resolution
+                 if device.type == 'cuda' and _check_ffmpeg_encoder("hevc_nvenc", target_w, target_h):
+                     vcodec_lib = "hevc_nvenc"
+                 elif device.type == 'mps' and _check_ffmpeg_encoder("hevc_videotoolbox", target_w, target_h):
+                     vcodec_lib = "hevc_videotoolbox"
+                 else:
+                     vcodec_lib = "libx265"
+                     
+            elif codec == 'av1':
+                 # Try hardware AV1 first at target resolution
+                 if device.type == 'cuda' and _check_ffmpeg_encoder("av1_nvenc", target_w, target_h):
+                     vcodec_lib = "av1_nvenc"
+                     print(f"   ℹ️  Hardware AV1 Encoding supported (av1_nvenc).")
+                 else:
+                     # Switch to HEVC as fallback, checking HW then SW
+                     print(f"   ℹ️  Hardware AV1 not supported at {target_w}x{target_h}. Fallback protocol initiated.")
+                     if device.type == 'cuda' and _check_ffmpeg_encoder("hevc_nvenc", target_w, target_h):
+                         vcodec_lib = "hevc_nvenc" 
+                         print(f"   ℹ️  Fallback: Using Hardware HEVC (hevc_nvenc).")
+                     elif device.type == 'mps' and _check_ffmpeg_encoder("hevc_videotoolbox", target_w, target_h):
+                         vcodec_lib = "hevc_videotoolbox"
+                         print(f"   ℹ️  Fallback: Using Hardware HEVC (hevc_videotoolbox).")
+                     else:
+                         vcodec_lib = "libx265"
+                         print(f"   ℹ️  Fallback: Using Software HEVC (libx265).")
+            
+            else: # h264 or auto
+                # For H.264, check limits. If target > 8K (or even 4K depending on card), switch to HEVC
+                # Actually, check_ffmpeg_encoder("h264_nvenc", w, h) will tell us if H.264 is viable.
+                use_h264 = True
+                if device.type == 'cuda' and _check_ffmpeg_encoder("h264_nvenc", target_w, target_h):
+                     vcodec_lib = "h264_nvenc"
+                elif device.type == 'mps' and _check_ffmpeg_encoder("h264_videotoolbox", target_w, target_h):
+                     vcodec_lib = "h264_videotoolbox"
+                else:
+                     # Fallback to software h264
+                     # But software h264 also fails at extreme high res (level limits).
+                     # Probe software h264
+                     if _check_ffmpeg_encoder("libx264", target_w, target_h):
+                         vcodec_lib = "libx264"
+                     else:
+                         use_h264 = False
+                
+                # If H.264 failed or if target is visibly too large for efficient H.264
+                if not use_h264 or target_w > 8192 or target_h > 4320:
+                     # Switch to HEVC
+                     msg = "H.264 limits exceeded" if use_h264 else "H.264 encoder failed"
+                     if device.type == 'cuda' and _check_ffmpeg_encoder("hevc_nvenc", target_w, target_h):
+                          vcodec_lib = "hevc_nvenc"
+                     elif device.type == 'mps' and _check_ffmpeg_encoder("hevc_videotoolbox", target_w, target_h):
+                          vcodec_lib = "hevc_videotoolbox"
+                     else:
+                          vcodec_lib = "libx265"
+                     print(f"   ℹ️  Resolution {target_w}x{target_h}: {msg}. Switching to HEVC ({vcodec_lib}).")
+
+            # Final check for > 8K (Extreme resolutions)
+            # Ensure we didn't pick something that will fail, though probing should have caught it.
+            # If we are on software HEVC, we are usually good up to 16K.
+            pass
+            
+            # Build FFmpeg command based on codec
+            if vcodec_lib in ["av1_nvenc", "av1_vulkan"]:
+                # AV1 encoder command
+                if vcodec_lib == "av1_nvenc":
+                    ffmpeg_cmd = [
+                        'ffmpeg', '-y',
+                        '-f', 'rawvideo',
+                        '-vcodec', 'rawvideo',
+                        '-s', f'{target_w}x{target_h}',
+                        '-pix_fmt', 'bgr24',
+                        '-r', str(fps),
+                        '-i', '-',
+                        '-c:v', 'av1_nvenc',
+                        '-preset', 'p4',  # p1=fastest, p7=slowest. p4 is balanced.
+                        '-cq', '30',      # Constant quality mode
+                        '-pix_fmt', 'yuv420p',
+                        temp_video_out
+                    ]
+                else:
+                    ffmpeg_cmd = [
+                        'ffmpeg', '-y',
+                        '-f', 'rawvideo',
+                        '-vcodec', 'rawvideo',
+                        '-s', f'{target_w}x{target_h}',
+                        '-pix_fmt', 'bgr24',
+                        '-r', str(fps),
+                        '-i', '-',
+                        '-c:v', 'libsvtav1',
+                        '-preset', '8',  # 0=slowest/best, 13=fastest. 8 is a good balance.
+                        '-crf', '30',    # AV1 CRF: 0-63, lower=better. 30 is visually lossless.
+                        '-pix_fmt', 'yuv420p',
+                        temp_video_out
+                    ]
+            else:
+                ffmpeg_cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'rawvideo',
+                    '-vcodec', 'rawvideo',
+                    '-s', f'{target_w}x{target_h}',
+                    '-pix_fmt', 'bgr24',
+                    '-r', str(fps),
+                    '-i', '-',
+                    '-c:v', vcodec_lib,
+                    '-pix_fmt', 'yuv420p',
+                ]
+                
+                # Dynamic Bitrate/Quality
+                if "nvenc" in vcodec_lib:
+                    ffmpeg_cmd.extend(['-preset', 'p4', '-cq', '20'])
+                elif "videotoolbox" in vcodec_lib:
+                    # VideoToolbox doesn't use -crf or -cq for high-res reliably
+                    # We use -allow_sw 1 to permit software fallback if HW limits hit (rare but safe)
+                    ffmpeg_cmd.extend(['-realtime', '1', '-allow_sw', '1'])
+                else: # libx264/265
+                    ffmpeg_cmd.extend(['-preset', 'fast', '-crf', '18' if codec == 'hevc' else '20'])
+                
+                ffmpeg_cmd.append(temp_video_out)
+            
+            import subprocess
+            try:
+                 ffmpeg_proc = subprocess.Popen(
+                    ffmpeg_cmd, 
+                    stdin=subprocess.PIPE, 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.PIPE # Capture stderr for debugging
+                 )
+                 # Quick check for immediate startup failure
+                 time.sleep(0.2)
+                 if ffmpeg_proc.poll() is not None:
+                     err = ffmpeg_proc.stderr.read().decode()
+                     print(f"   ❌ FFmpeg Pipe failed to start ({vcodec_lib}): {err.strip()}")
+                     return False
+                 print(f"   ✅ FFmpeg Pipe initialized ({vcodec_lib}).")
+            except Exception as e:
+                 print(f"   ❌ FFmpeg Pipe failed: {e}")
+                 return False
+
+        if 'start_time' not in locals():
+            # Use the global time module (imported at top of file)
+            start_time = time.time()
+        
+        print("   🎨 Upscaling frames...", flush=True)
+        
+        frame_idx = 0
+        monitor = ResourceMonitor()
+        if psutil: 
+            monitor.__enter__() # Only start thread if psutil available
+
+        try:
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
+                frame_idx += 1
+                
+                # Process with RealESRGANer
+                # It handles tiled processing internally if needed, very memory efficient
+                try:
+                    output, _ = upsampler.enhance(frame, outscale=factor)
+                except Exception as e:
+                    print(f"\n   ❌ Real-ESRGAN failed on frame {frame_idx}: {e}")
+                    print(f"   ℹ️  This may indicate the resolution ({target_w}x{target_h}) exceeds GPU memory limits.")
+                    raise
+                
+                # Resize if needed (for non-integer checks above, though RealESRGAN usually matches factor)
+                # But we forced target_w/h to be even, so let's resize to match exactly
+                if output.shape[1] != target_w or output.shape[0] != target_h:
+                    output = cv2.resize(output, (target_w, target_h))
+                
+                if output.shape[1] != target_w or output.shape[0] != target_h:
+                    output = cv2.resize(output, (target_w, target_h))
+                
+                if out == "FFMPEG_PIPE":
+                    # Ensure uint8 data type for raw piping (fixes "Black Video" issue)
+                    import numpy as np
+                    if output.dtype != np.uint8:
+                        output = output.astype(np.uint8)
+                    try:
+                        # Chunked write to avoid 'Errno 22' on massive frames (Windows pipe limits)
+                        raw_data = output.tobytes()
+                        chunk_size = 64 * 1024 * 1024 # 64MB chunks
+                        for i in range(0, len(raw_data), chunk_size):
+                            ffmpeg_proc.stdin.write(raw_data[i:i+chunk_size])
+                    except Exception as e:
+                        print(f"\n   ❌ FFmpeg pipe write failed on frame {frame_idx}: {e}")
+                        print(f"   ℹ️  Frame size: {output.nbytes / 1024 / 1024:.1f}MB. Target Resolution: {target_w}x{target_h}")
+                        raise
+                else:
+                    out.write(output)
+                    
+                if frame_idx % 10 == 0:
+                    print(f"   Frame {frame_idx}/{total_frames}...", flush=True)
+                    
+        finally:
+            cap.release()
+            
+            non_error_exit = True
+            try:
+                if hasattr(monitor, 'thread') and monitor.thread and monitor.thread.is_alive():
+                    monitor.__exit__(None, None, None)
+            except:
+                non_error_exit = False
+                
+            if out == "FFMPEG_PIPE":
+                try:
+                    ffmpeg_proc.stdin.close()
+                except:
+                    pass
+                
+                # Robust wait with timeout
+                try:
+                    ffmpeg_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print("   ⚠️  FFmpeg process hung. Forcing termination...", flush=True)
+                    ffmpeg_proc.terminate()
+                    try:
+                        ffmpeg_proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        ffmpeg_proc.kill()
+                    except subprocess.TimeoutExpired:
+                        ffmpeg_proc.kill()
+            
+            # Friendly exit message
+            if '_interrupted' in globals() and _interrupted:
+                print("👋 Goodbye!")
+                
+        print(f"\n   ✅ Video track processing complete.")
+        
+        # Performance Summary
+        duration = time.time() - start_time
+        cpu_p, ram_avail, vram_avail, gpu_p = monitor.get_averages()
+        
+        mem = (ram_avail, vram_avail, cpu_p, gpu_p)
+        print(f"   ✓ Processed in {duration:.1f}s (RAM: {mem[0]:.1f}GB | VRAM: {mem[1]:.1f}GB | CPU: {mem[2]:.1f}% | GPU: {mem[3]:.1f}%)")
+        
+        # Write JSON Report if requested (for Test Runner Stats)
+        try:
+            # We need to access 'args' from the global scope (main module args)
+            # Or assume it was passed? Standard pattern in this file relies on global 'args' often,
+            # but cleaner to check if 'args' is in globals.
+            # Using 'globals().get("args")' as this function is top-level.
+            g_args = globals().get("args")
+            if g_args and hasattr(g_args, "report_json") and g_args.report_json:
+                import json
+                stats = {
+                    "time": duration,
+                    "ram": mem[0],
+                    "vram": mem[1],
+                    "cpu": mem[2],
+                    "gpu": mem[3]
+                }
+                with open(g_args.report_json, 'w') as f:
+                    json.dump(stats, f)
+        except Exception as e:
+            print(f"   ⚠️  Failed to write report JSON: {e}")
+
+        # Mux Audio if source had audio
+        # We can use FFmpeg to copy audio from source to dest
+        print(f"   🔗 Muxing audio...", flush=True)
+        import subprocess
+        
+        # Try to copy audio from source. If it fails (no audio), we use temp video as-is.
+        # UPDATE: The video is already encoded by FFmpeg pipe (could be H.264 or HEVC).
+        # We should COPY the video stream and only re-encode audio.
+        
+        cmd = [
+             "ffmpeg", "-y",
+             "-i", temp_video_out,    # Input 0: Upscaled video (silent, already encoded)
+             "-i", video_path,        # Input 1: Original video (audio source)
+             "-map", "0:v",           # Use video from input 0
+             "-map", "1:a?",          # Use audio from input 1 (optional)
+             "-c:v", "copy",          # COPY video stream (preserves HEVC/H.264)
+             "-c:a", "aac",           # Encode audio to AAC
+             "-shortest",             # Match shortest
+             output_path,
+             "-loglevel", "error"
+        ]
+        
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"✅ Fast upscaled video saved to {output_path}")
+            os.remove(temp_video_out)
+            return True
+        except subprocess.CalledProcessError:
+            print("⚠️  Muxing failed or no audio found. Moving silent video to output.")
+            if os.path.exists(temp_video_out):
+                  if os.path.exists(output_path): os.remove(output_path)
+                  os.rename(temp_video_out, output_path)
+            return True
+
+    except Exception as e:
+        print(f"❌ Fast upscaling failed: {e}")
         return False
 
 def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
@@ -3668,21 +4471,55 @@ def run_interactive(jump_point=None):
         # Method
         print("\n⚙️ Select Method:\n")
         method_options = [
-            ("AI Upscale (High Quality, Slow)", "ai"),
+            ("AI Upscale (High Quality)", "ai"),
             ("Simple Upscale (Fast, Lanczos)", "simple"),
         ]
         method = prompt_choice("Method", method_options)
         if method is None:
             return
         
+        ai_model = "realesrgan"
+        video_codec = "auto"
+        
+        if method == "ai":
+            # Select Model
+            print("\n🤖 Select AI Model:\n")
+            model_options = [
+                ("Real-ESRGAN (Fast, Faithful)", "realesrgan"),
+                ("Stable Diffusion (Slow, Creative)", "sd"),
+            ]
+            ai_model = prompt_choice("Model", model_options)
+            if ai_model is None:
+                return
+
+            if media_type == "video":
+                # Select Codec for Video
+                print("\n🎥 Select Video Codec:\n")
+                codec_options = [
+                    ("Auto (Default)", "auto"),
+                    ("H.264", "h264"),
+                    ("HEVC (H.265)", "hevc"),
+                    ("AV1", "av1"),
+                ]
+                video_codec = prompt_choice("Codec", codec_options)
+                if video_codec is None:
+                    return
+
         # Build command
         if media_type == "image":
             cmd = f"-ui \"{input_file}\" -uf {factor}"
+            if method == "ai":
+                cmd += f" -iu {ai_model}"
+            else:
+                cmd += " -su"
         else:
             cmd = f"-uv \"{input_file}\" -uf {factor}"
-        
-        if method == "simple":
-            cmd += " -su"
+            if method == "ai":
+                cmd += f" -vu {ai_model}"
+                if video_codec != "auto":
+                    cmd += f" -vc {video_codec}"
+            else:
+                cmd += " -su"
         
         run_self_command(cmd)
         input("\nPress Enter to continue...")
@@ -4064,16 +4901,19 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
     print(f"   • Press CTRL+C at any time to interrupt")
     print(f"{'='*60}")
     
-    try:
-        choice = input(f"\n   Continue? [Y/n]: ").lower().strip()
-        if choice in ['n', 'no']:
-            print("❌ Test cancelled.")
+    if os.environ.get("AI_MEDIA_FORCE") != "1":
+        try:
+            choice = input(f"\n   Continue? [Y/n]: ").lower().strip()
+            if choice in ['n', 'no']:
+                print("❌ Test cancelled.")
+                if exit_on_finish: sys.exit(0)
+                return False
+        except KeyboardInterrupt:
+            print("\n❌ Test cancelled.")
             if exit_on_finish: sys.exit(0)
             return False
-    except KeyboardInterrupt:
-        print("\n❌ Test cancelled.")
-        if exit_on_finish: sys.exit(0)
-        return False
+    else:
+        print(f"\n   (Skipping confirmation due to --force)\n")
     
     print(f"\n{'='*60}")
     print(f"🧪 Running {len(tests)} test(s)")
@@ -4162,7 +5002,7 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
         json_report_path = os.path.join(script_dir, f"{suite_timestamp}-{i+1:03d}-temp-performance.json")
         
         # Add --report-json arg if command supports it (assuming all ai-media commands do)
-        full_command = [sys.executable, os.path.join(script_dir, 'ai-media.py')] + shlex.split(command) + ["--report-json", json_report_path]
+        full_command = [sys.executable, "-u", os.path.join(script_dir, 'ai-media.py')] + shlex.split(command) + ["--report-json", json_report_path]
         
         # For logging, show command without the hidden report arg
         cmd_display = f"python ai-media.py {command}"
@@ -4333,12 +5173,6 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                     
                     # Store exact generation time in results if available
                     results.append((test_name, True, f"{r_time:.1f}s"))
-                    
-                    # Cleanup report file
-                    try:
-                        os.remove(json_report_path)
-                    except:
-                        pass
                         
                 except Exception as e:
                     print(f"{emoji('⚠️ ', 'Warning: ')}Failed to read stats JSON: {e}")
@@ -4346,7 +5180,15 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
             else:
                 # Fallback to elapsed time if no JSON report
                 results.append((test_name, True, f"{elapsed:.1f}s"))
+        
+        # Always cleanup report file if it exists (even if test failed)
+        if json_report_path and os.path.exists(json_report_path):
+            try:
+                os.remove(json_report_path)
+            except:
+                pass
 
+        if test_passed:
             print(f"{emoji('✅ ', '')}PASSED ({elapsed:.1f}s)")
             passed += 1
             _test_state['passed'] = passed
@@ -4462,6 +5304,8 @@ Examples:
   python ai-media.py -ui input.jpg -uf 2x
   python ai-media.py -ui input.jpg -uf 4x
   python ai-media.py -ui input.jpg -uf 4x -su (Simple Upscale)
+  python ai-media.py -uv input.mp4 -vu realesrgan (Fast AI - Recommended)
+  python ai-media.py -uv input.mp4 -uf 2x -vu sd (High Detail AI)
 
 
 Supported Models:
@@ -4497,6 +5341,7 @@ Supported Models:
   Upscaling:
     - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
     - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
+    - Real-ESRGAN x4plus: ~0.3GB| ai-forever/Real-ESRGAN (Fast, Faithful)
         """
     )
     
@@ -4531,6 +5376,8 @@ Supported Models:
     video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
     video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
     video_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")
+    video_group.add_argument("-vc", "--video-codec", choices=['auto', 'h264', 'hevc', 'av1'], default='auto',
+                             help="Video Codec: h264, hevc, av1, or auto. AV1 uses hardware encoder (av1_nvenc) when available. Default: auto")
     
     audio_group = parser.add_argument_group("Audio Options")
     audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
@@ -4550,7 +5397,7 @@ Supported Models:
 
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
     transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
-    transform_group.add_argument("--remove-background", "-rb", action="store_true", help="Remove background (Transparent PNG).")
+    transform_group.add_argument("-rb", "--remove-background", action="store_true", help="Remove background (Transparent PNG).")
     transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
     transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
 
@@ -4568,6 +5415,8 @@ Supported Models:
     upscale_mode_group = parser.add_argument_group("AI Upscaling Options")
     upscale_mode_group.add_argument("-ui", "--upscale-image", metavar="FILE", help="Upscale an existing image")
     upscale_mode_group.add_argument("-uv", "--upscale-video", metavar="FILE", help="Upscale an existing video")
+    upscale_mode_group.add_argument("-iu", "--image-upscaler", choices=["sd", "realesrgan"], default="realesrgan", help="Model for image upscaling: 'realesrgan' (Fast, faithful, default) or 'sd' (Stable Diffusion, slower, creative)")
+    upscale_mode_group.add_argument("-vu", "--video-upscaler", choices=["sd", "realesrgan"], default="realesrgan", help="Model for video upscaling: 'realesrgan' (Fast, faithful, default) or 'sd' (Stable Diffusion, slow, detailed)")
     # transform_group.add_argument("--vignette", action="store_true", help="Add a vignette effect.")
     # transform_group.add_argument("--add-noise", type=float, help="Add noise strength (0.0-1.0).")
 
@@ -4603,7 +5452,7 @@ Supported Models:
                             help="Run Python unit tests (Verbose mode). Default: all tests.")
     
     # Interactive Mode
-    parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
+    parser.add_argument("-I", "--interactive", nargs="?", const="menu", metavar="JUMP",
                         help="Run in interactive mode. Optional: Jump point (e.g., 'image/sdxl', 'audio/bark').")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
@@ -4614,6 +5463,10 @@ Supported Models:
     # Combined Test Execution Logic
     exit_code = 0
     run_any_tests = False
+    
+    # Propagate Force Flag globally (Must be done before tests)
+    if args.force:
+        os.environ["AI_MEDIA_FORCE"] = "1"
 
     # 1. Run unit tests if requested
     if args.unittests is not None or args.unittests_verbose is not None:
@@ -4742,9 +5595,7 @@ Supported Models:
     
     uf = parse_upscale_factor(args.upscale_factor)
     
-    # Propagate Force Flag globally
-    if args.force:
-        os.environ["AI_MEDIA_FORCE"] = "1"
+
         
 
 
@@ -4830,6 +5681,9 @@ Supported Models:
         
         if args.simple_upscale:
             simple_upscale_image(args.upscale_image, args.output, factor=uf)
+        elif args.image_upscaler == "realesrgan":
+            success = upscale_image_fast(args.upscale_image, args.output, factor=uf)
+            if not success: sys.exit(1)
         else:
             upscale_image_file(args.upscale_image, args.output, args.upscale_strength, factor=uf)
         return
@@ -4842,6 +5696,9 @@ Supported Models:
         
         if args.simple_upscale:
             simple_upscale_video(args.upscale_video, args.output, factor=uf)
+        elif args.video_upscaler == "realesrgan":
+            success = upscale_video_fast(args.upscale_video, args.output, factor=uf, codec=args.video_codec)
+            if not success: sys.exit(1)
         else:
             upscale_video_file(args.upscale_video, args.output, args.upscale_strength, factor=uf)
         return
@@ -5285,10 +6142,16 @@ Supported Models:
 
         # --- Stage 2: Upscaling (Chained) ---
         if success and args.upscale:
+            # Determine base resolution for logging
+            msg_res = ""
+            if args.generate_image:
+                msg_res = f"({args.output})"
+            
             print("")
             print("="*60)
-            print(f"👉 Step 2 - Upscale {uf}x")
+            print(f"👉 Step 2 - Upscale {uf}x {msg_res}")
             print("="*60)
+            print("   (This will happen in multiple stages if factor is high)")
             print("")
             
             # Auto-detect mode. Overwrites the file with high-res version?
@@ -5304,16 +6167,28 @@ Supported Models:
             if args.generate_image:
                 if args.simple_upscale:
                     simple_upscale_image(args.output, upscale_out, factor=uf)
+                elif getattr(args, "image_upscaler", "default") == "realesrgan":
+                     # Fast Real-ESRGAN
+                     upscale_image_fast(args.output, upscale_out, factor=uf)
                 else:
+                    # Legacy Latent Upscaler (Stable Diffusion)
                     upscale_image_file(args.output, upscale_out, args.upscale_strength, factor=uf)
             elif args.generate_video:
                 if args.simple_upscale:
                     simple_upscale_video(args.output, upscale_out, factor=uf)
+                elif getattr(args, "video_upscaler", "default") == "realesrgan":
+                     # Fast Real-ESRGAN
+                     codec_arg = getattr(args, 'video_codec', 'auto')
+                     upscale_video_fast(args.output, upscale_out, factor=uf, device=device, 
+                                        model_name="realesrgan-x4plus",
+                                        force_realesrgan=True, upscale_half=True, video_upscaler="realesrgan", codec=codec_arg)
                 else:
+                    # Legacy Latent Upscaler
                     upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user.")
+        print("👋 Goodbye!")
         sys.exit(0)
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")

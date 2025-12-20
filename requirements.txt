@@ -12,3 +12,4 @@ protobuf>=4.0.0
 timm>=0.9.10
 einops>=0.7.0
 torchsde>=0.2.6
+realesrgan>=0.3.0

@@ -19,7 +19,7 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, mock_open, Mock
 import io
 
 # =============================================================================
@@ -1161,6 +1161,225 @@ class TestCaptioning(unittest.TestCase):
 # =============================================================================
 # Main
 # =============================================================================
+
+class TestUpscaleArguments(unittest.TestCase):
+    """Tests for upscale arguments routing."""
+
+    def run_cli(self, args_list):
+        """Helper to run CLI arguments parsing."""
+        with patch('sys.argv', ['ai-media.py'] + args_list):
+            try:
+                ai_media.main()
+            except SystemExit:
+                pass
+
+    @patch('ai_media.simple_upscale_video')
+    @patch('ai_media.upscale_video_file')
+    @patch('ai_media.upscale_video_fast')
+    def test_upscale_video_routing(self, mock_fast, mock_std, mock_simple):
+        """Test video upscaling argument routing."""
+        # Case 1: Standard (Default)
+        self.run_cli(["-uv", "in.mp4", "-uf", "2.0"])
+        mock_fast.assert_called()
+        mock_std.assert_not_called()
+        mock_simple.assert_not_called()
+        
+        # Case 2: Standard (Explicit)
+        mock_std.reset_mock()
+        self.run_cli(["-uv", "in.mp4", "--video-upscaler", "sd"])
+        mock_std.assert_called()
+        
+        # Case 3: Simple
+        mock_std.reset_mock()
+        self.run_cli(["-uv", "in.mp4", "-su"])
+        mock_simple.assert_called()
+        
+        # Case 4: Fast (Real-ESRGAN)
+        mock_simple.reset_mock()
+        self.run_cli(["-uv", "in.mp4", "--video-upscaler", "realesrgan"])
+        mock_fast.assert_called()
+
+        # Case 5: Fast (Real-ESRGAN) with -vu alias
+        mock_fast.reset_mock()
+        self.run_cli(["-uv", "in.mp4", "-vu", "realesrgan"])
+        mock_fast.assert_called()
+
+        mock_fast.reset_mock()
+        self.run_cli(["-uv", "in.mp4", "-vc", "av1"])
+        mock_fast.assert_called()
+
+    @patch('ai_media.simple_upscale_image')
+    @patch('ai_media.upscale_image_file')
+    @patch('ai_media.upscale_image_fast')
+    def test_upscale_image_routing(self, mock_fast, mock_std, mock_simple):
+        """Test image upscaling argument routing."""
+        # Case 1: Standard (Default = Real-ESRGAN)
+        self.run_cli(["-ui", "in.png", "-uf", "2.0"])
+        mock_fast.assert_called()
+        mock_std.assert_not_called()
+        mock_simple.assert_not_called()
+        
+        # Case 2: Standard (Explicit SD)
+        mock_std.reset_mock()
+        self.run_cli(["-ui", "in.png", "--image-upscaler", "sd"])
+        mock_std.assert_called()
+        
+        # Case 3: Simple
+        mock_std.reset_mock()
+        self.run_cli(["-ui", "in.png", "-su"])
+        mock_simple.assert_called()
+        
+        # Case 4: Fast (Real-ESRGAN) explicit
+        mock_simple.reset_mock()
+        self.run_cli(["-ui", "in.png", "--image-upscaler", "realesrgan"])
+        mock_fast.assert_called()
+
+class TestFastUpscaler(unittest.TestCase):
+    """Tests for upscale_video_fast() function."""
+    
+    def setUp(self):
+        # Setup mocks
+        self.patcher_has = patch('ai_media.HAS_REALESRGAN', True)
+        self.patcher_exists = patch('os.path.exists', return_value=True)
+        self.patcher_device = patch('ai_media.get_optimal_device_and_dtype', return_value=(Mock(type='cpu'), None))
+        self.patcher_rrdb = patch('ai_media.RRDBNet', create=True)
+        self.patcher_esrgan = patch('ai_media.RealESRGANer', create=True)
+        self.patcher_monitor = patch('ai_media.ResourceMonitor', create=True)
+        self.mock_cv2 = MagicMock()
+        self.patcher_cv2 = patch.dict('sys.modules', {'cv2': self.mock_cv2})
+        self.patcher_cv2.start()
+        
+        self.mock_has = self.patcher_has.start()
+        self.mock_exists = self.patcher_exists.start()
+        self.mock_device = self.patcher_device.start()
+        self.mock_rrdb = self.patcher_rrdb.start()
+        self.mock_esrgan = self.patcher_esrgan.start()
+        self.mock_monitor = self.patcher_monitor.start()
+        # Complex mocking of local imports is hard. 
+        # We will basic-test the dependency check first.
+        
+    def tearDown(self):
+        self.patcher_has.stop()
+        self.patcher_exists.stop()
+        self.patcher_device.stop()
+        self.patcher_rrdb.stop()
+        self.patcher_esrgan.stop()
+        self.patcher_monitor.stop()
+
+    @patch('ai_media.HAS_REALESRGAN', False)
+    def test_missing_dependency(self):
+        """Test returning False if dependencies missing."""
+        with patch('builtins.print') as mock_print:
+            result = ai_media.upscale_video_fast("in.mp4", "out.mp4")
+            self.assertFalse(result)
+            mock_print.assert_any_call("❌ Real-ESRGAN not installed. Cannot run fast upscale.")
+
+    def test_resolution_limit_exceeded(self):
+        """Test returning False if target resolution exceeds 15K limit."""
+        # Setup mock for 1080p input
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        
+        self.mock_cv2.CAP_PROP_FRAME_WIDTH = 3
+        self.mock_cv2.CAP_PROP_FRAME_HEIGHT = 4
+        self.mock_cv2.CAP_PROP_FPS = 5
+        self.mock_cv2.CAP_PROP_FRAME_COUNT = 7
+        self.mock_cv2.VideoCapture.return_value = mock_cap
+        
+        mock_cap.get.side_effect = lambda prop: {
+            3: 1920, # Width
+            4: 1080, # Height
+            5: 30,   # FPS
+            7: 100   # Frames
+        }.get(prop, 0)
+        
+        with patch('builtins.print') as mock_print:
+            # 1920 * 10 = 19200 (exceeds 15360)
+            result = ai_media.upscale_video_fast("in.mp4", "out.mp4", factor=10.0)
+            self.assertFalse(result)
+            mock_print.assert_any_call(f"   ❌ Target Resolution 19200x10800 exceeds the stable 15K limit (15360px).")
+
+    @patch('subprocess.Popen')
+    def test_av1_fallback_to_hevc(self, mock_popen):
+        """Test that AV1 falls back to HEVC if hardware AV1 encoding is not supported."""
+        # 1. Setup Mock for Video Capture
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        self.mock_cv2.VideoCapture.return_value = mock_cap
+        self.mock_cv2.CAP_PROP_FRAME_WIDTH = 3
+        self.mock_cv2.CAP_PROP_FRAME_HEIGHT = 4
+        
+        mock_cap.get.side_effect = lambda prop: {
+            3: 1280, 4: 720, 5: 30, 7: 10
+        }.get(prop, 0)
+        
+        # Mock cap.read() to return ONE frame then stop.
+        mock_cap.read.side_effect = [(True, MagicMock()), (False, None)]
+        
+        # Force OpenCV VideoWriter to FAIL opening, so logic falls back to FFMPEG_PIPE
+        mock_out = MagicMock()
+        mock_out.isOpened.return_value = False
+        self.mock_cv2.VideoWriter.return_value = mock_out
+
+        # 2. Setup Device as CUDA
+        self.mock_device.return_value = (Mock(type='cuda'), None)
+
+        # 3. Use module-level mock for encoder checking
+        # Simulate AV1 failing and HEVC succeeding
+        def check_encoder_side_effect(name, w, h):
+            if name == 'av1_nvenc': return False
+            if name == 'hevc_nvenc': return True
+            return True
+
+        # 4. Mock FFmpeg Popen success
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None # Running
+        mock_proc.wait.return_value = 0 
+        mock_proc.stdin.write.return_value = None
+        mock_popen.return_value = mock_proc
+
+        # 5. Patch 'realesrgan' via sys.modules
+        mock_realesrgan_module = MagicMock()
+        mock_esrgan_class = MagicMock()
+        mock_realesrgan_module.RealESRGANer = mock_esrgan_class
+        
+        # Ensure the instance returned by the class is configured correctly
+        mock_upsampler = mock_esrgan_class.return_value
+        mock_output = MagicMock()
+        mock_output.tobytes.return_value = b'x' * 10
+        mock_output.nbytes = 10
+        mock_output.shape = (2880, 5120, 3)
+        mock_output.astype.return_value = mock_output
+        mock_upsampler.enhance.return_value = (mock_output, None)
+
+        with patch.dict('sys.modules', {'realesrgan': mock_realesrgan_module, 'basicsr.archs.rrdbnet_arch': MagicMock()}):
+            with patch('builtins.print') as mock_print, \
+                 patch('ai_media._check_ffmpeg_encoder', side_effect=check_encoder_side_effect) as mock_check, \
+                 patch('os.remove'):
+                
+                # Run with AV1 codec requested
+                try:
+                    ai_media.upscale_video_fast("in.mp4", "out.mp4", codec='av1')
+                except Exception as e:
+                    print(f"DEBUG: Unknown error in test: {e}")
+                    raise e
+                
+                # Check calls
+                mock_check.assert_any_call('av1_nvenc', 5120, 2880)
+                mock_check.assert_any_call('hevc_nvenc', 5120, 2880)
+                
+                # Check for fallback message
+                found_fallback = False
+                found_hevc = False
+                for call in mock_print.call_args_list:
+                    arg = str(call.args[0])
+                    if "Hardware AV1 not supported" in arg:
+                        found_fallback = True
+                    if "Using Hardware HEVC" in arg:
+                        found_hevc = True
+                        
+                self.assertTrue(found_fallback, "Should log AV1 fallback message")
+                self.assertTrue(found_hevc, "Should log switch to Hardware HEVC")
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

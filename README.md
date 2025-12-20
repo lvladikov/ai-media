@@ -10,7 +10,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 📝 **Description Generation** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](#description-generation-options), [Examples](#description-generation-examples) and [Models](#description-generation-models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
 - 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Creative Image Transformations Options](#creative-image-transformations-options), [Examples](#creative-image-transformation-examples) and [Models](#creative-image-transformation-models).
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](#media-conversion-options) and [Examples](#media-conversion-examples).
-- 📈 **Upscaling** - **Upscale** images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows. See [Upscaling Options](#ai-upscaling-options), [Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
+- 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](#ai-upscaling-options), [Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](#testing).
 - ⚙️ **Power User Controls**
@@ -19,6 +19,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
     - 🟢 **NVIDIA GPUs** (CUDA + Float16)
+    - 🟡 **Codec Analysis Tool** - Verify your system's hardware and software encoding limits. See [Codec Analysis Tool](#codec-analysis-tool).
     - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only** and never uploaded. To disable, use `--no-performance-tracking` (or `-npt`). [See details](#performance-tracking).
 
 > [!NOTE]
@@ -40,6 +41,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
     - **accelerate**: Optimization for efficient large model loading
     - **opencv-python**: Video frame processing & manipulation
     - **scipy**: Audio signal processing & file handling
+    - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
 
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
@@ -250,13 +252,31 @@ Here are prompt examples for common editing tasks.
 | `-uv`, `--upscale-video` | Path to the video file to upscale. | `None` |
 | `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
 | `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
-| `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Higher values allow the model to generate more texture/detail but may diverge from the original. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
+| `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Higher = closer to original structure. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
+| `-iu`, `--image-upscaler` | Model for image upscaling: `realesrgan` (Fast, Faithful) or `sd` (Slow, Creative). | `realesrgan` |
+| `-vu`, `--video-upscaler` | Model for video upscaling: `realesrgan` (Fast, Faithful) or `sd` (Slow, Creative). | `realesrgan` |
+| `-vc`, `--video-codec` | Preferred Codec: `auto` (Default), `h264`, `hevc`, `av1`. See **Codec Logic** below. |
 | `-su`, `--simple-upscale` | Use simple non-AI upscaling (PIL Lanczos for images, FFmpeg for videos). **Video:** Extremely fast (skips frame extraction). **Image:** Instant. | `False` |
 
 > [!NOTE]
 > **Video Upscaling Modes:**
-> *   **Default (AI)**: Extracts every frame, runs AI upscaling on each, then stitches them back. **Slow** but adds detail.
-> *   **Simple (`-su`)**: Uses FFmpeg to scale the video stream directly. **Instant** but no new detail.
+> *   **Default (Real-ESRGAN):** Uses `RealESRGAN_x4plus`. **Fast** & faithful.
+> *   **Stable Diffusion (`-vu sd`)**: Creative AI upscaling. **Slow**.
+> *   **Simple (`-su`)**: Instant scaling. No new detail.
+>
+> **Codec Logic & Auto-Switching:**
+> The script automatically probes your hardware capabilities for the target resolution.
+> *   **`h264`**: Tries hardware acceleration first (`h264_nvenc` for NVIDIA, `h264_videotoolbox` for Mac). Falls back to the universal software encoder `libx264`. (Switches to HEVC if >8K).
+> *   **`hevc`**: Tries hardware acceleration first (`hevc_nvenc` for NVIDIA, `hevc_videotoolbox` for Mac). Falls back to the universal software encoder `libx265`.
+> *   **`av1`**: Tries hardware acceleration first (`av1_nvenc`). Falls back to HEVC (Hardware then Software).
+>
+> **Check Your System Limits:**
+> Run `python tools/test_codec_limits.py` to stress-test your system's encoding capabilities up to 20K.
+
+### Example: 8K Video Upscaling with HEVC
+```bash
+python ai-media.py -uv input_video.mp4 -uf 8.0 -vc hevc
+```
 
 > [!NOTE]
 > **Resource Safety Check:** Before starting, the script calculates the target resolution (e.g., 8K = 33MP) and estimated RAM usage. If it detects a risk of massive swapping or system freeze ("Billboard Sizing"), it will warn you and ask for confirmation. Use `--force` to bypass this.
@@ -285,6 +305,17 @@ python ai-media.py -i -p "Forest landscape" -o "./outputs/landscapes/forest.jpg"
 
 # Advanced JSON size & Model selection
 python ai-media.py -i -p "Portrait of a wizard" -o wizard.png --size "{w: 512, h: 768}" --image-model sd-1.5
+
+# Chained Generation (Generate -> Upscale)
+python ai-media.py -i -p "Mountains" -s 720p --upscale -uf 2x
+
+# High-Res 16K Generation with Proactive Optimization
+# Logic: 
+#   1. Gen at 3K Base (3072x3072) -> Fast & Stable
+#   2. Auto-Upscale (5.21x total):
+#      - Pass 1: 4x AI Upscale (Real-ESRGAN)
+#      - Final: 1.30x Lanczos Resize -> Exact 16,000x16,000
+python ai-media.py -i -p "Fruit basket" -s 16000x16000 -otn landscape --image-model sd-1.5
 ```
 
 #### Video Generation Examples
@@ -368,14 +399,20 @@ python ai-media.py -ca song.wav -cat mp3
 
 #### AI Upscaling Examples
 ```bash
-# Standalone Image Upscale (x4 by default)
+# Image Upscale (Real-ESRGAN - Fast, default)
 python ai-media.py -ui input.jpg -uf 4.0
 
-# Simple Upscale (Non-AI, Fast)
+# Image Upscale (Stable Diffusion - Slower, creative)
+python ai-media.py -ui input.jpg -uf 4.0 -iu sd
+
+# Simple Upscale (Non-AI, Instant)
 python ai-media.py -ui photo.jpg -uf 4 -su
 
-# Video Upscale (AI - Slow, Frame-by-Frame)
+# Video Upscale (Real-ESRGAN - Fast, default)
 python ai-media.py -uv clip.mp4 -uf 2.0
+
+# Video Upscale (Stable Diffusion - Slow, creative details)
+python ai-media.py -uv clip.mp4 -uf 2.0 -vu sd
 
 # Video Upscale (Simple/Fast - Native FFmpeg)
 python ai-media.py -uv clip.mp4 -uf 2.0 -su
@@ -385,9 +422,23 @@ python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
 ```
 
 > [!NOTE]
-> **Video Upscaling Process:** 
-> *   **AI Upscaling**: Works by (1) extracting all frames, (2) upscaling each frame individually with the AI model, (3) stitching them back. This is slow (~10s/frame) but high quality. Dedicated video super-resolution models may be added in the future.
-> *   **Simple Upscaling (`-su`)**: Uses FFmpeg's built-in Lanczos scaling directly on the video stream. This is **extremely fast** and doesn't require extracting frames, but doesn't add new details like AI does.
+> **Video Upscaling Modes:**
+> 
+> All AI video upscaling processes each frame individually (true temporal super-resolution models may be added in the future).
+>
+> | Mode | Speed | Quality | Method |
+> | :--- | :--- | :--- | :--- |
+> | **Real-ESRGAN** (default) | **Fast** (~1s/frame) | Faithful enhancement | Single forward pass, direct FFmpeg pipe |
+> | **Stable Diffusion** (`-vu sd`) | Slow (~10s/frame) | Creative/detailed | 50 diffusion steps, disk extraction |
+> | **Simple** (`-su`) | Instant | No AI enhancement | FFmpeg Lanczos scaling |
+>
+> **Real-ESRGAN is the default** for both image and video upscaling. Use `-vu sd` or `-iu sd` for Stable Diffusion.
+
+> [!NOTE]
+> **Video Encoding (Cross-Platform):**
+> *   **macOS/Linux**: OpenCV uses native system codecs (AVFoundation/FFmpeg) for H.264 encoding.
+> *   **Windows**: Falls back to a robust FFmpeg pipe for encoding. The "FFmpeg Pipe initialized" message is expected behavior.
+> *   **8K+ Support**: Automatically switches to HEVC (H.265) for resolutions above 8192x4320 (H.264's maximum).
 
 
 **Smart Format Handling**
@@ -494,6 +545,7 @@ By default, the Bark model can only generate ~14 seconds of audio per pass. This
 | :--- | :--- | :--- | :--- | :--- |
 | **SD x2 Latent** | `upscaler_x2` | ~4GB | ~8GB | **Factors ≤ 2x**. Fast, preserves original style. |
 | **SD x4 Upscaler** | `upscaler` | ~8GB | ~16GB | **Factors > 2x**. High detail, sharpens textures. |
+| **Real-ESRGAN** | `realesrgan` | ~0.3GB | ~2GB | **Fast Mode**. Fast, faithful upscaling, better temporal consistency. |
 
 
 #### AI Upscaling Architecture
@@ -602,6 +654,16 @@ python ai-media.py --interactive "5/2"
 python ai-media.py --interactive 3/5
 ```
 
+## Codec Analysis Tool
+Included in the `tools/` directory is a script to verify your system's hardware and software encoding limits.
+```bash
+python tools/test_codec_limits.py
+```
+This tool will:
+- Detect your acceleration platform (NVIDIA CUDA or MacOS MPS).
+- Stress test H.264, HEVC, and AV1 encoders.
+- Check resolutions from 4K up to 20K.
+- Provide a summary of which resolutions your hardware can handle vs. software fallback.
 
 ## Performance Tracking
 
@@ -661,6 +723,31 @@ You'll be prompted if:
 - **y**: Proceed despite the warning
 - **N** (default): Cancel and adjust parameters
 - **--force**: Skip all confirmation prompts (overwrites existing files and ignores resource warnings).
+
+## High-Resolution Optimization (Proactive Workflow)
+
+Generating native 4K+ or 8K images in a single pass can be extremely slow and frequently triggers "Out of Memory" (OOM) errors or driver crashes (especially on Apple Silicon).
+
+To solve this, `ai-media` includes a proactive optimization workflow for high-res requests:
+
+1.  **Threshold Detection**: If you request a size larger than **6 Megapixels** (approx. 3K territory), the script will detect it.
+2.  **Interactive Recommendation**: You will be prompted to switch to the **Optimized Workflow**:
+    -   **Step 1**: Generate at an optimized **3K base** (3072px long edge). This is fast and fits in most GPU buffers.
+    -   **Step 2**: Automatically **AI Upscale** the result to your exact target resolution.
+3.  **Benefits**: 
+    -   **Stability**: Avoids kernel crashes and OOM errors.
+    -   **Speed**: Generating at 3K + Upscaling is often faster than native 4K/8K.
+    -   **Seamlessness**: The upscale happens automatically after generation finishes.
+
+### Smart Multi-Stage Strategy (How it reaches 8K/16K)
+To ensure the highest quality and exact dimensions, the script uses a **multi-stage pipeline**:
+-   **AI Passes**: It first applies high-performance 4x models like **Real-ESRGAN** (default) or **Stable Diffusion** (if requested).
+-   **Lanczos Resize**: Because high-res targets (like 5.21x) rarely land on clean multiples, a final high-quality **Lanczos resize** is applied to match your requested resolution exactly.
+    - *Example (6x)*: 4x AI Pass + 1.5x Lanczos Resize.
+    - *Example (5.21x)*: 4x AI Pass + 1.30x Lanczos Resize.
+
+> [!TIP]
+> This workflow defaults to **Real-ESRGAN** for the AI pass, ensuring a fast and faithful expansion of the 3K base image.
 
 ## Safety Checker
 
@@ -781,6 +868,7 @@ This project uses the following open-source libraries:
 | [opencv-python](https://github.com/opencv/opencv-python) | Video frame processing | [opencv/opencv](https://github.com/opencv/opencv) |
 | [timm](https://github.com/huggingface/pytorch-image-models) | Image models (Required for Florence-2) | [huggingface/pytorch-image-models](https://github.com/huggingface/pytorch-image-models) |
 | [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
+| [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Real-ESRGAN upscaling | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
 
 **AI Models used:**
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
