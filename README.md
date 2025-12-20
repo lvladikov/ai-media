@@ -589,6 +589,8 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `6` | **Convert** | `convert` | Convert Menu |
 | `7` | **Upscale** | `upscale` | Upscale Menu |
 | `8` | **Test** | `test` | Run Tests |
+| `8/1` | | `test/unit` | Unit Tests |
+| `8/2` | | `test/integration` | Integration Tests |
 | `9` | **Sysinfo** | `sysinfo` | System Information |
 
 ```bash
@@ -802,18 +804,51 @@ This project uses the following open-source libraries:
 
 ## Testing (Internal)
 
-This project includes an automated test suite for development and verification. It's primarily for internal use, but if you want to see everything in action, you're welcome to run it.
+This project includes two types of testing:
 
-### Running Tests
+### Unit Tests (Code Logic)
+
+Python unit tests for verifying parsing functions, helper functions, and classes. Uses Python's built-in `unittest` module (no installation required).
+
 ```bash
-# Run all tests (Quiet Mode)
+# Run all unit tests via ai-media.py
+python ai-media.py --unittests
+
+# Run a specific test class
+python ai-media.py --unittests tests.ai-media_test.TestParseSize
+
+# Run a specific test method
+python ai-media.py --unittests tests.ai-media_test.TestParseSize.test_resolution_presets
+```
+
+Or use Python's unittest module directly:
+
+```bash
+python -m unittest tests.ai-media_test -v
+python -m unittest tests.ai-media_test.TestParseSize -v
+```
+
+| File | Description |
+| :--- | :--- |
+| `tests/ai-media_test.py` | Unit tests for parsing, helpers, and classes |
+
+You can also run unit tests from the **Interactive Mode** → **Run Tests** → **Unit Tests**.
+
+---
+
+### Integration Tests
+
+Full integration tests that exercise the complete application. These tests run actual commands and verify outputs.
+
+```bash
+# Run all integration tests (Quiet Mode)
 python ai-media.py --test
 
-# Run all tests (Verbose Mode - shows output)
+# Run all integration tests (Verbose Mode - shows output)
 python ai-media.py --test-verbose
 ```
 
-### Single Test Execution
+#### Single Test Execution
 You can run a specific test by providing its name (exact match):
 
 ```bash
@@ -824,7 +859,7 @@ python ai-media.py --test "Image - SDXL (Default)"
 python ai-media.py --test-verbose "Image - Auto Filename"
 ```
 
-### Multiple Test Execution
+#### Multiple Test Execution
 You can run a specific subset of tests by passing them as a space-separated list:
 
 ```bash
@@ -834,13 +869,13 @@ python ai-media.py --test-verbose "Validation - Image Generation" "Validation - 
 ```
 
 > [!NOTE]
-> The test name must match exactly what is defined in `run-tests.json`. If the name is not found, the script will list all available tests.
+> The test name must match exactly what is defined in `tests/integration-tests.json`. If the name is not found, the script will list all available tests.
 
 | File/Folder | Description |
 | :--- | :--- |
-| `run-tests.json` | Test configurations (commands, expected outputs) |
-| `testData/inputs/` | Sample input files for tests |
-| `testData/outputs/` | Generated outputs (git-ignored) |
+| `tests/integration-tests.json` | Test configurations (commands, expected outputs) |
+| `tests/testData/inputs/` | Sample input files for tests |
+| `tests/testData/outputs/` | Generated outputs (git-ignored) |
 
 > [!WARNING]
 > - This may take a **long time** (30+ minutes)

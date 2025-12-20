@@ -23,18 +23,20 @@ performance.json
 *.mkv
 *.mp3
 *.wav
+*.aac
+*.flac
+*.ogg
+*.txt
+*.wmv
 
 # Allow screenshots folder (README images)
 !screenshots/
 !screenshots/**
 
-# Test Data - ignore outputs (and subfolders), keep inputs
-testData/outputs/**
+# Allow tests folder to be committed (but we'll ignore outputs below)
+!tests/
+!tests/**
 
-# Unignore testData/inputs (need to unignore parent first, then contents)
-!testData/
-!testData/inputs/
-!testData/inputs/**
-
-# Allow run-tests.json to be committed
-!run-tests.json
+# Re-ignore test outputs and pycache (after unignoring tests/**)
+tests/testData/outputs/
+tests/__pycache__/

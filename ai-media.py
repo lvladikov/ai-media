@@ -3122,6 +3122,8 @@ def run_interactive(jump_point=None):
         'convert': ('convert', None),
         'caption': ('caption', None),
         'test': ('test', None),
+        'test/unit': ('test', 'unit'),
+        'test/integration': ('test', 'integration'),
         'sysinfo': ('sysinfo', None),
         # By number (matching menu order)
         '1': ('image', None),
@@ -3148,6 +3150,8 @@ def run_interactive(jump_point=None):
         '6': ('convert', None),
         '7': ('upscale', None),
         '8': ('test', None),
+        '8/1': ('test', 'unit'),
+        '8/2': ('test', 'integration'),
         '9': ('sysinfo', None),
     }
     
@@ -3756,24 +3760,136 @@ def run_interactive(jump_point=None):
         run_self_command(cmd)
         input("\nPress Enter to continue...")
     
-    def test_menu():
-        """Test selection submenu."""
-        clear_screen()
-        show_header("Run Tests")
+    def test_menu(preset_submenu=None):
+        """Test selection submenu - choose between Unit Tests and Integration Tests."""
+        # If preset submenu provided, go directly to that menu
+        if preset_submenu == 'unit':
+            unit_test_menu()
+            return
+        elif preset_submenu == 'integration':
+            integration_test_menu()
+            return
         
+        while True:
+            clear_screen()
+            show_header("Run Tests")
+            
+            options = [
+                ("🧪  Unit Tests (Python unittest)", "UNIT"),
+                ("🚀  Integration Tests (tests/integration-tests.json)", "INTEGRATION"),
+            ]
+            
+            choice = prompt_menu("Select test type:", options)
+            
+            if choice is None: return
+            
+            if choice == "UNIT":
+                unit_test_menu()
+            elif choice == "INTEGRATION":
+                integration_test_menu()
+    
+    def unit_test_menu():
+        """Unit Tests submenu - dynamically loads test classes from tests/ai-media_test.py."""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        test_module = os.path.join(script_dir, "tests", "ai-media_test.py")
+        
+        # Check if test file exists
+        if not os.path.exists(test_module):
+            clear_screen()
+            show_header("Unit Tests")
+            print("❌ tests/ai-media_test.py not found.")
+            print(f"   Expected location: {test_module}")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Extract test classes and count tests per class from tests/ai-media_test.py
+        test_classes = {}  # {class_name: test_count}
+        test_method_count = 0
+        try:
+            with open(test_module, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            import re
+            current_class = None
+            class_pattern = r'^class\s+(Test\w+)\s*\(\s*(?:unittest\.)?TestCase\s*\)\s*:'
+            method_pattern = r'^\s+def\s+(test_\w+)\s*\('
+            
+            for line in lines:
+                # Check for class definition
+                class_match = re.match(class_pattern, line)
+                if class_match:
+                    current_class = class_match.group(1)
+                    test_classes[current_class] = 0
+                # Check for test method
+                elif current_class and re.match(method_pattern, line):
+                    test_classes[current_class] += 1
+                    test_method_count += 1
+        except Exception as e:
+            clear_screen()
+            show_header("Unit Tests")
+            print(f"❌ Error parsing test file: {e}")
+            input("\nPress Enter to continue...")
+            return
+        
+        if not test_classes:
+            clear_screen()
+            show_header("Unit Tests")
+            print("❌ No test classes found in tests/ai-media_test.py")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Build options
+        options = []
+        class_count = len(test_classes)
+        options.append((f"🚀  Run All ({class_count} classes, {test_method_count} tests)", "ALL"))
+        
+        for cls in sorted(test_classes.keys()):
+            count = test_classes[cls]
+            # Format: TestParseSize -> Parse Size
+            display_name = cls.replace("Test", "", 1)
+            # Add space before capitals
+            display_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', display_name)
+            options.append((f"{cls} ({count} tests)", cls))
+        
+        while True:
+            clear_screen()
+            show_header("Unit Tests")
+            choice = prompt_menu(f"Select a test class to run:\n\nℹ️  {class_count} test classes ({test_method_count} tests) found in tests/ai-media_test.py\n", options)
+            
+            if choice is None: return
+            
+            if choice == "ALL":
+                # Run all unit tests
+                print("\n🧪 Running all unit tests...\n")
+                print("=" * 60)
+                os.system(f'"{sys.executable}" -m unittest tests.ai-media_test -v')
+            else:
+                # Run specific test class
+                print(f"\n🧪 Running {choice}...\n")
+                print("=" * 60)
+                os.system(f'"{sys.executable}" -m unittest tests.ai-media_test.{choice} -v')
+            
+            input("\nPress Enter to continue...")
+    
+    def integration_test_menu():
+        """Integration Tests submenu - tests from tests/integration-tests.json."""
         # Load tests
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        test_file = os.path.join(script_dir, "run-tests.json")
+        test_file = os.path.join(script_dir, "tests", "integration-tests.json")
         try:
             with open(test_file, "r") as f:
                 data = json.load(f)
             tests = data.get("tests", [])
         except Exception as e:
+            clear_screen()
+            show_header("App Run Tests")
             print(f"❌ Error loading tests: {e}")
             input("Press Enter...")
             return
 
         if not tests:
+            clear_screen()
+            show_header("App Run Tests")
             print("❌ No tests found.")
             input("Press Enter...")
             return
@@ -3792,10 +3908,6 @@ def run_interactive(jump_point=None):
                 display = name
             options.append((display, name))
         
-        # Add 'Run All' as first option? or prompt user?
-        # User request was specifically for a menu list like browser files.
-        # Let's stick to listing individual tests for now, maybe add "Run All" at top.
-        
         # Prepend 'Run All' options
         count = len(tests)
         options.insert(0, (f"📜  Run All {count} Tests (Verbose)", "ALL_VERBOSE"))
@@ -3803,7 +3915,7 @@ def run_interactive(jump_point=None):
 
         while True:
             clear_screen()
-            show_header("Run Tests")
+            show_header("App Run Tests")
             choice = prompt_menu("Select a test to run:\n\nℹ️  Individual tests are always run in VERBOSE mode\n", options)
             
             if choice is None: return
@@ -3820,6 +3932,7 @@ def run_interactive(jump_point=None):
                 run_self_command(f"--test-verbose \"{choice}\"")
                 
             input("\nPress Enter to continue...")
+
 
     
     # Main loop
@@ -3855,7 +3968,8 @@ def run_interactive(jump_point=None):
             caption_menu(initial_model if first_run or initial_action == 'caption' else None)
             initial_model = None
         elif action == "test":
-            test_menu()
+            test_menu(initial_model if first_run or initial_action == 'test' else None)
+            initial_model = None
         elif action == "sysinfo":
             system_info_menu()
 
@@ -3863,7 +3977,7 @@ def run_interactive(jump_point=None):
 
 
 def run_tests(verbose=False, test_filter=None):
-    """Run test suite from run-tests.json."""
+    """Run test suite from tests/integration-tests.json."""
     import shlex
     import subprocess
     
@@ -3871,7 +3985,7 @@ def run_tests(verbose=False, test_filter=None):
     global _test_state
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    test_file = os.path.join(script_dir, "run-tests.json")
+    test_file = os.path.join(script_dir, "tests", "integration-tests.json")
     
     if not os.path.exists(test_file):
         print(f"❌ Test file not found: {test_file}")
@@ -3882,7 +3996,7 @@ def run_tests(verbose=False, test_filter=None):
     
     tests = data.get("tests", [])
     if not tests:
-        print("❌ No tests found in run-tests.json")
+        print("❌ No tests found in tests/integration-tests.json")
         sys.exit(1)
     
     # Filter tests if requested
@@ -4446,8 +4560,10 @@ Supported Models:
     
     # Testing
     test_group = parser.add_argument_group("Testing")
-    test_group.add_argument("--test", nargs="*", help="Run test suite from run-tests.json (quiet mode). Optional: Space-separated list of Test Names.")
-    test_group.add_argument("--test-verbose", nargs="*", help="Run test suite with full output. Optional: Space-separated list of Test Names.")
+    test_group.add_argument("--test", nargs="*", help="Run integration tests from tests/integration-tests.json (quiet mode). Optional: Space-separated list of Test Names.")
+    test_group.add_argument("--test-verbose", nargs="*", help="Run integration tests with full output. Optional: Space-separated list of Test Names.")
+    test_group.add_argument("--unittests", nargs="?", const="tests.ai-media_test", metavar="MODULE",
+                            help="Run Python unit tests. Default: all tests. Examples: tests.ai-media_test.TestParseSize, tests.ai-media_test.TestParseSize.test_resolution_presets")
     
     # Interactive Mode
     parser.add_argument("--interactive", "-I", nargs="?", const="menu", metavar="JUMP",
@@ -4457,6 +4573,15 @@ Supported Models:
     
     global args
     args = parser.parse_args()
+    
+    # Run unit tests if --unittests is provided
+    if args.unittests is not None:
+        import subprocess
+        cmd = [sys.executable, "-m", "unittest", args.unittests, "-v"]
+        print(f"Running: python -m unittest {args.unittests} -v\n")
+        print("=" * 60)
+        result = subprocess.run(cmd)
+        sys.exit(result.returncode)
     
     # Run test suite if --test or --test-verbose is provided
     # Note: with nargs='*', presence is indicated by not None. Empty list [] means flag present but no values (Run All).
