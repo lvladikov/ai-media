@@ -99,7 +99,8 @@ def check_encoder_resolution(encoder, width, height, timeout=60):
     Tries to encode a 1-second null video at the given resolution.
     Returns (Success, Message, Duration)
     """
-    print(f"   Testing {encoder} @ {width}x{height}...", end="", flush=True)
+    res_str = f"{width}x{height}"
+    print(f"   Testing {encoder:<20} @ {res_str:<12}", end="", flush=True)
     
     cmd = [
         'ffmpeg', '-y', 
@@ -151,46 +152,94 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
     Tries to decode a 1-frame test video.
     Returns (Success, Message, Duration)
     """
-    print(f"   Testing {decoder} @ {width}x{height}...", end="", flush=True)
+    res_str = f"{width}x{height}"
+    print(f"   Testing {decoder:<20} @ {res_str:<12}", end="", flush=True)
     
     # We need to feed the decoder some valid bitstream. 
     # We'll generate a very short bitstream using a standard software encoder.
     src_encoder = "libx264"
-    if codec_type == "hevc": src_encoder = "libx265"
-    elif codec_type == "av1": src_encoder = "libsvtav1"
+    if codec_type == "hevc": 
+        src_encoder = "libx265"
+    elif codec_type == "av1": 
+        src_encoder = "libsvtav1"
 
-    # Single command with a pipe to avoid intermediate files
-    # Generating 1 frame is enough to test if decoder can initialize and decode
-    cmd = f'ffmpeg -y -f lavfi -i color=c=black:s={width}x{height}:r=30 -t 0.1 -c:v {src_encoder} -preset ultrafast -f nut - | ffmpeg -vcodec {decoder} -i - -f null -'
+    # Windows: Use temp files (pipes fail for AV1)
+    # Mac/Linux: Use faster pipe method
+    use_temp_file = (platform.system() == "Windows")
     
-    try:
-        start = time.time()
-        proc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
-        duration = time.time() - start
+    if use_temp_file:
+        import tempfile
+        import os
         
-        if proc.returncode == 0:
-            print(f" ✅ ({duration:.2f}s)")
-            return True, "OK", duration
-        else:
-            print(f" ❌")
-            err_lines = proc.stderr.split('\n')
-            last_err = "Unknown Error"
-            for line in err_lines[-10:]:
-                if "Error" in line or "failed" in line or "incorrect" in line or "Horizontal" in line or "not supported" in line:
-                    last_err = line.strip()
-                    break
-            return False, f"Err: {last_err[:50]}...", duration
+        container = "webm" if codec_type == "av1" else "mp4"
+        with tempfile.NamedTemporaryFile(suffix=f'.{container}', delete=False) as tmp:
+            temp_path = tmp.name
+        
+        try:
+            start = time.time()
             
-    except subprocess.TimeoutExpired:
-        print(" ⏱️ Timeout")
-        return False, "Timeout", timeout
-    except Exception as e:
-        print(f" 💥")
-        return False, str(e), 0
+            # Step 1: Generate test bitstream to temp file
+            encode_cmd = [
+                'ffmpeg', '-y', '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:r=30',
+                '-t', '0.1', '-c:v', src_encoder, '-preset', 'ultrafast' if 'lib' in src_encoder else '12',
+                temp_path
+            ]
+            proc1 = subprocess.run(encode_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=120)
+            if proc1.returncode != 0:
+                print(f" ❌ (encode failed)")
+                return False, "Encode failed", 0
+            
+            # Step 2: Decode the temp file with the target decoder
+            decode_cmd = [
+                'ffmpeg', '-y', '-c:v', decoder, '-i', temp_path, '-f', 'null', '-'
+            ]
+            proc2 = subprocess.run(decode_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
+            duration = time.time() - start
+            
+            if proc2.returncode == 0:
+                print(f" ✅ ({duration:.2f}s)")
+                return True, "OK", duration
+            else:
+                print(f" ❌")
+                return False, "Decode failed", duration
+                
+        except subprocess.TimeoutExpired:
+            print(" ⏱️ Timeout")
+            return False, "Timeout", timeout
+        except Exception as e:
+            print(f" 💥")
+            return False, str(e), 0
+        finally:
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+    else:
+        # Mac/Linux: Use pipe (faster)
+        cmd = f'ffmpeg -y -f lavfi -i color=c=black:s={width}x{height}:r=30 -t 0.1 -c:v {src_encoder} -preset ultrafast -f nut - | ffmpeg -vcodec {decoder} -i - -f null -'
+        
+        try:
+            start = time.time()
+            proc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
+            duration = time.time() - start
+            
+            if proc.returncode == 0:
+                print(f" ✅ ({duration:.2f}s)")
+                return True, "OK", duration
+            else:
+                print(f" ❌")
+                return False, "Decode failed", duration
+                
+        except subprocess.TimeoutExpired:
+            print(" ⏱️ Timeout")
+            return False, "Timeout", timeout
+        except Exception as e:
+            print(f" 💥")
+            return False, str(e), 0
 
 def main():
     print("===========================================")
-    print("   Universal Codec Resolution Limit Test")
+    print("🎬 Universal Codec Resolution Limit Test")
     print("===========================================")
     
     sys_info = get_platform_info()
@@ -245,7 +294,7 @@ def main():
         sys.exit(0)
 
     print("\n==============================================")
-    print("Decoding Tests (just for information)")
+    print("Decoding Tests (just for your information)")
     print("==============================================")
 
     try:
@@ -280,14 +329,23 @@ def print_summary(results, resolutions, type_label):
     if not results:
         return
 
-    print(f"\n\n===========================================")
-    print(f"   SUMMARY RESULTS: {type_label}S")
-    print("===========================================")
+    # Fixed column widths
+    name_width = 25
+    col_width = 6  # Width for each resolution column
     
+    # Build header row first to calculate total width
     headers = [r[0] for r in resolutions]
-    header_str = " | ".join([f"{h:<5}" for h in headers])
-    print(f"{type_label:<25} | {header_str}")
-    print("-" * (25 + 3 + len(header_str)))
+    header_row = f"{type_label:<{name_width}} |"
+    for h in headers:
+        header_row += f" {h:^{col_width}}|"
+    
+    table_width = len(header_row)
+    
+    print(f"\n\n{'='*table_width}")
+    print(f"📊 SUMMARY RESULTS: {type_label}S")
+    print(f"{'='*table_width}")
+    print(header_row)
+    print("-" * table_width)
     
     key_name = "encoder" if type_label == "ENCODER" else "decoder"
     items_seen = []
@@ -299,16 +357,16 @@ def print_summary(results, resolutions, type_label):
         is_hw = is_hardware_encoder(item) if type_label == "ENCODER" else is_hardware_decoder(item)
         label = "HW" if is_hw else "SW"
         display_name = f"[{label}] {item}"
-        row = f"{display_name:<25} | "
+        row = f"{display_name:<{name_width}} |"
         for res_name, _, _ in resolutions:
             match = next((x for x in results if x[key_name] == item and x["res"] == res_name), None)
             if match:
                 symbol = "✅" if match["pass"] else "❌"
-                row += f"{symbol:<5} | "
+                row += f"  {symbol}   |"
             else:
-                row += f"{'-':<5} | "
+                row += f"  -   |"
         print(row)
-    print("===========================================")
+    print(f"{'='*table_width}")
 
 if __name__ == "__main__":
     main()
