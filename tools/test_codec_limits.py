@@ -212,7 +212,7 @@ def main():
     results_enc = []
     results_dec = []
     
-    print("\n===================================================")
+    print("\n=====================================================")
     print("Encoding Tests (most important for ai-media features)")
     print("=====================================================")
 
