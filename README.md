@@ -271,7 +271,7 @@ Here are prompt examples for common editing tasks.
 > *   **`av1`**: Tries hardware acceleration first (`av1_nvenc`). Falls back to HEVC (Hardware then Software).
 >
 > **Check Your System Limits:**
-> Run `python tools/test_codec_limits.py` to stress-test your system's encoding capabilities up to 20K.
+> Run `python tests/test_codec_limits.py` to stress-test your system's encoding capabilities up to 20K.
 
 ### Example: 8K Video Upscaling with HEVC
 ```bash
@@ -655,9 +655,9 @@ python ai-media.py --interactive 3/5
 ```
 
 ## Codec Analysis Tool
-Included in the `tools/` directory is a script to verify your system's hardware and software encoding limits.
+Included in the `tests/` directory is a script to verify your system's hardware and software encoding limits.
 ```bash
-python tools/test_codec_limits.py
+python tests/test_codec_limits.py
 ```
 This tool will:
 - Detect your acceleration platform (NVIDIA CUDA or MacOS MPS).
