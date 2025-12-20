@@ -53,11 +53,6 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["DIFFUSERS_VERBOSITY"] = "error"
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 
-# Suppress "MallocStackLogging: can't turn off..." warning on macOS
-# This allows the "turn off" call to succeed by ensuring it's enabled initially.
-if sys.platform == "darwin":
-    os.environ["MallocStackLogging"] = "1"
-
 # CUDA Memory Optimization - Reduce fragmentation on Windows/NVIDIA
 # This helps prevent "CUDA out of memory" errors even when GPU has free memory
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
@@ -1854,9 +1849,15 @@ class ResourceMonitor:
                 try:
                     # Apple Silicon: Query AGXAccelerator via ioreg for GPU utilization
                     import re
+                    # Create a sanitized environment for the subprocess to avoid inheritance 
+                    # of MallocStackLogging state which causes warnings on macOS.
+                    env = os.environ.copy()
+                    env["MallocStackLogging"] = "0" 
+                    
                     result = subprocess.run(
                         ['ioreg', '-r', '-d', '1', '-w', '0', '-c', 'AGXAccelerator'],
-                        capture_output=True, text=True, check=False
+                        capture_output=True, text=True, check=False,
+                        env=env
                     )
                     if result.returncode == 0:
                         # Extract "Device Utilization %" from PerformanceStatistics
@@ -3950,45 +3951,77 @@ def run_tests(verbose=False, test_filter=None):
                 full_command,
                 cwd=script_dir,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT, # Merge stderr into stdout for simple streaming
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                env=env
+                env=env,
+                bufsize=1, # Line buffered
+                universal_newlines=True
             )
+            
+            stdout_lines = []
             
             try:
                 if is_interactive:
                     if verbose: print(f"⏳ Waiting {interactive_wait}s for interactive output...")
                     time.sleep(interactive_wait)
+                    
                     # Terminate interactive process (Windows-compatible)
                     if os.name == 'nt':
                         current_process.terminate()  # Windows: terminate gracefully
                     else:
                         current_process.send_signal(signal.SIGINT)  # Unix: send CTRL+C
-                
-                # Get timeout from test config or default to 600s (10 mins)
-                timeout_limit = test.get("timeout", 600)
-                stdout, stderr = current_process.communicate(timeout=timeout_limit if not is_interactive else 5)
+                        
+                    # For interactive tests, we don't need real-time streaming, just capture final output
+                    # and ensure it doesn't hang.
+                    timeout_limit = test.get("timeout", 600)
+                    stdout, stderr = current_process.communicate(timeout=5) # Short timeout after term
+                    stdout_lines = [stdout] if stdout else []
+                    
+                    # Note: stderr is merged to stdout in Popen, so stderr var will be None/Empty
+                    
+                else:
+                    # Non-interactive (Batch) mode: Stream output real-time
+                    timeout_limit = test.get("timeout", 600)
+                    start_read_time = time.time()
+                    
+                    while True:
+                        # Check for timeout
+                        if time.time() - start_read_time > timeout_limit:
+                            raise subprocess.TimeoutExpired(full_command, timeout_limit)
+                        
+                        # Read line
+                        line = current_process.stdout.readline()
+                        if not line and current_process.poll() is not None:
+                            break
+                        
+                        if line:
+                            # Only stream to user if verbose mode is on
+                            if verbose:
+                                print(line, end='', flush=True) 
+                            stdout_lines.append(line)
+                            
+                    current_process.wait() # Ensure clean exit
+
                 elapsed = time.time() - start_time
+                stdout = "".join(stdout_lines) 
+                # stderr is merged into stdout via Popen(stderr=subprocess.STDOUT)
                 
-                # Show verbose output if requested
+                # Show verbose output (already streamed for batch, just marking end)
                 if verbose:
-                    if stdout:
-                        print(f"\n--- STDOUT ---")
-                        print(stdout)
-                    if stderr:
-                        print(f"\n--- STDERR ---")
-                        print(stderr)
-                    print(f"--- END ---\n")
+                    if is_interactive:
+                         # Interactive output wasn't streamed, so print it now if verbose
+                         print(f"\n--- STDOUT (Captured) ---")
+                         print(stdout)
+                    print(f"\n--- END ---\n")
                 
                 if current_process.returncode != 0 and not is_interactive:
                     # Interactive tests expect SIGINT exit code (usually 130 or 1 or 0 handling)
                     # If caught cleanly it might be 0.
                     # We only fail non-interactive tests on non-zero exit code here unless specific check later.
                     print(f"❌ Command failed with exit code {current_process.returncode}")
-                    if stderr and not verbose:
-                        print(f"   Error: {stderr[:200]}")
+                    # Since stderr is merged, we can't print it separately, but it's already on screen.
                     test_passed = False
                     failure_reason = f"Exit code {current_process.returncode}"
                 
@@ -4007,7 +4040,7 @@ def run_tests(verbose=False, test_filter=None):
                 current_process.kill()
                 current_process.wait()
                 elapsed = time.time() - start_time
-                print(f"❌ Command timed out after 10 minutes")
+                print(f"❌ Command timed out after {timeout_limit} seconds")
                 test_passed = False
                 failure_reason = "Timeout"
                 

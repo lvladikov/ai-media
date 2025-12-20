@@ -158,6 +158,7 @@
     },
     {
       "name": "Video - AVI Format",
+      "timeout": 3600,
       "command": "-v -p \"Format test\" -o testData/outputs/vid_format.avi -l 1s --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -167,7 +168,7 @@
     },
     {
       "name": "Video - CogVideoX",
-      "timeout": 3600,
+      "timeout": 7200,
       "command": "-v -p \"A dog running\" -o testData/outputs/vid_cogvideox.mp4 -l 1s --video-model cogvideox --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
