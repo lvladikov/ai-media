@@ -834,11 +834,11 @@ python ai-media.py --test-verbose "Validation - Image Generation" "Validation - 
 ```
 
 > [!NOTE]
-> The test name must match exactly what is defined in `testing.json`. If the name is not found, the script will list all available tests.
+> The test name must match exactly what is defined in `run-tests.json`. If the name is not found, the script will list all available tests.
 
 | File/Folder | Description |
 | :--- | :--- |
-| `testing.json` | Test configurations (commands, expected outputs) |
+| `run-tests.json` | Test configurations (commands, expected outputs) |
 | `testData/inputs/` | Sample input files for tests |
 | `testData/outputs/` | Generated outputs (git-ignored) |
 

@@ -295,7 +295,10 @@ def signal_handler(sig, frame):
         print(f"{'='*60}")
         print(f"   Completed: {completed}/{_test_state['total']}")
         print(f"   Passed: {_test_state['passed']} ✅")
-        print(f"   Failed: {_test_state['failed']} ❌")
+        if _test_state['failed'] > 0:
+            print(f"   Failed: {_test_state['failed']} ❌")
+        else:
+            print(f"   Failed: {_test_state['failed']}")
         print(f"   Skipped: {_test_state['total'] - completed}")
         print(f"{'='*60}")
         sys.exit(130)
@@ -3760,7 +3763,7 @@ def run_interactive(jump_point=None):
         
         # Load tests
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        test_file = os.path.join(script_dir, "testing.json")
+        test_file = os.path.join(script_dir, "run-tests.json")
         try:
             with open(test_file, "r") as f:
                 data = json.load(f)
@@ -3860,7 +3863,7 @@ def run_interactive(jump_point=None):
 
 
 def run_tests(verbose=False, test_filter=None):
-    """Run test suite from testing.json."""
+    """Run test suite from run-tests.json."""
     import shlex
     import subprocess
     
@@ -3868,7 +3871,7 @@ def run_tests(verbose=False, test_filter=None):
     global _test_state
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    test_file = os.path.join(script_dir, "testing.json")
+    test_file = os.path.join(script_dir, "run-tests.json")
     
     if not os.path.exists(test_file):
         print(f"❌ Test file not found: {test_file}")
@@ -3879,7 +3882,7 @@ def run_tests(verbose=False, test_filter=None):
     
     tests = data.get("tests", [])
     if not tests:
-        print("❌ No tests found in testing.json")
+        print("❌ No tests found in run-tests.json")
         sys.exit(1)
     
     # Filter tests if requested
@@ -3960,12 +3963,25 @@ def run_tests(verbose=False, test_filter=None):
         expected_inputs = test.get("expectedInputItems", [])
         expected_outputs = test.get("expectedOutputItems", [])
         
-        print(f"\n{'-'*50}")
-        print(f"📋 Test {i+1}/{len(tests)}: {test_name}")
+        # Formatting
         description = test.get("description", "")
+        header = f"📋 Test {i+1}/{len(tests)}: {test_name}"
+        desc = f"   {description}" if description else ""
+        start_t_str = datetime.now().strftime("%H:%M:%S")
+        time_line = f"   Start at: {start_t_str}"
+        
+        # Calculate dynamic width (min 50)
+        lines = [header, desc, time_line]
+        max_len = max(50, *[len(l) for l in lines if l])
+        sep = "-" * max_len
+        
+        print(f"\n{sep}")
+        print(header)
         if description:
-            print(f"   {description}")
-        print(f"{'-'*50}")
+            print(desc)
+        print("")
+        print(time_line)
+        print(f"{sep}")
         
         test_passed = True
         failure_reason = None
@@ -4430,7 +4446,7 @@ Supported Models:
     
     # Testing
     test_group = parser.add_argument_group("Testing")
-    test_group.add_argument("--test", nargs="*", help="Run test suite from testing.json (quiet mode). Optional: Space-separated list of Test Names.")
+    test_group.add_argument("--test", nargs="*", help="Run test suite from run-tests.json (quiet mode). Optional: Space-separated list of Test Names.")
     test_group.add_argument("--test-verbose", nargs="*", help="Run test suite with full output. Optional: Space-separated list of Test Names.")
     
     # Interactive Mode

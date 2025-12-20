@@ -36,5 +36,5 @@ testData/outputs/**
 !testData/inputs/
 !testData/inputs/**
 
-# Allow testing.json to be committed
-!testing.json
+# Allow run-tests.json to be committed
+!run-tests.json
