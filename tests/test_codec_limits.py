@@ -171,7 +171,7 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
         import tempfile
         import os
         
-        container = "webm" if codec_type == "av1" else "mp4"
+        container = "mkv" if codec_type == "av1" else "mp4"  # MKV works better for AV1 than webm
         with tempfile.NamedTemporaryFile(suffix=f'.{container}', delete=False) as tmp:
             temp_path = tmp.name
         
@@ -179,9 +179,17 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
             start = time.time()
             
             # Step 1: Generate test bitstream to temp file
+            # Build preset based on encoder type
+            if src_encoder == "libsvtav1":
+                preset_args = ['-preset', '12']  # SVT-AV1 uses numeric presets
+            elif src_encoder in ["libx264", "libx265"]:
+                preset_args = ['-preset', 'ultrafast']
+            else:
+                preset_args = []
+            
             encode_cmd = [
                 'ffmpeg', '-y', '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:r=30',
-                '-t', '0.1', '-c:v', src_encoder, '-preset', 'ultrafast' if 'lib' in src_encoder else '12',
+                '-t', '0.1', '-c:v', src_encoder, *preset_args,
                 temp_path
             ]
             proc1 = subprocess.run(encode_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=120)
@@ -216,7 +224,15 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
                 pass
     else:
         # Mac/Linux: Use pipe (faster)
-        cmd = f'ffmpeg -y -f lavfi -i color=c=black:s={width}x{height}:r=30 -t 0.1 -c:v {src_encoder} -preset ultrafast -f nut - | ffmpeg -vcodec {decoder} -i - -f null -'
+        # Build preset based on encoder type
+        if src_encoder == "libsvtav1":
+            preset_str = "-preset 12"
+        elif src_encoder in ["libx264", "libx265"]:
+            preset_str = "-preset ultrafast"
+        else:
+            preset_str = ""
+        
+        cmd = f'ffmpeg -y -f lavfi -i color=c=black:s={width}x{height}:r=30 -t 0.1 -c:v {src_encoder} {preset_str} -f nut - | ffmpeg -vcodec {decoder} -i - -f null -'
         
         try:
             start = time.time()
