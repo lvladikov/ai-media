@@ -2729,6 +2729,22 @@ def convert_audio_file(input_path, target):
 
 # --- Interactive Mode ---
 
+def emoji(emoji_char, fallback=""):
+    """Return emoji if terminal supports it, otherwise return fallback text.
+    
+    Args:
+        emoji_char: The emoji string to display (e.g., "🎨 ")
+        fallback: Text to use if emoji encoding fails (e.g., "")
+    
+    Returns:
+        emoji_char if terminal can encode it, otherwise fallback
+    """
+    try:
+        emoji_char.encode(sys.stdout.encoding or 'utf-8')
+        return emoji_char
+    except (UnicodeEncodeError, LookupError, AttributeError):
+        return fallback
+
 def clear_screen():
     """Clear terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -2736,7 +2752,7 @@ def clear_screen():
 def show_header(title="AI-Media"):
     """Show interactive mode header."""
     print(f"\n{'═'*60}")
-    print(f"🎨 {title}")
+    print(f"{emoji('🎨 ', '')}{title}")
     print(f"{'═'*60}\n")
 
 def run_self_command(cmd_string):
@@ -3989,7 +4005,7 @@ def run_interactive(jump_point=None):
 # --- Test Runner ---
 
 
-def run_tests(verbose=False, test_filter=None):
+def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
     """Run test suite from tests/integration-tests.json."""
     import shlex
     import subprocess
@@ -4001,30 +4017,32 @@ def run_tests(verbose=False, test_filter=None):
     test_file = os.path.join(script_dir, "tests", "integration-tests.json")
     
     if not os.path.exists(test_file):
-        print(f"❌ Test file not found: {test_file}")
-        sys.exit(1)
+        print(f"{emoji('❌ ', 'Error: ')}Test file not found: {test_file}")
+        if exit_on_finish: sys.exit(1)
+        return False
     
     with open(test_file, "r") as f:
         data = json.load(f)
     
     tests = data.get("tests", [])
     if not tests:
-        print("❌ No tests found in tests/integration-tests.json")
-        sys.exit(1)
+        print(f"{emoji('❌ ', 'Error: ')}No tests found in tests/integration-tests.json")
+        if exit_on_finish: sys.exit(1)
+        return False
     
     # Filter tests if requested
     if test_filter:
         if isinstance(test_filter, list):
-            print(f"🔎 Test Filter Mode: Searching for {len(test_filter)} specific tests...")
+            print(f"{emoji('🔎 ', '')}Test Filter Mode: Searching for {len(test_filter)} specific tests...")
             tests = [t for t in tests if t.get("name") in test_filter]
         else:
-             print(f"🔎 Single Test Mode: Searching for '{test_filter}'...")
+             print(f"{emoji('🔎 ', '')}Single Test Mode: Searching for '{test_filter}'...")
              tests = [t for t in tests if t.get("name") == test_filter]
         
         if not tests:
-            print(f"❌ Error: No tests found matching filter: {test_filter}")
+            print(f"{emoji('❌ ', 'Error: ')}No tests found matching filter: {test_filter}")
             print("   Available tests are listed in the ID list, or:")
-            print("\n👉 Redirecting to Interactive Test Menu in ", end="", flush=True)
+            print(f"\n{emoji('👉 ', '')}Redirecting to Interactive Test Menu in ", end="", flush=True)
             for i in range(3, 0, -1):
                 print(f"{i}...", end="", flush=True)
                 time.sleep(1)
@@ -4032,19 +4050,17 @@ def run_tests(verbose=False, test_filter=None):
             # Call interactive mode jumping to 'test' menu
             # We need to access run_interactive. It is defined in the same global scope.
             run_interactive(jump_point="test")
-            return
+            return False
         
-        print(f"✅ Found {len(tests)} test(s) matching filter.\n")
+        print(f"{emoji('✅ ', '')}Found {len(tests)} test(s) matching filter.\n")
 
     # Warning prompt
     print(f"\n{'='*60}")
-    print(f"⚠️  WARNING: Test Suite")
+    print(f"{emoji('⚠️  ', '   ')}WARNING: Test Suite")
     print(f"{'='*60}")
-    print(f"   • Found {len(tests)} test(s) to run")
-    print(f"   • This may take a LONG time (30+ minutes)")
-    print(f"   • Uses significant system resources (CPU, RAM, GPU)")
-    print(f"   • Will download ALL models if not already cached")
-    print(f"   • Models can be 2-30GB each")
+    print(f"   • Integration tests can take a long time")
+    print(f"   • Models will be downloaded if not present (2-30GB each)")
+    print(f"   • High system resource consumption")
     print(f"   • Press CTRL+C at any time to interrupt")
     print(f"{'='*60}")
     
@@ -4052,10 +4068,12 @@ def run_tests(verbose=False, test_filter=None):
         choice = input(f"\n   Continue? [Y/n]: ").lower().strip()
         if choice in ['n', 'no']:
             print("❌ Test cancelled.")
-            sys.exit(0)
+            if exit_on_finish: sys.exit(0)
+            return False
     except KeyboardInterrupt:
         print("\n❌ Test cancelled.")
-        sys.exit(0)
+        if exit_on_finish: sys.exit(0)
+        return False
     
     print(f"\n{'='*60}")
     print(f"🧪 Running {len(tests)} test(s)")
@@ -4063,7 +4081,9 @@ def run_tests(verbose=False, test_filter=None):
     
     passed = 0
     failed = 0
+    skipped = 0
     results = []
+    ran_count = 0
     
     # Resource aggregation variables
     total_ram = 0.0
@@ -4092,7 +4112,7 @@ def run_tests(verbose=False, test_filter=None):
         
         # Formatting
         description = test.get("description", "")
-        header = f"📋 Test {i+1}/{len(tests)}: {test_name}"
+        header = f"{emoji('📋 ', '')}Test {i+1}/{len(tests)}: {test_name}"
         desc = f"   {description}" if description else ""
         start_t_str = datetime.now().strftime("%H:%M:%S")
         time_line = f"   Start at: {start_t_str}"
@@ -4117,13 +4137,13 @@ def run_tests(verbose=False, test_filter=None):
         for input_item in expected_inputs:
             input_path = os.path.join(script_dir, input_item)
             if not os.path.exists(input_path):
-                print(f"❌ Missing input: {input_item}")
+                print(f"{emoji('❌ ', '[X] ')}Missing input: {input_item}")
                 test_passed = False
                 failure_reason = f"Missing input: {input_item}"
                 break
         
         if not test_passed:
-            print(f"⏭️  Skipping due to missing inputs")
+            print(f"{emoji('⏭️  ', '')}Skipping due to missing inputs")
             failed += 1
             results.append((test_name, False, failure_reason))
             continue
@@ -4134,7 +4154,7 @@ def run_tests(verbose=False, test_filter=None):
             output_path = os.path.join(script_dir, output_item)
             if os.path.exists(output_path):
                 os.remove(output_path)
-                print(f"🗑️  Deleted: {output_item}")
+                print(f"{emoji('🗑️  ', '(-) ')}Deleted: {output_item}")
         
         # Prepare JSON Report Path
         import tempfile
@@ -4146,7 +4166,7 @@ def run_tests(verbose=False, test_filter=None):
         
         # For logging, show command without the hidden report arg
         cmd_display = f"python ai-media.py {command}"
-        print(f"🚀 Running: {cmd_display}")
+        print(f"{emoji('🚀 ', '(>) ')}Running: {cmd_display}")
             
             # ... rest of subprocess creation ...
         
@@ -4179,7 +4199,7 @@ def run_tests(verbose=False, test_filter=None):
             
             try:
                 if is_interactive:
-                    if verbose: print(f"⏳ Waiting {interactive_wait}s for interactive output...")
+                    if verbose: print(f"{emoji('⏳ ', 'Wait: ')}Waiting {interactive_wait}s for interactive output...")
                     time.sleep(interactive_wait)
                     
                     # Terminate interactive process (Windows-compatible)
@@ -4235,7 +4255,7 @@ def run_tests(verbose=False, test_filter=None):
                     # Interactive tests expect SIGINT exit code (usually 130 or 1 or 0 handling)
                     # If caught cleanly it might be 0.
                     # We only fail non-interactive tests on non-zero exit code here unless specific check later.
-                    print(f"❌ Command failed with exit code {current_process.returncode}")
+                    print(f"{emoji('❌ ', 'Error: ')}Command failed with exit code {current_process.returncode}")
                     # Since stderr is merged, we can't print it separately, but it's already on screen.
                     test_passed = False
                     failure_reason = f"Exit code {current_process.returncode}"
@@ -4244,7 +4264,7 @@ def run_tests(verbose=False, test_filter=None):
                 if test_passed and expected_stdout_items:
                     for item in expected_stdout_items:
                         if item not in stdout:
-                            print(f"❌ Missing stdout item: '{item}'")
+                            print(f"{emoji('❌ ', 'Error: ')}Missing stdout item: '{item}'")
                             test_passed = False
                             failure_reason = f"Missing stdout: '{item}'"
                             break
@@ -4255,7 +4275,7 @@ def run_tests(verbose=False, test_filter=None):
                 current_process.kill()
                 current_process.wait()
                 elapsed = time.time() - start_time
-                print(f"❌ Command timed out after {timeout_limit} seconds")
+                print(f"{emoji('❌ ', 'Error: ')}Command timed out after {timeout_limit} seconds")
                 test_passed = False
                 failure_reason = "Timeout"
                 
@@ -4271,7 +4291,7 @@ def run_tests(verbose=False, test_filter=None):
             
         except Exception as e:
             elapsed = time.time() - start_time
-            print(f"❌ Command exception: {e}")
+            print(f"{emoji('❌ ', 'Error: ')}Command exception: {e}")
             test_passed = False
             failure_reason = str(e)
         
@@ -4284,7 +4304,7 @@ def run_tests(verbose=False, test_filter=None):
             for output_item in expected_outputs:
                 output_path = os.path.join(script_dir, output_item)
                 if not os.path.exists(output_path):
-                    print(f"❌ Missing output: {output_item}")
+                    print(f"{emoji('❌ ', 'Error: ')}Missing output: {output_item}")
                     test_passed = False
                     failure_reason = f"Missing output: {output_item}"
                     break
@@ -4321,20 +4341,22 @@ def run_tests(verbose=False, test_filter=None):
                         pass
                         
                 except Exception as e:
-                    print(f"⚠️ Failed to read stats JSON: {e}")
+                    print(f"{emoji('⚠️ ', 'Warning: ')}Failed to read stats JSON: {e}")
                     results.append((test_name, True, f"{elapsed:.1f}s"))
             else:
                 # Fallback to elapsed time if no JSON report
                 results.append((test_name, True, f"{elapsed:.1f}s"))
 
-            print(f"✅ PASSED ({elapsed:.1f}s)")
+            print(f"{emoji('✅ ', '')}PASSED ({elapsed:.1f}s)")
             passed += 1
             _test_state['passed'] = passed
         else:
-            print(f"❌ FAILED ({elapsed:.1f}s)")
+            print(f"{emoji('❌ ', '')}FAILED ({elapsed:.1f}s)")
             failed += 1
             _test_state['failed'] = failed
             results.append((test_name, False, failure_reason))
+    
+        ran_count += 1
     
     # Mark test as no longer active
     _test_state['active'] = False
@@ -4343,13 +4365,13 @@ def run_tests(verbose=False, test_filter=None):
 
     # Print summary
     print(f"\n{'='*60}")
-    print(f"📊 TEST SUMMARY")
+    print(f"{emoji('📊 ', '')}TEST SUMMARY")
     print(f"{'='*60}")
     print(f"   Total:  {len(tests)}")
-    print(f"   Passed: {passed} ✅")
+    print(f"   Passed: {passed} {emoji('✅', '')}")
     
     if failed > 0:
-        print(f"   Failed: {failed} ❌")
+        print(f"   Failed: {failed} {emoji('❌', '')}")
     else:
         print(f"   Failed: {failed}")
         
@@ -4362,7 +4384,7 @@ def run_tests(verbose=False, test_filter=None):
         avg_gpu = total_gpu / resource_count
         
         if len(tests) >= 2:
-             print(f"\n   ⚖️  Averages:\n")
+             print(f"\n   {emoji('⚖️  ', '')}Averages:\n")
         
         print(f"   RAM: {avg_ram:.1f} GB")
         print(f"   VRAM: {avg_vram:.1f} GB")
@@ -4589,40 +4611,109 @@ Supported Models:
     global args
     args = parser.parse_args()
     
-    # Run unit tests if --unittests or --unittests-verbose is provided
+    # Combined Test Execution Logic
+    exit_code = 0
+    run_any_tests = False
+
+    # 1. Run unit tests if requested
     if args.unittests is not None or args.unittests_verbose is not None:
-        import subprocess
+        run_any_tests = True
         
         # Determine target and verbosity
         target = args.unittests if args.unittests else args.unittests_verbose
         is_verbose = args.unittests_verbose is not None
         
+        print(f"{emoji('🧪 ', '')}Running Unit Tests: {target}\n")
+        print("=" * 60)
+        
+        import subprocess
+        
+        # Build command
         cmd = [sys.executable, "-m", "unittest", target]
         if is_verbose:
             cmd.append("-v")
+        
+        # Run and capture output
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            env=env
+        )
+        
+        if is_verbose:
+            # Post-process verbose output to add line breaks and emojis
+            # unittest -v format: "test_name (module.Class.test_name)\nDescription ... status"
+            for line in proc.stdout:
+                line = line.rstrip()
+                
+                # Skip empty lines (we'll add our own spacing)
+                if not line:
+                    continue
+                
+                # Test result lines end with " ... ok/FAIL/ERROR/skipped"
+                if line.endswith(" ... ok"):
+                    line = line[:-7] + f" ... {emoji('✅', 'ok')}"
+                    print(f"{emoji('🔹 ', '')}{line}\n")
+                elif line.endswith(" ... FAIL"):
+                    line = line[:-9] + f" ... {emoji('❌', 'FAIL')}"
+                    print(f"{emoji('🔹 ', '')}{line}\n")
+                elif line.endswith(" ... ERROR"):
+                    line = line[:-10] + f" ... {emoji('❌', 'ERROR')}"
+                    print(f"{emoji('🔹 ', '')}{line}\n")
+                elif " ... skipped" in line:
+                    line = line.replace(" ... skipped", f" ... {emoji('⏭️', 'skipped')}")
+                    print(f"{emoji('🔹 ', '')}{line}\n")
+                # Summary line
+                elif line.startswith("Ran "):
+                    print(f"\n{'-' * 60}")
+                    print(f"{emoji('📊 ', '')}{line}")
+                elif line.startswith("OK"):
+                    print(f"{emoji('✅ ', '')}{line}")
+                elif line.startswith("FAILED"):
+                    print(f"{emoji('❌ ', '')}{line}")
+                # Other lines (test name, tracebacks, etc)
+                else:
+                    print(line)
             
-        print(f"Running: {' '.join(cmd)}\n")
-        print("=" * 60)
-        result = subprocess.run(cmd)
-        sys.exit(result.returncode)
-    
-    # Run test suite if --test or --test-verbose is provided
-    # Note: with nargs='*', presence is indicated by not None. Empty list [] means flag present but no values (Run All).
+            proc.wait()
+            if proc.returncode != 0:
+                exit_code = proc.returncode
+        else:
+            # Non-verbose: just stream output directly
+            for line in proc.stdout:
+                print(line, end='')
+            proc.wait()
+            if proc.returncode != 0:
+                exit_code = proc.returncode
+
+    # 2. Run test suite if requested
     if args.test is not None or args.test_verbose is not None:
+        run_any_tests = True
         # Determine test filter
         test_filter = []
-        # Merge lists if both provided (though unlikely)
         if args.test: test_filter.extend(args.test)
         if args.test_verbose: test_filter.extend(args.test_verbose)
         
-        # If test_filter is empty here, it means flags were provided but no names -> Run All.
-        # However, our run_tests logic expects None for "Run All", and a list/string for filtering.
-        # Let's normalize.
         if not test_filter:
             test_filter = None # Run All
         
-        run_tests(verbose=bool(args.test_verbose is not None), test_filter=test_filter)
-        return  # run_tests calls sys.exit
+        # run_tests usually calls sys.exit, we need to handle that or modify run_tests
+        # Since run_tests exits, we must ensure it's the last thing if called directly,
+        # OR we modify run_tests to return status. 
+        # Modifying run_tests is cleaner.
+        success = run_tests(verbose=bool(args.test_verbose is not None), test_filter=test_filter, exit_on_finish=False)
+        if not success:
+            exit_code = 1
+            
+    if run_any_tests:
+        sys.exit(exit_code)
     
     # Run interactive mode if --interactive is provided OR no arguments given
     # Check if any meaningful argument was provided

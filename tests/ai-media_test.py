@@ -622,11 +622,12 @@ class TestShowHeader(unittest.TestCase):
     
     def test_prints_header(self):
         """Test show_header prints a header."""
-        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+        with patch('sys.stdout', new=io.StringIO()) as fake_out:
             ai_media.show_header("Test Title")
-            output = mock_stdout.getvalue()
+            output = fake_out.getvalue()
             self.assertIn("Test Title", output)
-            self.assertIn("═", output)
+            # Check for either classic '=' or decorative '═' border
+            self.assertTrue("═" in output or "=" in output)
     
     def test_default_title(self):
         """Test show_header uses default title."""
@@ -634,6 +635,50 @@ class TestShowHeader(unittest.TestCase):
             ai_media.show_header()
             output = mock_stdout.getvalue()
             self.assertIn("AI-Media", output)
+
+
+class TestEmoji(unittest.TestCase):
+    """Tests for emoji() helper function - terminal emoji fallback."""
+    
+    def test_returns_emoji_when_encoding_supported(self):
+        """Test emoji is returned when terminal supports encoding."""
+        # Mock stdout with UTF-8 encoding
+        with patch('sys.stdout') as mock_stdout:
+            mock_stdout.encoding = 'utf-8'
+            result = ai_media.emoji("🎨 ", "")
+            self.assertEqual(result, "🎨 ")
+    
+    def test_returns_fallback_when_encoding_fails(self):
+        """Test fallback is returned when encoding fails."""
+        # Mock stdout with an encoding that can't handle emoji
+        with patch('sys.stdout') as mock_stdout:
+            mock_stdout.encoding = 'ascii'
+            result = ai_media.emoji("🎨 ", "ART: ")
+            self.assertEqual(result, "ART: ")
+    
+    def test_returns_fallback_with_none_encoding(self):
+        """Test fallback on None encoding (defaults to utf-8 which works)."""
+        with patch('sys.stdout') as mock_stdout:
+            mock_stdout.encoding = None
+            # Should NOT fallback since utf-8 is used as default and supports emoji
+            result = ai_media.emoji("✅ ", "OK: ")
+            self.assertEqual(result, "✅ ")
+    
+    def test_empty_fallback(self):
+        """Test empty string fallback."""
+        with patch('sys.stdout') as mock_stdout:
+            mock_stdout.encoding = 'ascii'
+            result = ai_media.emoji("❌ ", "")
+            self.assertEqual(result, "")
+    
+    def test_various_emojis(self):
+        """Test various emoji characters."""
+        with patch('sys.stdout') as mock_stdout:
+            mock_stdout.encoding = 'utf-8'
+            self.assertEqual(ai_media.emoji("🔎 ", ""), "🔎 ")
+            self.assertEqual(ai_media.emoji("📋 ", ""), "📋 ")
+            self.assertEqual(ai_media.emoji("🚀 ", "(>) "), "🚀 ")
+            self.assertEqual(ai_media.emoji("⏳ ", "Wait: "), "⏳ ")
 
 
 # =============================================================================

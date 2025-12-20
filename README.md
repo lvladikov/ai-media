@@ -846,9 +846,34 @@ python ai-media.py --test "Image - SDXL"
 
 > **Note**: Test output is buffered to prevent console spam. For long-running tests (like downloading models), use `--test-verbose` to see progress in real-time.
 
+### Combined Test Execution
+
+You can run both Unit and Integration tests in a single command, mixing verbosity levels as needed. This is useful for verifying internal logic and pipeline execution at once:
+
+```bash
+# Run All Unit Tests (Summary) + All Integration Tests (Summary)
+python ai-media.py --unittests --test
+
+# Run All Unit Tests (Verbose) + All Integration Tests (Verbose)
+python ai-media.py --unittests-verbose --test-verbose
+
+# Run Specific Unit Test Class + All Integration Tests (Verbose)
+python ai-media.py --unittests tests.ai-media_test.TestParseSize --test-verbose
+
+# Run All Unit Tests (Verbose) + Specific Integration Test
+python ai-media.py --unittests-verbose --test "Image - SDXL (Default)"
+
+# Run Unit Tests (Summary) + Multiple Specific Integration Tests
+python ai-media.py --unittests --test "Image - Auto Filename" "Audio - Bark TTS"
+
+# Run Specific Unit Method (Verbose) + Specific Video Integration Test
+python ai-media.py --unittests-verbose tests.ai-media_test.TestParseDuration.test_colon_format_hms --test "Video - Zeroscope (Default)"
+```
+
 | File | Description |
 | :--- | :--- |
 | `tests/ai-media_test.py` | Unit tests for parsing, helpers, and classes |
+| `tests/integration-tests.json` | JSON definitions for full-pipeline integration tests |
 
 
 ---
