@@ -1,6 +1,6 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface. It also includes unit and integration tests to verify the functionality of the tool.
 
 ## Features
 
@@ -12,6 +12,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](#media-conversion-options) and [Examples](#media-conversion-examples).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Stable Diffusion x2/x4) or simple non-AI (Lanczos/FFmpeg). Supports custom factors and chained workflows. See [Upscaling Options](#ai-upscaling-options), [Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
+- 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](#testing).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -802,7 +803,6 @@ This project uses the following open-source libraries:
 
 ---
 
-## Testing (Internal)
 ## 🧪 Testing
 
 The included test suite covers unit tests (Python logic) and integration tests (full generation pipelines).
