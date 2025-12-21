@@ -930,14 +930,31 @@ class TestSignalHandler(unittest.TestCase):
     """Tests for signal_handler() function."""
     
     def test_signal_handler_non_test_mode(self):
-        """Test signal handler in non-test mode exits with code 0."""
+        """Test signal handler in non-test mode sets interrupted state on first call."""
+        # Reset global state
         ai_media._test_state['active'] = False
+        ai_media._interrupted = False
+        ai_media._first_interrupt_time = None
+        ai_media._force_kill_timer = None
         
         # Redirect stdout to avoid emoji encoding issues on Windows
         with patch('sys.stdout', new_callable=io.StringIO):
-            with self.assertRaises(SystemExit) as cm:
-                ai_media.signal_handler(None, None)
-            self.assertEqual(cm.exception.code, 0)
+            # First interrupt in non-test mode catches SystemExit for graceful cleanup
+            # It sets _interrupted=True and _first_interrupt_time, then catches its own sys.exit(0)
+            ai_media.signal_handler(None, None)
+            
+            # Verify state changes
+            self.assertTrue(ai_media._interrupted)
+            self.assertIsNotNone(ai_media._first_interrupt_time)
+        
+        # Clean up the timer that was started
+        if ai_media._force_kill_timer:
+            ai_media._force_kill_timer.cancel()
+            ai_media._force_kill_timer = None
+        
+        # Reset state
+        ai_media._interrupted = False
+        ai_media._first_interrupt_time = None
     
     def test_signal_handler_test_mode(self):
         """Test signal handler in test mode exits with code 130."""
