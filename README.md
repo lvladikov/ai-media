@@ -513,7 +513,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 | **HunyuanVideo** | `hunyuan` | Any | ~25GB | Massive scale. ⚠️ **Heavy (24GB+ VRAM)**. |
 | **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | **Default**. Fast, no watermarks. Auto-upscales with XL. |
 | **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | *Internal V2V upscaler*. |
-| **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
+| **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Very Heavy on all Systems** (~50GB+ RAM). |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
 | **ModelScope** | `ms-1.7b` | Any | ~10GB | **Legacy**. General purpose (has watermark issues). |
 
