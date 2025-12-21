@@ -2,6 +2,116 @@ import subprocess
 import time
 import sys
 import platform
+import threading
+import os
+
+# Global skip flag
+skip_requested = False
+skip_lock = threading.Lock()
+input_thread = None
+input_thread_stop = False
+
+def start_input_listener():
+    """Start a background thread to listen for 'S' key to skip tests."""
+    global input_thread, input_thread_stop, skip_requested
+    input_thread_stop = False
+    
+    def listener():
+        global skip_requested, input_thread_stop
+        if platform.system() == "Windows":
+            import msvcrt
+            while not input_thread_stop:
+                if msvcrt.kbhit():
+                    key = msvcrt.getch().decode('utf-8', errors='ignore').lower()
+                    if key == 's':
+                        with skip_lock:
+                            skip_requested = True
+                time.sleep(0.05)
+        else:
+            # Unix - set terminal to raw mode once
+            import termios
+            import tty
+            try:
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                try:
+                    tty.setcbreak(fd)
+                    while not input_thread_stop:
+                        # Use select with a short timeout
+                        import select
+                        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+                        if rlist:
+                            key = sys.stdin.read(1).lower()
+                            if key == 's':
+                                with skip_lock:
+                                    skip_requested = True
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+    
+    input_thread = threading.Thread(target=listener, daemon=True)
+    input_thread.start()
+
+def stop_input_listener():
+    """Stop the background input listener thread."""
+    global input_thread_stop
+    input_thread_stop = True
+
+def reset_skip_flag():
+    """Reset the skip flag for the next test."""
+    global skip_requested
+    with skip_lock:
+        skip_requested = False
+
+def is_skip_requested():
+    """Check if skip was requested."""
+    with skip_lock:
+        return skip_requested
+
+def run_with_skip_support(cmd, timeout, shell=False):
+    """
+    Runs a subprocess with support for 'S' key to skip.
+    Returns (returncode, stderr, was_skipped, duration)
+    """
+    reset_skip_flag()
+    
+    start = time.time()
+    proc = subprocess.Popen(
+        cmd, 
+        shell=shell,
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.PIPE, 
+        text=True
+    )
+    
+    # Poll until process finishes or skip is requested
+    while proc.poll() is None:
+        if is_skip_requested():
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except:
+                proc.kill()
+            duration = time.time() - start
+            return -1, "", True, duration
+        
+        # Check timeout
+        if time.time() - start > timeout:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except:
+                proc.kill()
+            duration = time.time() - start
+            return -2, "Timeout", False, duration
+        
+        time.sleep(0.1)  # Small delay to avoid busy-waiting
+    
+    duration = time.time() - start
+    stderr = proc.stderr.read() if proc.stderr else ""
+    return proc.returncode, stderr, False, duration
+
 
 def is_hardware_encoder(name):
     """
@@ -97,7 +207,7 @@ def get_platform_info():
 def check_encoder_resolution(encoder, width, height, timeout=60):
     """
     Tries to encode a 1-second null video at the given resolution.
-    Returns (Success, Message, Duration)
+    Returns (Success, Message, Duration, Skipped)
     """
     res_str = f"{width}x{height}"
     print(f"   Testing {encoder:<20} @ {res_str:<12}", end="", flush=True)
@@ -121,36 +231,36 @@ def check_encoder_resolution(encoder, width, height, timeout=60):
         cmd.extend(['-preset', '12']) # max speed
 
     try:
-        start = time.time()
-        # Increased timeout for high-res software encoding
-        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
-        duration = time.time() - start
+        returncode, stderr, was_skipped, duration = run_with_skip_support(cmd, timeout, shell=False)
         
-        if proc.returncode == 0:
+        if was_skipped:
+            print(" ⏩ Skipped")
+            return False, "Skipped", duration, True
+        elif returncode == -2:  # Timeout
+            print(" ⏱️ Timeout")
+            return False, "Timeout", timeout, False
+        elif returncode == 0:
             print(f" ✅ ({duration:.2f}s)")
-            return True, "OK", duration
+            return True, "OK", duration, False
         else:
             print(f" ❌")
             # Extract basic error
-            err_lines = proc.stderr.split('\n')
+            err_lines = stderr.split('\n')
             last_err = "Unknown Error"
             for line in err_lines[-10:]:
                 if "Error" in line or "failed" in line or "incorrect" in line or "Horizontal" in line:
                     last_err = line.strip()
                     break
-            return False, f"Err: {last_err[:50]}...", duration
+            return False, f"Err: {last_err[:50]}...", duration, False
             
-    except subprocess.TimeoutExpired:
-        print(" ⏱️ Timeout")
-        return False, "Timeout", timeout
     except Exception as e:
         print(f" 💥")
-        return False, str(e), 0
+        return False, str(e), 0, False
 
 def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
     """
     Tries to decode a 1-frame test video.
-    Returns (Success, Message, Duration)
+    Returns (Success, Message, Duration, Skipped)
     """
     res_str = f"{width}x{height}"
     print(f"   Testing {decoder:<20} @ {res_str:<12}", end="", flush=True)
@@ -169,7 +279,6 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
     
     if use_temp_file:
         import tempfile
-        import os
         
         container = "mkv" if codec_type == "av1" else "mp4"  # MKV works better for AV1 than webm
         with tempfile.NamedTemporaryFile(suffix=f'.{container}', delete=False) as tmp:
@@ -195,28 +304,31 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
             proc1 = subprocess.run(encode_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=120)
             if proc1.returncode != 0:
                 print(f" ❌ (encode failed)")
-                return False, "Encode failed", 0
+                return False, "Encode failed", 0, False
             
-            # Step 2: Decode the temp file with the target decoder
+            # Step 2: Decode the temp file with the target decoder (with skip support)
             decode_cmd = [
                 'ffmpeg', '-y', '-c:v', decoder, '-i', temp_path, '-f', 'null', '-'
             ]
-            proc2 = subprocess.run(decode_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
+            returncode, stderr, was_skipped, dur = run_with_skip_support(decode_cmd, timeout, shell=False)
             duration = time.time() - start
             
-            if proc2.returncode == 0:
+            if was_skipped:
+                print(" ⏩ Skipped")
+                return False, "Skipped", duration, True
+            elif returncode == -2:  # Timeout
+                print(" ⏱️ Timeout")
+                return False, "Timeout", timeout, False
+            elif returncode == 0:
                 print(f" ✅ ({duration:.2f}s)")
-                return True, "OK", duration
+                return True, "OK", duration, False
             else:
                 print(f" ❌")
-                return False, "Decode failed", duration
+                return False, "Decode failed", duration, False
                 
-        except subprocess.TimeoutExpired:
-            print(" ⏱️ Timeout")
-            return False, "Timeout", timeout
         except Exception as e:
             print(f" 💥")
-            return False, str(e), 0
+            return False, str(e), 0, False
         finally:
             try:
                 os.remove(temp_path)
@@ -235,23 +347,24 @@ def check_decoder_resolution(decoder, codec_type, width, height, timeout=300):
         cmd = f'ffmpeg -y -f lavfi -i color=c=black:s={width}x{height}:r=30 -t 0.1 -c:v {src_encoder} {preset_str} -f nut - | ffmpeg -vcodec {decoder} -i - -f null -'
         
         try:
-            start = time.time()
-            proc = subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
-            duration = time.time() - start
+            returncode, stderr, was_skipped, duration = run_with_skip_support(cmd, timeout, shell=True)
             
-            if proc.returncode == 0:
+            if was_skipped:
+                print(" ⏩ Skipped")
+                return False, "Skipped", duration, True
+            elif returncode == -2:  # Timeout
+                print(" ⏱️ Timeout")
+                return False, "Timeout", timeout, False
+            elif returncode == 0:
                 print(f" ✅ ({duration:.2f}s)")
-                return True, "OK", duration
+                return True, "OK", duration, False
             else:
                 print(f" ❌")
-                return False, "Decode failed", duration
+                return False, "Decode failed", duration, False
                 
-        except subprocess.TimeoutExpired:
-            print(" ⏱️ Timeout")
-            return False, "Timeout", timeout
         except Exception as e:
             print(f" 💥")
-            return False, str(e), 0
+            return False, str(e), 0, False
 
 def main():
     print("===========================================")
@@ -261,6 +374,10 @@ def main():
     sys_info = get_platform_info()
     print(f"System: {sys_info['system']}")
     print(f"Acceleration: {sys_info['accel_type'].upper()}")
+    print("\n💡 Tip: Press 'S' during a test to skip it")
+    
+    # Start background thread to listen for 'S' key
+    start_input_listener()
     
     RESOLUTIONS = [
         ("4K", 3840, 2160),
@@ -294,7 +411,7 @@ def main():
                 for res_name, w, h in RESOLUTIONS:
                     t_out = 600 # 10 mins
                     
-                    success, msg, dur = check_encoder_resolution(enc, w, h, timeout=t_out)
+                    success, msg, dur, skipped = check_encoder_resolution(enc, w, h, timeout=t_out)
                     
                     results_enc.append({
                         "codec": codec,
@@ -302,10 +419,12 @@ def main():
                         "res": res_name,
                         "w": w, "h": h,
                         "pass": success,
-                        "note": msg
+                        "note": msg,
+                        "skipped": skipped
                     })
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user. Showing partial summary...")
+        stop_input_listener()
         print_summary(results_enc, RESOLUTIONS, "ENCODER")
         sys.exit(0)
 
@@ -325,7 +444,7 @@ def main():
                 for res_name, w, h in RESOLUTIONS:
                     t_out = 600 # 10 mins
                     
-                    success, msg, dur = check_decoder_resolution(dec, codec, w, h, timeout=t_out)
+                    success, msg, dur, skipped = check_decoder_resolution(dec, codec, w, h, timeout=t_out)
                     
                     results_dec.append({
                         "codec": codec,
@@ -333,10 +452,14 @@ def main():
                         "res": res_name,
                         "w": w, "h": h,
                         "pass": success,
-                        "note": msg
+                        "note": msg,
+                        "skipped": skipped
                     })
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user. Showing partial summary...")
+
+    # Stop background input listener
+    stop_input_listener()
 
     print_summary(results_enc, RESOLUTIONS, "ENCODER")
     print_summary(results_dec, RESOLUTIONS, "DECODER")
@@ -377,10 +500,15 @@ def print_summary(results, resolutions, type_label):
         for res_name, _, _ in resolutions:
             match = next((x for x in results if x[key_name] == item and x["res"] == res_name), None)
             if match:
-                symbol = "✅" if match["pass"] else "❌"
+                if match.get("skipped"):
+                    symbol = "⏩"  # Skipped
+                elif match["pass"]:
+                    symbol = "✅"
+                else:
+                    symbol = "❌"
                 row += f"  {symbol}   |"
             else:
-                row += f"  ➖   |"  # emoji dash for consistent width
+                row += f"  ➖   |"  # emoji dash for not tested
         print(row)
     print(f"{'='*table_width}")
 
