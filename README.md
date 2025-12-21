@@ -1,6 +1,8 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface. It also includes unit and integration tests to verify the functionality of the tool.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface. It also includes unit and integration tests to verify the functionality of the tool. 
+
+Consider using these models more for personal use and experimenting, as most of them require a lot of resources, especially for video generation. The idea was to prove that local AI Media models can be run on personal computers, and to build a python wrapper that allows for easy execution of these models.
 
 ![Infographic created with NotebookLM](screenshots/infographic.png) 
 
