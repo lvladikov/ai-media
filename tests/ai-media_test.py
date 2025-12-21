@@ -1594,5 +1594,46 @@ class TestAudioMuxing(unittest.TestCase):
         self.assertTrue(callable(ai_media.upscale_video_file))
 
 
+# =============================================================================
+# Loading Timer Tests
+# =============================================================================
+
+class TestLoadingTimer(unittest.TestCase):
+    """Tests for the delayed loading message timer."""
+    
+    def test_loading_timer_variable_exists(self):
+        """Test _loading_timer variable exists in module."""
+        self.assertTrue(hasattr(ai_media, '_loading_timer'))
+    
+    def test_loading_shown_variable_exists(self):
+        """Test _loading_shown variable exists in module."""
+        self.assertTrue(hasattr(ai_media, '_loading_shown'))
+    
+    def test_show_loading_message_function_exists(self):
+        """Test _show_loading_message function exists."""
+        self.assertTrue(hasattr(ai_media, '_show_loading_message'))
+        self.assertTrue(callable(ai_media._show_loading_message))
+    
+    def test_loading_timer_is_none_for_cli_mode(self):
+        """Test _loading_timer is None when running with CLI args (test mode)."""
+        # When running tests, sys.argv has arguments, so timer should be None
+        # (or already cancelled)
+        timer = ai_media._loading_timer
+        # Timer should either be None (not started) or cancelled (if started)
+        if timer is not None:
+            self.assertFalse(timer.is_alive())
+    
+    def test_show_loading_message_sets_flag(self):
+        """Test _show_loading_message sets _loading_shown to True."""
+        # Reset the flag
+        ai_media._loading_shown = False
+        
+        # Capture stdout to avoid printing during test
+        with patch('sys.stdout', new_callable=io.StringIO):
+            ai_media._show_loading_message()
+        
+        self.assertTrue(ai_media._loading_shown)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

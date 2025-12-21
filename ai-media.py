@@ -43,6 +43,23 @@ from datetime import datetime
 import PIL.Image
 import PIL.ImageOps
 
+# --- Delayed Loading Message (only shown if imports take > 3 seconds) ---
+# This avoids showing the message on fast "warm" starts when modules are cached
+# Only applies to interactive mode (no CLI arguments)
+import threading
+_loading_timer = None
+_loading_shown = False
+def _show_loading_message():
+    global _loading_shown
+    _loading_shown = True
+    print("⏳ Loading... (May take a moment on first boot while modules initialize and cache)", flush=True)
+
+# Only start timer if likely interactive mode (no args or just --interactive)
+if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-int')):
+    _loading_timer = threading.Timer(3.0, _show_loading_message)
+    _loading_timer.daemon = True
+    _loading_timer.start()
+
 # --- Monkey Patch for basicsr/torchvision compatibility ---
 try:
     from torchvision.transforms import functional_tensor
@@ -5721,6 +5738,10 @@ class CleanHelpFormatter(argparse.RawTextHelpFormatter):
         return super()._format_action_invocation(action)
 
 def main():
+    # Cancel loading message timer (imports complete)
+    if _loading_timer:
+        _loading_timer.cancel()
+    
     parser = argparse.ArgumentParser(
         description="Generate, describe, upscale, and convert media using AI and FFmpeg.",
         formatter_class=CleanHelpFormatter,
