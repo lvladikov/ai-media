@@ -1910,7 +1910,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # --- Performance Tracking ---
         tracker = PerformanceTracker()
         
-        print(f"🎬 Rendering video frames at {gen_width}x{gen_height}... (This will be slow)")
+        print(f"🎬 Rendering video frames at {gen_width}x{gen_height}... (This might be slow)")
         
         start_time = time.time()
         with ResourceMonitor() as monitor:
