@@ -1056,6 +1056,18 @@ python ai-media.py --test "Validation - Image Generation" "Validation - Video Ge
 python ai-media.py --test-verbose "Validation - Image Generation" "Validation - Video Generation" "Validation - Audio Generation"
 ```
 
+#### Skipping Tests
+You can permanently skip a specific test by adding `"skip": true` to its definition in `tests/integration-tests.json`.
+The test runner will report these as skipped in the final summary.
+
+```json
+{
+  "name": "Image - Auto Filename",
+  "skip": true,
+  "command": "..."
+}
+```
+
 > [!NOTE]
 > The test name must match exactly what is defined in `tests/integration-tests.json`. If the name is not found, the script will list all available tests.
 

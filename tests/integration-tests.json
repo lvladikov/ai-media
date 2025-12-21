@@ -205,6 +205,17 @@
       "description": "Generate video using ModelScope 1.7B model"
     },
     {
+      "name": "Video - CogVideoX",
+      "timeout": 7200,
+      "skip": true,
+      "command": "-v -p \"A dog running\" -o tests/testData/outputs/vid_cogvideox.mp4 -l 1s --video-model cogvideox --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_cogvideox.mp4"
+      ],
+      "description": "Generate video using CogVideoX model (SOTA)"
+    },
+    {
       "name": "Video - Muxing with Audio",
       "command": "-v -p \"A dancing robot\" -o tests/testData/outputs/vid_mux.mp4 -l 3s -s 576x320 -ap \"Techno music\" --force --unsafe",
       "expectedInputItems": [],
@@ -215,7 +226,7 @@
     },
     {
       "name": "Video - Muxing with Audio (Custom Model)",
-      "command": "-v -p \"A dancing robot\" -o tests/testData/outputs/vid_mux_small.mp4 -l 3s -ap \"Techno music\" -am musicgen-small --force --unsafe",
+      "command": "-v -p \"A dancing robot\" -o tests/testData/outputs/vid_mux_small.mp4 -l 3s -s 576x320 -ap \"Techno music\" -am musicgen-small --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_mux_small.mp4"

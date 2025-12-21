@@ -5600,6 +5600,12 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
         expected_inputs = test.get("expectedInputItems", [])
         expected_outputs = test.get("expectedOutputItems", [])
         
+        # Check for skip flag
+        if test.get("skip") is True:
+            print(f"\n{emoji('⏭️  ', '(-)')}Skipping test: {test_name} (skip: true)")
+            skipped += 1
+            continue
+        
         # Formatting
         description = test.get("description", "")
         header = f"{emoji('📋 ', '')}Test {i+1}/{len(tests)}: {test_name}"
@@ -5901,10 +5907,15 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
     print(f"   Total:  {len(tests)}")
     print(f"   Passed: {passed} {emoji('✅', '')}")
     
+
+    
     if failed > 0:
         print(f"   Failed: {failed} {emoji('❌', '')}")
     else:
         print(f"   Failed: {failed}")
+        
+    if skipped > 0:
+        print(f"   Skipped: {skipped} {emoji('⏭️', '')}")
         
     print(f"   Duration: {format_time(total_duration)}")
     
