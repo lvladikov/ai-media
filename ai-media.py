@@ -399,7 +399,8 @@ _test_state = {
     'active': False,
     'passed': 0,
     'failed': 0,
-    'total': 0
+    'total': 0,
+    'current_process': None  # Track subprocess for cleanup
 }
 _interrupted = False
 _force_kill_timer = None
@@ -410,10 +411,40 @@ def _force_exit():
     print("\n💀 Force-killing process (GPU operations did not respond in time)...")
     os._exit(1)  # Immediate exit, bypasses cleanup
 
+def _kill_test_subprocess():
+    """Kill the current test subprocess and its children."""
+    proc = _test_state.get('current_process')
+    if proc:
+        pid = proc.pid
+        print(f"\n   ⚠️  Killing subprocess tree (PID {pid})...")
+        if os.name == 'nt':
+            try:
+                import subprocess
+                subprocess.run(['taskkill', '/T', '/F', '/PID', str(pid)], 
+                               capture_output=True, timeout=5)
+                print(f"   ✅ Process tree terminated.")
+            except Exception as e:
+                print(f"   ⚠️  taskkill failed: {e}")
+                try:
+                    proc.kill()
+                except:
+                    pass
+        else:
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+            except:
+                try:
+                    proc.kill()
+                except:
+                    pass
+
 def signal_handler(sig, frame):
     global _interrupted, _force_kill_timer, _first_interrupt_time
     
     if _test_state['active']:
+        # Kill subprocess first
+        _kill_test_subprocess()
+        
         completed = _test_state['passed'] + _test_state['failed']
         print(f"\n\n{'='*60}")
         print(f"❌ Test suite interrupted by user (CTRL+C)")
@@ -5645,6 +5676,12 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
             env["PYTHONIOENCODING"] = "utf-8"
             
             # Use Popen for better control over the subprocess
+            # On Windows, create subprocess in new process group so it doesn't receive console Ctrl+C
+            # This allows parent to catch KeyboardInterrupt and kill subprocess properly
+            creation_flags = 0
+            if os.name == 'nt':
+                creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+            
             current_process = subprocess.Popen(
                 full_command,
                 cwd=script_dir,
@@ -5655,8 +5692,12 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                 errors='replace',
                 env=env,
                 bufsize=1, # Line buffered
-                universal_newlines=True
+                universal_newlines=True,
+                creationflags=creation_flags
             )
+            
+            # Track subprocess for signal handler cleanup
+            _test_state['current_process'] = current_process
             
             stdout_lines = []
             
@@ -5715,13 +5756,22 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                     print(f"\n--- END ---\n")
                 
                 if current_process.returncode != 0 and not is_interactive:
-                    # Interactive tests expect SIGINT exit code (usually 130 or 1 or 0 handling)
-                    # If caught cleanly it might be 0.
-                    # We only fail non-interactive tests on non-zero exit code here unless specific check later.
-                    print(f"{emoji('❌ ', 'Error: ')}Command failed with exit code {current_process.returncode}")
-                    # Since stderr is merged, we can't print it separately, but it's already on screen.
-                    test_passed = False
-                    failure_reason = f"Exit code {current_process.returncode}"
+                    # Check if it was a Ctrl+C interrupt
+                    # Unix: 130 (128 + SIGINT=2), Windows: -2 or 3221225786 (STATUS_CONTROL_C_EXIT)
+                    is_ctrl_c = current_process.returncode in [130, -2, 3221225786, -1073741510]
+                    
+                    if is_ctrl_c:
+                        print(f"\n\n⚠️  Interrupted! Cleaning up...")
+                        # Re-raise to trigger the outer handler
+                        raise KeyboardInterrupt()
+                    else:
+                        # Interactive tests expect SIGINT exit code (usually 130 or 1 or 0 handling)
+                        # If caught cleanly it might be 0.
+                        # We only fail non-interactive tests on non-zero exit code here unless specific check later.
+                        print(f"{emoji('❌ ', 'Error: ')}Command failed with exit code {current_process.returncode}")
+                        # Since stderr is merged, we can't print it separately, but it's already on screen.
+                        test_passed = False
+                        failure_reason = f"Exit code {current_process.returncode}"
                 
                 # Check STDOUT items
                 if test_passed and expected_stdout_items:
@@ -5744,12 +5794,32 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                 
         except KeyboardInterrupt:
             # Terminate subprocess and re-raise to be caught by outer handler
+            print(f"\n\n⚠️  Interrupted! Cleaning up subprocess...")
             if current_process:
-                current_process.terminate()
+                pid = current_process.pid
+                
+                # On Windows, use taskkill to kill the entire process tree
+                if os.name == 'nt':
+                    try:
+                        # /T = kill child processes, /F = force
+                        subprocess.run(['taskkill', '/T', '/F', '/PID', str(pid)], 
+                                       capture_output=True, timeout=5)
+                        print(f"   ✅ Process tree (PID {pid}) terminated.")
+                    except Exception as e:
+                        print(f"   ⚠️  taskkill failed: {e}, trying fallback...")
+                        current_process.kill()
+                else:
+                    # Unix: kill process group
+                    try:
+                        import signal
+                        os.killpg(os.getpgid(pid), signal.SIGKILL)
+                    except:
+                        current_process.kill()
+                
                 try:
                     current_process.wait(timeout=2)
                 except:
-                    current_process.kill()
+                    pass
             raise
             
         except Exception as e:
