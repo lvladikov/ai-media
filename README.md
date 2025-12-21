@@ -351,7 +351,7 @@ python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -s 576x3
 python ai-media.py -v -p "A cinematic drone shot of a futuristic cyberpunk city with neon lights and flying cars" -o city.mp4 --video-model wan2.2
 
 # LTX-Video (Fast & High Resolution)
-python ai-media.py -v -p "A futuristic car driving through a tunnel" -o car.mp4 --video-model ltx-video
+python ai-media.py -v -p "A beach at sunset with waves" -o beach.mp4 --video-model ltx-video -s 720p
 
 # Mochi 1 (High Motion Fidelity)
 python ai-media.py -v -p "Close up of a fluid simulation with complex splashes" -o fluid.mp4 --video-model mochi-1
@@ -524,7 +524,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 > 3. Further upscales using Real-ESRGAN if target > 1024×576
 > 4. Final FFmpeg resize to exact target dimensions if needed
 >
-> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster nbut may have slight frame-to-frame variation.
+> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster nbut may have slight frame-to-frame variation. LTX-Video and Mochi 1 work reasonably well on MPS.
 
 > **ℹ️ NVIDIA/CUDA:** XL V2V diffusion is confirmed to work well on NVIDIA/CUDA.
 
