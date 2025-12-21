@@ -44,6 +44,7 @@ Generate images, videos, and audio locally using state-of-the-art open source AI
     - **opencv-python**: Video frame processing & manipulation
     - **scipy**: Audio signal processing & file handling
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
+    - **imageio-ffmpeg**: FFmpeg bindings for video export (used by diffusers)
 
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
@@ -153,7 +154,8 @@ The script `ai-media.py` is the main entry point.
 
 | Option | Description |
 | :--- | :--- |
-| `--video-model` | Model: `zeroscope` (default), `ms-1.7b`, `cogvideox`, `svd`. |
+| `--video-model` | Model: `zeroscope` (default), `zeroscope-xl`, `ms-1.7b`, `cogvideox`, `svd`. |
+| `-s, --size` | Target resolution. For zeroscope: triggers **Dynamic Upscaling** (XL + Real-ESRGAN). |
 | `-l, --length` | Duration. Supports "2s", "5s", "1m", `{m:1, s:30}`. Default: 2s. |
 | `-ii, --input-image` | Source image path for **Image-to-Video** generation (SVD, CogVideoX I2V). |
 | `-ap, --audio-prompt` | **Text prompt** for generating background audio (e.g., "Techno beat"). Automatically muxes with video. Use `-am` to select audio model. |
@@ -322,11 +324,17 @@ python ai-media.py -i -p "Fruit basket" -s 16000x16000 -otn landscape --image-mo
 
 #### Video Generation Examples
 ```bash
-# Standard 5s clip
-python ai-media.py -v -p "A robot dancing" -l 5s -o robot.mp4
+# Native 576x320 (no upscaling, fastest)
+python ai-media.py -v -p "A robot dancing" -l 5s -s 576x320 -o robot.mp4
 
-# Auto-filename from prompt (creates "dancing-robot.mp4")
+# Auto-filename from prompt (uses default 720p, triggers XL + ESRGAN upscaling)
 python ai-media.py -v -p "Dancing robot in neon" -l 5s
+
+# XL upscale only (1024x576)
+python ai-media.py -v -p "A cat walking" -l 2s -s 1024x576
+
+# Higher resolution with Dynamic Upscaling (XL + Real-ESRGAN)
+python ai-media.py -v -p "Ocean waves" -l 3s -s 1080p -o waves_hd.mp4
 
 # Image-to-Video (using input image + text action)
 python ai-media.py -v -p "Camera pans left" -ii "./start_frame.png" -o animated.mp4
@@ -334,9 +342,23 @@ python ai-media.py -v -p "Camera pans left" -ii "./start_frame.png" -o animated.
 # Video with Audio (Generate Video, then Audio, then Merge)
 python ai-media.py -v -p "Cyberpunk dancers" --audio-prompt "Heavy techno beat" -l 10s -o party.mp4
 
-# Long video (1m 30s) using Zeroscope model
-python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -o flight.mp4 --video-model zeroscope
+# Long video (1m 30s) using Zeroscope model at native resolution
+python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -s 576x320 -o flight.mp4 --video-model zeroscope
 ```
+
+> [!NOTE]
+> **Zeroscope Dynamic Upscaling Pipeline:**
+>
+> When generating video with zeroscope at resolutions above native 576x320, a multi-stage temporal upscaling pipeline is used automatically:
+>
+> | Stage | Resolution | Method |
+> | :--- | :--- | :--- |
+> | 1. Generate | 576x320 | zeroscope_v2_576w (base model) |
+> | 2. Temporal Upscale | 1024x576 | zeroscope_v2_XL (V2V diffusion) |
+> | 3. AI Upscale | 2x-4x | Real-ESRGAN (frame-by-frame) |
+> | 4. Final Resize | Target | FFmpeg Lanczos |
+>
+> Use `-s 576x320` to skip upscaling and generate at native resolution (fastest).
 
 #### Audio Generation Examples
 ```bash
@@ -424,9 +446,7 @@ python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
 ```
 
 > [!NOTE]
-> **Video Upscaling Modes:**
-> 
-> All AI video upscaling processes each frame individually (true temporal super-resolution models may be added in the future).
+> **Standalone Video Upscaling Modes (`-uv`):**
 >
 > | Mode | Speed | Quality | Method |
 > | :--- | :--- | :--- | :--- |
@@ -434,7 +454,7 @@ python ai-media.py -i -p "Epic mountain" -s 720p --upscale -uf 4x
 > | **Stable Diffusion** (`-vu sd`) | Slow (~10s/frame) | Creative/detailed | 50 diffusion steps, disk extraction |
 > | **Simple** (`-su`) | Instant | No AI enhancement | FFmpeg Lanczos scaling |
 >
-> **Real-ESRGAN is the default** for both image and video upscaling. Use `-vu sd` or `-iu sd` for Stable Diffusion.
+> Audio is automatically preserved from the source video if present.
 
 > [!NOTE]
 > **Video Encoding (Cross-Platform):**
@@ -473,10 +493,20 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 | Model | Code | Resolution | Download | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Zeroscope** | `zeroscope` | 576×320 | ~4GB | **Default**. Fast, no watermarks. |
+| **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | **Default**. Fast, no watermarks. Auto-upscales with XL for higher resolutions. |
+| **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | *Internal V2V upscaler*. Auto-used on NVIDIA. **Skipped on Mac** (CPU too slow). |
 | **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
 | **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
+
+> [!NOTE]
+> **Zeroscope Dynamic Upscaling:** When you request a resolution higher than 576×320 with the `zeroscope` model (e.g., `-s 1080p`), the script automatically:
+> 1. Generates at native 576×320 (fast, stable)
+> 2. **NVIDIA/CUDA:** Upscales to 1024×576 using `zeroscope_v2_XL` (temporal-aware V2V diffusion)
+> 3. Further upscales using Real-ESRGAN if target > 1024×576
+> 4. Final FFmpeg resize to exact target dimensions if needed
+>
+> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster but may have slight frame-to-frame variation.
 
 > [!WARNING]
 > **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
@@ -646,6 +676,7 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `8` | **Test** | `test` | Run Tests |
 | `8/1` | | `test/unit` | Unit Tests |
 | `8/2` | | `test/integration` | Integration Tests |
+| `8/3` | | `test/codec` | Codec Limits Test |
 | `9` | **Sysinfo** | `sysinfo` | System Information |
 
 ```bash
@@ -871,6 +902,7 @@ This project uses the following open-source libraries:
 | [timm](https://github.com/huggingface/pytorch-image-models) | Image models (Required for Florence-2) | [huggingface/pytorch-image-models](https://github.com/huggingface/pytorch-image-models) |
 | [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Real-ESRGAN upscaling | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
+| [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | FFmpeg bindings for video export | [imageio/imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) |
 
 **AI Models used:**
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)

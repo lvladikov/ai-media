@@ -293,6 +293,26 @@
       "description": "Generate video with explicit --video-model zeroscope flag"
     },
     {
+      "name": "Video - Zeroscope XL Upscale (1024x576)",
+      "timeout": 3600,
+      "command": "-v -p \"Ocean waves\" -o tests/testData/outputs/vid_zeroscope_xl.mp4 -l 1s -s 1024x576 --video-model zeroscope --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_zeroscope_xl.mp4"
+      ],
+      "description": "Generate video at 1024x576 using Zeroscope + XL dynamic upscaling"
+    },
+    {
+      "name": "Video - Zeroscope Dynamic Upscale (720p)",
+      "timeout": 7200,
+      "command": "-v -p \"Mountain sunset\" -o tests/testData/outputs/vid_zeroscope_720p.mp4 -l 1s -s 720p --video-model zeroscope --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_zeroscope_720p.mp4"
+      ],
+      "description": "Generate video at 720p using Zeroscope + XL + Real-ESRGAN full dynamic upscaling pipeline"
+    },
+    {
       "name": "Audio - AAC Format",
       "command": "-a -p \"Format test\" -o tests/testData/outputs/aud_format.aac -l 2s --audio-model musicgen-small --force",
       "expectedInputItems": [],
@@ -956,6 +976,27 @@
         "System Information"
       ],
       "description": "Test interactive menu jump by name (sysinfo)"
+    },
+    {
+      "name": "Interactive - Jump 8/3 (Codec Limits Test)",
+      "command": "--interactive 8/3",
+      "interactive": true,
+      "interactiveWait": 3.0,
+      "expectedStdoutItems": [
+        "Codec Limits Test",
+        "FFmpeg Codec"
+      ],
+      "description": "Test interactive menu jump to Codec Limits Test"
+    },
+    {
+      "name": "Interactive - Jump test/codec",
+      "command": "--interactive test/codec",
+      "interactive": true,
+      "interactiveWait": 3.0,
+      "expectedStdoutItems": [
+        "Codec Limits Test"
+      ],
+      "description": "Test interactive menu jump by path (test/codec)"
     }
   ]
 }

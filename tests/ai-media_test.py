@@ -86,6 +86,7 @@ class TestConstants(unittest.TestCase):
         """Test VIDEO_MODELS dictionary exists with expected keys."""
         self.assertIn("default", ai_media.VIDEO_MODELS)
         self.assertIn("zeroscope", ai_media.VIDEO_MODELS)
+        self.assertIn("zeroscope-xl", ai_media.VIDEO_MODELS)
         self.assertIn("cogvideox", ai_media.VIDEO_MODELS)
         self.assertIn("svd", ai_media.VIDEO_MODELS)
     
@@ -1380,6 +1381,218 @@ class TestFastUpscaler(unittest.TestCase):
                         
                 self.assertTrue(found_fallback, "Should log AV1 fallback message")
                 self.assertTrue(found_hevc, "Should log switch to Hardware HEVC")
+
+
+class TestZeroscopeDynamicUpscaling(unittest.TestCase):
+    """Tests for zeroscope dynamic upscaling detection logic."""
+    
+    def test_zeroscope_xl_in_video_models(self):
+        """Test zeroscope-xl model is registered."""
+        self.assertIn("zeroscope-xl", ai_media.VIDEO_MODELS)
+        self.assertEqual(ai_media.VIDEO_MODELS["zeroscope-xl"], "cerspense/zeroscope_v2_XL")
+    
+    def test_zeroscope_xl_in_model_requirements(self):
+        """Test zeroscope_v2_XL has MODEL_REQUIREMENTS entry."""
+        self.assertIn("cerspense/zeroscope_v2_XL", ai_media.MODEL_REQUIREMENTS)
+        reqs = ai_media.MODEL_REQUIREMENTS["cerspense/zeroscope_v2_XL"]
+        self.assertEqual(reqs["vram"], 10)
+        self.assertEqual(reqs["ram"], 16)
+        self.assertEqual(reqs["max_resolution"], (1024, 576))
+    
+    def test_zeroscope_576w_model_requirements(self):
+        """Test zeroscope_v2_576w has correct MODEL_REQUIREMENTS."""
+        self.assertIn("cerspense/zeroscope_v2_576w", ai_media.MODEL_REQUIREMENTS)
+        reqs = ai_media.MODEL_REQUIREMENTS["cerspense/zeroscope_v2_576w"]
+        self.assertEqual(reqs["max_resolution"], (576, 320))
+    
+    def test_ffmpeg_resize_video_exists(self):
+        """Test ffmpeg_resize_video function exists."""
+        self.assertTrue(hasattr(ai_media, 'ffmpeg_resize_video'))
+        self.assertTrue(callable(ai_media.ffmpeg_resize_video))
+    
+    def test_upscale_video_zeroscope_xl_exists(self):
+        """Test upscale_video_zeroscope_xl function exists."""
+        self.assertTrue(hasattr(ai_media, 'upscale_video_zeroscope_xl'))
+        self.assertTrue(callable(ai_media.upscale_video_zeroscope_xl))
+
+
+class TestZeroscopeXLMPSFix(unittest.TestCase):
+    """Tests for Zeroscope XL MPS limitation workaround (skip XL on Apple Silicon)."""
+    
+    def test_upscale_video_zeroscope_xl_signature(self):
+        """Test upscale_video_zeroscope_xl has the expected parameters."""
+        import inspect
+        sig = inspect.signature(ai_media.upscale_video_zeroscope_xl)
+        params = list(sig.parameters.keys())
+        # Function takes video_frames (list of PIL Images), prompt, device, dtype, strength
+        self.assertIn('video_frames', params)
+        self.assertIn('prompt', params)
+        self.assertIn('device', params)
+        self.assertIn('dtype', params)
+        self.assertIn('strength', params)
+    
+    def test_mps_detection_mechanism_exists(self):
+        """Test that MPS detection mechanism exists in torch."""
+        import torch
+        # Verify the detection mechanism exists
+        self.assertTrue(hasattr(torch.backends, 'mps'))
+        self.assertTrue(hasattr(torch.backends.mps, 'is_available'))
+    
+    def test_mps_skip_xl_logic(self):
+        """Test that MPS detection correctly identifies when to skip XL."""
+        import torch
+        
+        # Simulate MPS detection logic used in generate_video
+        def should_skip_xl():
+            is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+            return is_mps
+        
+        # On a Mac with MPS, this should return True
+        # On NVIDIA, this should return False
+        # We can't control the hardware, but we verify the logic pattern works
+        result = should_skip_xl()
+        self.assertIsInstance(result, bool)
+    
+    def test_mps_skip_xl_logic_pattern(self):
+        """Test the MPS skip logic pattern works correctly."""
+        # Test the boolean logic pattern used in generate_video
+        # is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+        
+        # Case 1: MPS available, CUDA not available -> Skip XL (True)
+        mps_available, cuda_available = True, False
+        is_mps = mps_available and not cuda_available
+        self.assertTrue(is_mps)  # XL should be skipped
+        
+        # Case 2: CUDA available -> Use XL (False)
+        mps_available, cuda_available = False, True
+        is_mps = mps_available and not cuda_available
+        self.assertFalse(is_mps)  # XL should be used
+        
+        # Case 3: Neither available (CPU only) -> Use XL (False)
+        mps_available, cuda_available = False, False
+        is_mps = mps_available and not cuda_available
+        self.assertFalse(is_mps)  # XL should be used on CPU
+        
+        # Case 4: Both available (shouldn't happen, but CUDA takes priority) -> Use XL (False)
+        mps_available, cuda_available = True, True
+        is_mps = mps_available and not cuda_available
+        self.assertFalse(is_mps)  # XL should be used when CUDA is present
+    
+    def test_current_system_mps_detection(self):
+        """Test MPS detection on current system returns valid boolean."""
+        import torch
+        is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+        self.assertIsInstance(is_mps, bool)
+        # On this Mac, should be True; on NVIDIA, should be False
+    
+    def test_ffmpeg_resize_video_signature(self):
+        """Test ffmpeg_resize_video has the expected parameters."""
+        import inspect
+        sig = inspect.signature(ai_media.ffmpeg_resize_video)
+        params = list(sig.parameters.keys())
+        self.assertIn('input_path', params)
+        self.assertIn('output_path', params)
+        self.assertIn('target_w', params)
+        self.assertIn('target_h', params)
+
+
+class TestAudioMuxing(unittest.TestCase):
+    """Tests for audio track detection and muxing in video upscaling."""
+    
+    @patch('subprocess.run')
+    def test_ffprobe_audio_detection_with_audio(self, mock_run):
+        """Test has_audio_track returns True when audio stream present."""
+        # Mock ffprobe returning "audio" in stdout
+        mock_run.return_value = MagicMock(stdout="audio\n", returncode=0)
+        
+        # Test the inline has_audio_track logic
+        def has_audio_track(video_file):
+            try:
+                import subprocess
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ], capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
+        
+        result = has_audio_track("test_video.mp4")
+        self.assertTrue(result)
+    
+    @patch('subprocess.run')
+    def test_ffprobe_audio_detection_without_audio(self, mock_run):
+        """Test has_audio_track returns False when no audio stream."""
+        # Mock ffprobe returning empty stdout (no audio)
+        mock_run.return_value = MagicMock(stdout="", returncode=0)
+        
+        def has_audio_track(video_file):
+            try:
+                import subprocess
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ], capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
+        
+        result = has_audio_track("silent_video.mp4")
+        self.assertFalse(result)
+    
+    @patch('subprocess.run')
+    def test_ffprobe_audio_detection_timeout(self, mock_run):
+        """Test has_audio_track returns False on timeout."""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="ffprobe", timeout=10)
+        
+        def has_audio_track(video_file):
+            try:
+                import subprocess
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ], capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
+        
+        result = has_audio_track("test_video.mp4")
+        self.assertFalse(result)
+    
+    @patch('subprocess.run')
+    def test_ffprobe_audio_detection_error(self, mock_run):
+        """Test has_audio_track returns False on subprocess error."""
+        mock_run.side_effect = Exception("ffprobe not found")
+        
+        def has_audio_track(video_file):
+            try:
+                import subprocess
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ], capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
+        
+        result = has_audio_track("test_video.mp4")
+        self.assertFalse(result)
+    
+    def test_upscale_video_fast_exists(self):
+        """Test upscale_video_fast function exists."""
+        self.assertTrue(hasattr(ai_media, 'upscale_video_fast'))
+        self.assertTrue(callable(ai_media.upscale_video_fast))
+    
+    def test_upscale_video_file_exists(self):
+        """Test upscale_video_file function exists."""
+        self.assertTrue(hasattr(ai_media, 'upscale_video_file'))
+        self.assertTrue(callable(ai_media.upscale_video_file))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

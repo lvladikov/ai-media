@@ -144,6 +144,7 @@ AUDIO_MODELS = {
 VIDEO_MODELS = {
     "ms-1.7b": "damo-vilab/text-to-video-ms-1.7b",     # Has watermark issues
     "zeroscope": "cerspense/zeroscope_v2_576w",        # 576x320 optimized (default)
+    "zeroscope-xl": "cerspense/zeroscope_v2_XL",      # 1024x576 V2V upscaler (internal use)
     "cogvideox": "THUDM/CogVideoX-5b",                 # High quality (requires high VRAM)
     "svd": "stabilityai/stable-video-diffusion-img2vid-xt", # SVD Image-to-Video
     "default": "cerspense/zeroscope_v2_576w"
@@ -194,6 +195,7 @@ MODEL_REQUIREMENTS = {
     # Video Models (max_resolution based on training data)
     "damo-vilab/text-to-video-ms-1.7b": {"vram": 12, "ram": 16, "max_resolution": (1280, 720)},
     "cerspense/zeroscope_v2_576w": {"vram": 8, "ram": 12, "max_resolution": (576, 320)},
+    "cerspense/zeroscope_v2_XL": {"vram": 10, "ram": 16, "max_resolution": (1024, 576)},  # V2V Upscaler
     "THUDM/CogVideoX-5b": {"vram": 32, "ram": 48, "max_resolution": (1920, 1080)}, # ~50GB on Mac (float32)
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
     "stabilityai/stable-diffusion-x4-upscaler": {"vram": 8, "ram": 16, "max_resolution": (4096, 4096)},
@@ -276,9 +278,15 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     
     # Check resolution limits
     max_res = reqs.get("max_resolution")
+    is_zeroscope = "zeroscope" in model_id.lower() and "xl" not in model_id.lower()
+    
     if max_res and width and height:
         if width > max_res[0] or height > max_res[1]:
-            warnings.append(f"Resolution: {width}x{height} exceeds recommended max {max_res[0]}x{max_res[1]}")
+            if is_zeroscope:
+                # Zeroscope has dynamic upscaling - this is informational, not a warning
+                warnings.append(f"Resolution: {width}x{height} exceeds native {max_res[0]}x{max_res[1]} (Dynamic Upscaling will be used)")
+            else:
+                warnings.append(f"Resolution: {width}x{height} exceeds recommended max {max_res[0]}x{max_res[1]}")
     
     # Check duration limits (for audio/video)
     max_dur = reqs.get("max_duration")
@@ -288,7 +296,38 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     if not warnings:
         return True
     
-    # Display warnings
+    # Display warnings - use different style for zeroscope upscaling info
+    if is_zeroscope and len(warnings) == 1 and "Dynamic Upscaling" in warnings[0]:
+        # Zeroscope-specific informational message (not a scary warning)
+        # Check if MPS (XL is skipped on Apple Silicon)
+        import torch
+        is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+        
+        print("\n📐 Dynamic Upscaling Pipeline:\n")
+        print(f"   Target:   {width}x{height}")
+        print(f"   Native:   {max_res[0]}x{max_res[1]}")
+        if is_mps:
+            print(f"   Method:   Zeroscope 576w → Real-ESRGAN → Target (XL skipped on Mac)")
+        else:
+            print(f"   Method:   Zeroscope 576w → XL (1024x576) → Real-ESRGAN → Target")
+        print(f"\n   Model: {model_id}")
+        print(f"   ℹ️  This is the optimal workflow for high-res zeroscope output.\n")
+        
+        if force:
+            return True
+        
+        try:
+            choice = input("   Proceed with dynamic upscaling? [Y/n]: ").lower().strip()
+            if choice in ['', 'y', 'yes']:
+                print("")  # Spacer
+                return True
+            print("\n💡 Tip: Use -s 576x320 for native resolution (fastest).\n")
+            sys.exit(0)
+        except KeyboardInterrupt:
+            print("\n❌ Operation cancelled.\n")
+            sys.exit(0)
+    
+    # Standard warning display for other cases
     print("\n⚠️  Resource Warning:\n")
     for w in warnings:
         print(f"   • {w}")
@@ -1519,12 +1558,199 @@ def get_video_encoding_params(output_path):
     return params
 
 
+def ffmpeg_resize_video(input_path, output_path, target_w, target_h):
+    """Resize video to exact target dimensions using FFmpeg Lanczos.
+    
+    Used as a final step when AI upscalers produce dimensions that don't match
+    the target exactly (e.g., Real-ESRGAN's fixed 4x scale).
+    
+    Args:
+        input_path: Path to input video
+        output_path: Path for output video  
+        target_w: Target width (will be made even for codec compatibility)
+        target_h: Target height (will be made even for codec compatibility)
+        
+    Returns:
+        True on success, False on failure
+    """
+    # Ensure dimensions are even (required by most codecs)
+    target_w = target_w if target_w % 2 == 0 else target_w + 1
+    target_h = target_h if target_h % 2 == 0 else target_h + 1
+    
+    print(f"   📐 FFmpeg resize: {target_w}x{target_h}")
+    
+    try:
+        cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-vf", f"scale={target_w}:{target_h}:flags=lanczos",
+            "-c:a", "copy",  # Copy audio stream unchanged
+            output_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        print(f"   ⚠️  FFmpeg resize failed: {e}")
+        return False
+
+
+def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, strength=0.6):
+    """Upscale video frames using zeroscope_v2_XL (Video-to-Video diffusion).
+    
+    This function takes video frames from zeroscope_v2_576w (576x320) and upscales
+    them to 1024x576 using the XL model's video-to-video pipeline with temporal
+    consistency.
+    
+    Args:
+        video_frames: List of PIL Images or numpy arrays from 576w generation
+        prompt: The original text prompt (used for guidance during upscaling)
+        device: torch device (auto-detected if None)
+        dtype: torch dtype (auto-detected if None)
+        strength: Denoise strength 0.0-1.0. Higher = more creative, lower = faithful.
+                  Default 0.6 as recommended by model docs.
+                  
+    Returns:
+        List of upscaled PIL Images at 1024x576, or None on failure
+    """
+    print(f"\n🔄 Upscaling with Zeroscope XL (Video-to-Video)...")
+    print(f"   Input:    576x320 ({len(video_frames)} frames)")
+    print(f"   Output:   1024x576")
+    print(f"   Strength: {strength}")
+    
+    try:
+        import torch
+        from diffusers import DiffusionPipeline, DPMSolverMultistepScheduler
+        from PIL import Image
+        import numpy as np
+        
+        # Auto-detect device/dtype if not provided
+        if device is None or dtype is None:
+            device, dtype = get_optimal_device_and_dtype(quiet=True)
+        
+        # MPS limitation: Force CPU for XL V2V upscale
+        # MPS fails with "tensor dims larger than INT_MAX" on large video tensors
+        original_device = device
+        if device.type == "mps":
+            print("   ⚠️  MPS Limitation: Forcing CPU for XL V2V upscale (MPS tensor limit).")
+            device = torch.device("cpu")
+            dtype = torch.float32
+        
+        # Load XL model
+        xl_model_id = VIDEO_MODELS.get("zeroscope-xl", "cerspense/zeroscope_v2_XL")
+        print(f"   Model:    {xl_model_id}")
+        print(f"   Device:   {device}")
+        
+        pipe = DiffusionPipeline.from_pretrained(xl_model_id, torch_dtype=dtype)
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+        
+        # Memory optimization
+        pipe.to(device)
+        if device.type == "cpu":
+            pipe.enable_attention_slicing()
+        
+        pipe.enable_vae_slicing()
+        
+        # Prepare input frames - resize to 1024x576 for XL input
+        print(f"   Preparing frames...")
+        resized_frames = []
+        for frame in video_frames:
+            if isinstance(frame, np.ndarray):
+                # Handle float32/float64 arrays (0-1 range) - convert to uint8 (0-255)
+                if frame.dtype in [np.float32, np.float64]:
+                    frame = (frame * 255).clip(0, 255).astype(np.uint8)
+                frame = Image.fromarray(frame)
+            # Resize to XL's native resolution
+            resized_frame = frame.resize((1024, 576), Image.Resampling.LANCZOS)
+            resized_frames.append(resized_frame)
+        
+        # Run XL upscaling (Video-to-Video)
+        print(f"   Running diffusion upscale... (This may take a while)")
+        start_time = time.time()
+        
+        with ResourceMonitor() as monitor:
+            output = pipe(
+                prompt=prompt,
+                video=resized_frames,
+                strength=strength,
+                num_inference_steps=25
+            )
+        
+        duration = time.time() - start_time
+        avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+        print(f"   ✓ XL Upscale complete in {format_time(duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB)")
+        
+        # Cleanup XL pipeline
+        del pipe
+        clear_gpu_memory()
+        
+        # Extract output frames
+        upscaled_frames = output.frames[0] if hasattr(output, 'frames') else output.images
+        return upscaled_frames
+        
+    except Exception as e:
+        print(f"   ❌ XL Upscale failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def generate_video(prompt, output_path, duration, width, height, model_name="default", image_input=None, audio_prompt=None, audio_model="default"):
-    """Generate video (Text-to-Video or Image-to-Video) with optional Audio."""
+    """Generate video (Text-to-Video or Image-to-Video) with optional Audio.
+    
+    For Zeroscope: Implements dynamic upscaling pipeline when target resolution
+    exceeds native 576x320. Uses zeroscope_v2_XL for V2V upscaling to 1024x576,
+    then Real-ESRGAN for higher resolutions.
+    """
     
     # Resolve Model ID
     base_model = VIDEO_MODELS.get(model_name.lower(), model_name)
     if model_name.lower() == "default": base_model = VIDEO_MODELS["default"]
+    
+    # --- Zeroscope Dynamic Upscaling Detection ---
+    # Native resolution for zeroscope is 576x320
+    # If target is higher, we generate at native and upscale dynamically
+    is_zeroscope = "zeroscope" in base_model.lower() and "xl" not in base_model.lower()
+    zeroscope_native_w, zeroscope_native_h = 576, 320
+    zeroscope_xl_w, zeroscope_xl_h = 1024, 576
+    
+    needs_xl_upscale = False
+    needs_esrgan_upscale = False
+    target_width, target_height = width, height
+    gen_width, gen_height = width, height
+    
+    if is_zeroscope and not image_input:  # Only for T2V zeroscope
+        if width > zeroscope_native_w or height > zeroscope_native_h:
+            # Generate at native resolution, upscale later
+            gen_width, gen_height = zeroscope_native_w, zeroscope_native_h
+            
+            # Check if we're on MPS - skip XL (CPU diffusion is impractical)
+            import torch
+            is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+            
+            if is_mps:
+                # MPS: Skip XL entirely, go straight to Real-ESRGAN
+                needs_xl_upscale = False
+                needs_esrgan_upscale = True
+                print(f"📐 Dynamic Upscaling Pipeline (MPS Optimized):")
+                print(f"   ⚠️  Skipping XL V2V (CPU diffusion too slow on Apple Silicon)")
+                print(f"   Target:  {target_width}x{target_height}")
+                print(f"   Step 1:  Generate at {gen_width}x{gen_height} (Zeroscope native)")
+                print(f"   Step 2:  Real-ESRGAN to ~{target_width}x{target_height}")
+                print(f"   Step 3:  FFmpeg resize to exact {target_width}x{target_height}")
+            else:
+                # CUDA/CPU: Use full pipeline with XL
+                needs_xl_upscale = True
+                if width > zeroscope_xl_w or height > zeroscope_xl_h:
+                    needs_esrgan_upscale = True
+                    
+                print(f"📐 Dynamic Upscaling Pipeline Activated:")
+                print(f"   Target:  {target_width}x{target_height}")
+                print(f"   Step 1:  Generate at {gen_width}x{gen_height} (Zeroscope native)")
+                if needs_xl_upscale:
+                    print(f"   Step 2:  XL Upscale to {zeroscope_xl_w}x{zeroscope_xl_h} (V2V diffusion)")
+                if needs_esrgan_upscale:
+                    print(f"   Step 3:  Real-ESRGAN to ~{target_width}x{target_height}")
+                    print(f"   Step 4:  FFmpeg resize to exact {target_width}x{target_height}")
+            print("")
     
     # Handle Image-to-Video Logic
     is_i2v = True if image_input else False
@@ -1543,7 +1769,12 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Text-to-Video
         model_id = base_model
 
-    print(f"🎬 Generating Video ({'Image-to-Video' if is_i2v else 'Text-to-Video'})")
+    print(f"{'='*60}")
+    if needs_xl_upscale:
+        print(f"📐 Step 1: Generate at {gen_width}x{gen_height} (Zeroscope native)")
+    else:
+        print(f"🎬 Generating Video ({'Image-to-Video' if is_i2v else 'Text-to-Video'})")
+    print(f"{'='*60}")
     print(f"   Model:    {model_id}")
     print(f"   Prompt:   '{prompt}'")
     if is_i2v: print(f"   Input Img: {image_input}")
@@ -1662,13 +1893,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # --- Performance Tracking ---
         tracker = PerformanceTracker()
         
-        print(f"🎬 Rendering video frames... (This will be slow)")
+        print(f"🎬 Rendering video frames at {gen_width}x{gen_height}... (This will be slow)")
         
         start_time = time.time()
         with ResourceMonitor() as monitor:
             if is_i2v:
                 init_image = load_image(image_input)
-                init_image = init_image.resize((width, height))
+                init_image = init_image.resize((gen_width, gen_height))
                 
                 if "stable-video-diffusion" in model_id.lower():
                     video_frames = pipe(init_image).frames[0]
@@ -1682,8 +1913,35 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Collect & Record
         gen_duration = time.time() - start_time
         avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
-        tracker.record_linear("video", model_id, device, duration, gen_duration, width, height, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+        tracker.record_linear("video", model_id, device, duration, gen_duration, gen_width, gen_height, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
         print(f"   ✓ Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+        
+        # --- Zeroscope Dynamic Upscaling Pipeline ---
+        if needs_xl_upscale:
+            # Cleanup base pipeline before loading XL
+            del pipe
+            pipe = None
+            clear_gpu_memory()
+            
+            # Step 2: XL Upscale (576x320 -> 1024x576)
+            print(f"\n{'='*60}")
+            print(f"📐 Step 2: XL Upscale to {zeroscope_xl_w}x{zeroscope_xl_h} (V2V diffusion)")
+            print(f"{'='*60}")
+            
+            upscaled_frames = upscale_video_zeroscope_xl(
+                video_frames, 
+                prompt, 
+                device=device, 
+                dtype=dtype,
+                strength=0.6
+            )
+            
+            if upscaled_frames is not None:
+                video_frames = upscaled_frames
+                gen_width, gen_height = zeroscope_xl_w, zeroscope_xl_h
+            else:
+                print("   ⚠️  XL upscale failed, continuing with base resolution")
+                needs_esrgan_upscale = False  # Skip further upscaling
         
         if 'args' in globals() and hasattr(globals()['args'], 'report_json') and globals()['args'].report_json:
                 stats = {
@@ -1692,8 +1950,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                     "vram": avg_vram,
                     "cpu": avg_cpu,
                     "gpu": avg_gpu,
-                    "width": width,
-                    "height": height
+                    "width": target_width,
+                    "height": target_height
                 }
                 write_report_json(globals()['args'].report_json, stats)
         
@@ -1711,11 +1969,66 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 video_out
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             os.remove(temp_raw_video)
-            print(f"✅ Video track saved to {video_out}")
+            print(f"✅ Video saved to {video_out} ({gen_width}x{gen_height})")
         except Exception as e:
             # Fallback: use raw video if FFmpeg fails
             os.rename(temp_raw_video, video_out)
             print(f"⚠️  Video saved (may require VLC to play): {video_out}")
+        
+        # Step 3 & 4: Real-ESRGAN + FFmpeg resize for target > 1024x576
+        if needs_esrgan_upscale:
+            print(f"\n{'='*60}")
+            print(f"📐 Step 3: Real-ESRGAN Upscale to ~{target_width}x{target_height}")
+            print(f"{'='*60}")
+            
+            # Calculate upscale factor from 1024x576 to target
+            # Real-ESRGAN uses 4x model, so we may need FFmpeg for final sizing
+            esrgan_factor = max(target_width / zeroscope_xl_w, target_height / zeroscope_xl_h)
+            esrgan_factor = min(esrgan_factor, 4.0)  # Cap at 4x for single pass
+            
+            temp_esrgan_input = video_out
+            temp_esrgan_output = video_out + ".esrgan.mp4"
+            
+            # Run Real-ESRGAN upscale
+            esrgan_success = upscale_video_fast(
+                temp_esrgan_input, 
+                temp_esrgan_output, 
+                factor=esrgan_factor
+            )
+            
+            if esrgan_success and os.path.exists(temp_esrgan_output):
+                # Check if we need FFmpeg resize to exact target
+                # (Real-ESRGAN produces dimensions that are multiples of its scale)
+                import cv2
+                cap = cv2.VideoCapture(temp_esrgan_output)
+                esrgan_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                esrgan_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                
+                if esrgan_w != target_width or esrgan_h != target_height:
+                    # Step 4: FFmpeg resize to exact dimensions
+                    print(f"\n{'='*60}")
+                    print(f"📐 Step 4: FFmpeg resize to exact {target_width}x{target_height}")
+                    print(f"{'='*60}")
+                    
+                    temp_final = video_out + ".final.mp4"
+                    if ffmpeg_resize_video(temp_esrgan_output, temp_final, target_width, target_height):
+                        os.remove(temp_esrgan_output)
+                        os.remove(video_out)  # Remove intermediate XL output
+                        os.rename(temp_final, video_out)
+                        print(f"✅ Final video: {video_out} ({target_width}x{target_height})")
+                    else:
+                        # FFmpeg resize failed, use ESRGAN output as-is
+                        os.remove(video_out)
+                        os.rename(temp_esrgan_output, video_out)
+                        print(f"✅ Video saved: {video_out} ({esrgan_w}x{esrgan_h})")
+                else:
+                    # ESRGAN output matches target
+                    os.remove(video_out)
+                    os.rename(temp_esrgan_output, video_out)
+                    print(f"✅ Final video: {video_out} ({target_width}x{target_height})")
+            else:
+                print(f"   ⚠️  Real-ESRGAN failed, keeping XL output at {gen_width}x{gen_height}")
         
         # --- Stage 2 & 3: Audio Generation & Muxing ---
         
@@ -3124,38 +3437,56 @@ def upscale_video_fast(video_path, output_path, factor=4.0, device=None, model_n
         except Exception as e:
             print(f"   ⚠️  Failed to write report JSON: {e}")
 
-        # Mux Audio if source had audio
-        # We can use FFmpeg to copy audio from source to dest
-        print(f"   🔗 Muxing audio...", flush=True)
+        # Check if source video has audio before attempting mux
         import subprocess
         
-        # Try to copy audio from source. If it fails (no audio), we use temp video as-is.
-        # UPDATE: The video is already encoded by FFmpeg pipe (could be H.264 or HEVC).
-        # We should COPY the video stream and only re-encode audio.
+        def has_audio_track(video_file):
+            """Check if video file has an audio track using ffprobe."""
+            try:
+                cmd = [
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
         
-        cmd = [
-             "ffmpeg", "-y",
-             "-i", temp_video_out,    # Input 0: Upscaled video (silent, already encoded)
-             "-i", video_path,        # Input 1: Original video (audio source)
-             "-map", "0:v",           # Use video from input 0
-             "-map", "1:a?",          # Use audio from input 1 (optional)
-             "-c:v", "copy",          # COPY video stream (preserves HEVC/H.264)
-             "-c:a", "aac",           # Encode audio to AAC
-             "-shortest",             # Match shortest
-             output_path,
-             "-loglevel", "error"
-        ]
-        
-        try:
-            subprocess.run(cmd, check=True)
+        if has_audio_track(video_path):
+            # Mux Audio from source
+            print(f"   🔗 Muxing audio from source...", flush=True)
+            
+            cmd = [
+                 "ffmpeg", "-y",
+                 "-i", temp_video_out,    # Input 0: Upscaled video (silent, already encoded)
+                 "-i", video_path,        # Input 1: Original video (audio source)
+                 "-map", "0:v",           # Use video from input 0
+                 "-map", "1:a",           # Use audio from input 1
+                 "-c:v", "copy",          # COPY video stream (preserves HEVC/H.264)
+                 "-c:a", "aac",           # Encode audio to AAC
+                 "-shortest",             # Match shortest
+                 output_path,
+                 "-loglevel", "error"
+            ]
+            
+            try:
+                subprocess.run(cmd, check=True)
+                print(f"✅ Fast upscaled video saved to {output_path}")
+                os.remove(temp_video_out)
+                return True
+            except subprocess.CalledProcessError:
+                print("⚠️  Audio muxing failed. Saving silent video.")
+                if os.path.exists(temp_video_out):
+                      if os.path.exists(output_path): os.remove(output_path)
+                      os.rename(temp_video_out, output_path)
+                return True
+        else:
+            # No audio track in source - just rename temp to output
+            print(f"   ℹ️  No audio track in source, skipping mux.")
+            if os.path.exists(output_path): os.remove(output_path)
+            os.rename(temp_video_out, output_path)
             print(f"✅ Fast upscaled video saved to {output_path}")
-            os.remove(temp_video_out)
-            return True
-        except subprocess.CalledProcessError:
-            print("⚠️  Muxing failed or no audio found. Moving silent video to output.")
-            if os.path.exists(temp_video_out):
-                  if os.path.exists(output_path): os.remove(output_path)
-                  os.rename(temp_video_out, output_path)
             return True
 
     except Exception as e:
@@ -3350,6 +3681,42 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         shutil.rmtree(temp_dir)
+        
+        # Mux audio from source if present
+        def has_audio_track(video_file):
+            """Check if video file has an audio track using ffprobe."""
+            try:
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                    video_file
+                ], capture_output=True, text=True, timeout=10)
+                return "audio" in result.stdout
+            except:
+                return False
+        
+        if has_audio_track(video_path):
+            print(f"   🔗 Muxing audio from source...")
+            temp_output = output_path + ".temp.mp4"
+            os.rename(output_path, temp_output)
+            
+            mux_cmd = [
+                "ffmpeg", "-y",
+                "-i", temp_output,
+                "-i", video_path,
+                "-map", "0:v", "-map", "1:a",
+                "-c:v", "copy", "-c:a", "aac", "-shortest",
+                output_path, "-loglevel", "error"
+            ]
+            try:
+                subprocess.run(mux_cmd, check=True)
+                os.remove(temp_output)
+            except:
+                print("   ⚠️  Audio muxing failed, keeping silent video.")
+                os.rename(temp_output, output_path)
+        else:
+            print(f"   ℹ️  No audio track in source, skipping mux.")
+        
         print(f"✅ Upscaled video saved to {output_path}")
         return True
 
@@ -3943,6 +4310,7 @@ def run_interactive(jump_point=None):
         'test': ('test', None),
         'test/unit': ('test', 'unit'),
         'test/integration': ('test', 'integration'),
+        'test/codec': ('test', 'codec'),
         'sysinfo': ('sysinfo', None),
         # By number (matching menu order)
         '1': ('image', None),
@@ -3971,6 +4339,7 @@ def run_interactive(jump_point=None):
         '8': ('test', None),
         '8/1': ('test', 'unit'),
         '8/2': ('test', 'integration'),
+        '8/3': ('test', 'codec'),
         '9': ('sysinfo', None),
     }
     
@@ -4281,6 +4650,42 @@ def run_interactive(jump_point=None):
             if not length:
                 return
 
+        # Resolution (for Zeroscope dynamic upscaling)
+        size = None
+        if model == 'zeroscope':
+            print("\n📐 Select Output Resolution:\n")
+            
+            # Check if MPS (XL is skipped on Apple Silicon)
+            import torch
+            is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
+            
+            if is_mps:
+                print("   💡 Zeroscope uses Real-ESRGAN upscaling (XL skipped on Mac)")
+                size_options = [
+                    ("576x320 (Native, Fast)", "576x320"),
+                    ("1024x576 (ESRGAN)", "1024x576"),
+                    ("720p (ESRGAN)", "720p"),
+                    ("1080p (ESRGAN)", "1080p"),
+                    ("Custom Resolution", "custom"),
+                ]
+            else:
+                print("   💡 Zeroscope uses smart upscaling for higher resolutions")
+                size_options = [
+                    ("576x320 (Native, Fast)", "576x320"),
+                    ("1024x576 (XL Upscale)", "1024x576"),
+                    ("720p (XL + ESRGAN)", "720p"),
+                    ("1080p (XL + ESRGAN)", "1080p"),
+                    ("Custom Resolution", "custom"),
+                ]
+            size = prompt_choice("Size", size_options)
+            if size is None:
+                return
+            if size == "custom":
+                print()
+                size = prompt_text("Enter resolution (e.g. 1280x720)")
+                if not size:
+                    return
+
         # Input Image (Optional - for non-SVD models to enable Image-to-Video)
         if model != 'svd':
             print()
@@ -4307,6 +4712,8 @@ def run_interactive(jump_point=None):
         
         # Build Command
         cmd = f"-v -l {length} --video-model {model}"
+        if size:
+            cmd += f" -s {size}"
         if prompt:
             cmd += f" -p \"{prompt}\""
         if input_image:
@@ -4610,7 +5017,6 @@ def run_interactive(jump_point=None):
         cmd = f"-gd \"{input_file}\" -cm {model}"
         
         run_self_command(cmd)
-        run_self_command(cmd)
         input("\nPress Enter to continue...")
     
     def test_menu(preset_submenu=None):
@@ -4622,6 +5028,32 @@ def run_interactive(jump_point=None):
         elif preset_submenu == 'integration':
             integration_test_menu()
             return
+        elif preset_submenu == 'codec':
+            # Run codec test directly then return
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            codec_test = os.path.join(script_dir, "tests", "test_codec_limits.py")
+            if os.path.exists(codec_test):
+                clear_screen()
+                show_header("Codec Limits Test")
+                print("Running codec limits stress test...")
+                print("This tests H.264, HEVC, and AV1 encoder limits up to 20K.\n")
+                import subprocess
+                subprocess.run([sys.executable, codec_test])
+                
+                # Forcefully reset terminal to sane state (raw mode from child process leaks)
+                try:
+                    os.system('stty sane')  # Reset terminal on Unix
+                except:
+                    pass
+                
+                print("\n" + "="*60)
+                input("Press Enter to return to menu...")
+            else:
+                clear_screen()
+                show_header("Codec Limits Test")
+                print("❌ tests/test_codec_limits.py not found.")
+                input("\nPress Enter to continue...")
+            # Fall through to test menu loop (don't return to main menu)
         
         while True:
             clear_screen()
@@ -4630,6 +5062,7 @@ def run_interactive(jump_point=None):
             options = [
                 ("🧪  Unit Tests (Python unittest)", "UNIT"),
                 ("🚀  Integration Tests (tests/integration-tests.json)", "INTEGRATION"),
+                ("📊  Codec Limits Test (tests/test_codec_limits.py)", "CODEC"),
             ]
             
             choice = prompt_menu("Select test type:", options)
@@ -4640,6 +5073,32 @@ def run_interactive(jump_point=None):
                 unit_test_menu()
             elif choice == "INTEGRATION":
                 integration_test_menu()
+            elif choice == "CODEC":
+                # Run codec limits test directly
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                codec_test = os.path.join(script_dir, "tests", "test_codec_limits.py")
+                if os.path.exists(codec_test):
+                    clear_screen()
+                    show_header("Codec Limits Test")
+                    print("Running codec limits stress test...")
+                    print("This tests H.264, HEVC, and AV1 encoder limits up to 20K.\n")
+                    import subprocess
+                    subprocess.run([sys.executable, codec_test])
+                    
+                    # Forcefully reset terminal to sane state (raw mode from child process leaks)
+                    try:
+                        os.system('stty sane')
+                    except:
+                        pass
+                    
+                    print("\n" + "="*60)
+                    input("Press Enter to return to menu...")
+                else:
+                    clear_screen()
+                    show_header("Codec Limits Test")
+                    print("❌ tests/test_codec_limits.py not found.")
+                    print(f"   Expected location: {codec_test}")
+                    input("\nPress Enter to continue...")
     
     def unit_test_menu():
         """Unit Tests submenu - dynamically loads test classes from tests/ai-media_test.py."""
@@ -5359,7 +5818,7 @@ Supported Models:
     common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
     common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
     common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3).")
-    common_group.add_argument("-s", "--size", help="Resolution for Image/Video: '720p', '1080p', '4k', '8k', 'HD', '1280x720'. Default: 720p")
+    common_group.add_argument("-s", "--size", help="Resolution for Image/Video: '720p', '1080p', '4k', '1280x720'. For zeroscope: triggers dynamic upscaling (XL + Real-ESRGAN) for targets > 576x320. Default: 720p")
     common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
     
 
@@ -5372,7 +5831,7 @@ Supported Models:
     image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
     
     video_group = parser.add_argument_group("Video Options")
-    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())}")
+    video_group.add_argument("--video-model", default="default", help=f"Model: zeroscope (default, 576x320 native with auto-upscale), zeroscope-xl (V2V upscaler), ms-1.7b, cogvideox, svd")
     video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
     video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
     video_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")

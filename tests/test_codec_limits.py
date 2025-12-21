@@ -7,6 +7,7 @@ import os
 
 # Global skip flag
 skip_requested = False
+skip_all_requested = False
 skip_lock = threading.Lock()
 input_thread = None
 input_thread_stop = False
@@ -17,7 +18,7 @@ def start_input_listener():
     input_thread_stop = False
     
     def listener():
-        global skip_requested, input_thread_stop
+        global skip_requested, skip_all_requested, input_thread_stop
         if platform.system() == "Windows":
             import msvcrt
             while not input_thread_stop:
@@ -26,6 +27,9 @@ def start_input_listener():
                     if key == 's':
                         with skip_lock:
                             skip_requested = True
+                    elif key == 'r':
+                        with skip_lock:
+                            skip_all_requested = True
                 time.sleep(0.05)
         else:
             # Unix - set terminal to raw mode once
@@ -45,6 +49,9 @@ def start_input_listener():
                             if key == 's':
                                 with skip_lock:
                                     skip_requested = True
+                            elif key == 'r':
+                                with skip_lock:
+                                    skip_all_requested = True
                 finally:
                     termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             except Exception:
@@ -65,9 +72,14 @@ def reset_skip_flag():
         skip_requested = False
 
 def is_skip_requested():
-    """Check if skip was requested."""
+    """Check if skip was requested (single test or all remaining)."""
     with skip_lock:
-        return skip_requested
+        return skip_requested or skip_all_requested
+
+def is_skip_all_requested():
+    """Check if skip all remaining was requested."""
+    with skip_lock:
+        return skip_all_requested
 
 def run_with_skip_support(cmd, timeout, shell=False):
     """
@@ -374,7 +386,8 @@ def main():
     sys_info = get_platform_info()
     print(f"System: {sys_info['system']}")
     print(f"Acceleration: {sys_info['accel_type'].upper()}")
-    print("\n💡 Tip: Press 'S' during a test to skip it")
+    print("\n💡 Tip: Press 'S' to skip the current test")
+    print("        Press 'R' to skip all remaining tests")
     
     # Start background thread to listen for 'S' key
     start_input_listener()
