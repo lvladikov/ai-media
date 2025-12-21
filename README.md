@@ -506,7 +506,9 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 > 3. Further upscales using Real-ESRGAN if target > 1024×576
 > 4. Final FFmpeg resize to exact target dimensions if needed
 >
-> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster but may have slight frame-to-frame variation.
+> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster nbut may have slight frame-to-frame variation.
+
+> **ℹ️ NVIDIA/CUDA:** XL V2V diffusion is confirmed to work well on NVIDIA/CUDA.
 
 > [!WARNING]
 > **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
