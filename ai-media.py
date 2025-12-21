@@ -124,6 +124,11 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 # Global arguments holder for JSON reporting
 args = None
 
+try:
+    import ftfy
+except ImportError:
+    ftfy = None
+
 # --- Constants ---
 DEFAULT_IMAGE_SIZE = "720p"  # Maps to 1280x720
 DEFAULT_AUDIO_SAMPLING = "32000" # Hz (MusicGen default is usually 32k)
@@ -161,8 +166,12 @@ AUDIO_MODELS = {
 VIDEO_MODELS = {
     "ms-1.7b": "damo-vilab/text-to-video-ms-1.7b",     # Has watermark issues
     "zeroscope": "cerspense/zeroscope_v2_576w",        # 576x320 optimized (default)
-    "zeroscope-xl": "cerspense/zeroscope_v2_XL",      # 1024x576 V2V upscaler (internal use)
+    "zeroscope-xl": "cerspense/zeroscope_v2_XL",       # 1024x576 V2V upscaler (internal use)
     "cogvideox": "THUDM/CogVideoX-5b",                 # High quality (requires high VRAM)
+    "wan2.2": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",          # Alibaba Wan 2.2 (14B)
+    "ltx-video": "Lightricks/LTX-Video",               # Lightricks LTX-Video (Fast, High Res)
+    "mochi-1": "genmo/mochi-1-preview",                # Mochi 1 (Physics/Motion SOTA)
+    "hunyuan": "hunyuanvideo-community/HunyuanVideo",                 # HunyuanVideo (13B, Cinematic)
     "svd": "stabilityai/stable-video-diffusion-img2vid-xt", # SVD Image-to-Video
     "default": "cerspense/zeroscope_v2_576w"
 }
@@ -215,6 +224,12 @@ MODEL_REQUIREMENTS = {
     "cerspense/zeroscope_v2_XL": {"vram": 10, "ram": 16, "max_resolution": (1024, 576)},  # V2V Upscaler
     "THUDM/CogVideoX-5b": {"vram": 32, "ram": 48, "max_resolution": (1920, 1080)}, # ~50GB on Mac (float32)
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
+    "Wan-AI/Wan2.2-T2V-A14B-Diffusers": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)}, # ~14B params, high usage
+    "Wan-AI/Wan2.2-I2V-A14B-Diffusers": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},
+    "Lightricks/LTX-Video": {"vram": 16, "ram": 32, "max_resolution": (1216, 704)},      # Efficient DiT
+    "genmo/mochi-1-preview": {"vram": 19, "ram": 48, "max_resolution": (848, 480)},      # High VRAM (10B DiT)
+    "hunyuanvideo-community/HunyuanVideo": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},      # Huge 13B model
+    "hunyuanvideo-community/HunyuanVideo-I2V": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},
     "stabilityai/stable-diffusion-x4-upscaler": {"vram": 8, "ram": 16, "max_resolution": (4096, 4096)},
     "stabilityai/sd-x2-latent-upscaler": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
     "timbrooks/instruct-pix2pix": {"vram": 8, "ram": 12, "max_resolution": (1024, 1024)},
@@ -387,8 +402,17 @@ _test_state = {
     'total': 0
 }
 _interrupted = False
+_force_kill_timer = None
+_first_interrupt_time = None
+
+def _force_exit():
+    """Forcefully terminate the process after timeout."""
+    print("\n💀 Force-killing process (GPU operations did not respond in time)...")
+    os._exit(1)  # Immediate exit, bypasses cleanup
 
 def signal_handler(sig, frame):
+    global _interrupted, _force_kill_timer, _first_interrupt_time
+    
     if _test_state['active']:
         completed = _test_state['passed'] + _test_state['failed']
         print(f"\n\n{'='*60}")
@@ -404,10 +428,30 @@ def signal_handler(sig, frame):
         print(f"{'='*60}")
         sys.exit(130)
     else:
-        global _interrupted
         _interrupted = True
-        print("\n\n⚠️  Interrupted! Cleaning up...")
-        sys.exit(0)
+        
+        # If this is the first interrupt, start a force-kill timer
+        if _first_interrupt_time is None:
+            import time
+            _first_interrupt_time = time.time()
+            print("\n\n⚠️  Interrupted! Cleaning up... (Press Ctrl+C again or wait 5s to force-kill)")
+            
+            # Start a timer to force-kill after 5 seconds
+            import threading
+            _force_kill_timer = threading.Timer(5.0, _force_exit)
+            _force_kill_timer.daemon = True
+            _force_kill_timer.start()
+            
+            # Attempt graceful exit
+            try:
+                sys.exit(0)
+            except SystemExit:
+                pass
+        else:
+            # Second interrupt: force-kill immediately
+            if _force_kill_timer:
+                _force_kill_timer.cancel()
+            _force_exit()
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -1776,6 +1820,10 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Check if we need to switch to an I2V variant
         if "cogvideox" in base_model.lower():
             model_id = "THUDM/CogVideoX-5b-I2V"
+        elif "wan2.2" in base_model.lower() or "wan2.2" in model_name.lower():
+            model_id = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
+        elif "hunyuan" in base_model.lower() or "hunyuan" in model_name.lower():
+            model_id = "hunyuanvideo-community/HunyuanVideo-I2V"
         elif "stable-video-diffusion" in base_model.lower() or model_name.lower() == "svd":
             model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
         else:
@@ -1824,6 +1872,10 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             DPMSolverMultistepScheduler, 
             CogVideoXImageToVideoPipeline,
             StableVideoDiffusionPipeline,
+            WanPipeline,
+            WanImageToVideoPipeline,
+            HunyuanVideoPipeline,
+            HunyuanVideoImageToVideoPipeline,
             utils
         )
         from diffusers.utils import export_to_video, load_image
@@ -1860,45 +1912,86 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         if "cogvideox" in model_id.lower() and is_i2v:
             pipe = CogVideoXImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
-            # --- CogVideoX Memory Optimizations ---
             print(f"   ℹ️  Applying Memory Optimizations for CogVideoX...")
-            # 1. Sequential CPU Offload (Drastic VRAM reduction, offloads modules to CPU)
             pipe.enable_sequential_cpu_offload() 
-            print(f"   ✓ Sequential CPU Offload: Enabled")
-            
-            # 2. VAE Tiling (Splits VAE decode into small tiles)
             pipe.vae.enable_tiling()
-            print(f"   ✓ VAE Tiling: Enabled")
-            
-            # 3. VAE Slicing (Processes VAE tiles sequentially)
             pipe.vae.enable_slicing()
-            print(f"   ✓ VAE Slicing: Enabled")
+
+        elif "wan2.2" in model_id.lower():
+            # Wan 2.2 (Alibaba)
+            if is_i2v:
+                print(f"   ℹ️  Loading Wan 2.2 Image-to-Video Pipeline...")
+                pipe = WanImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            else:
+                print(f"   ℹ️  Loading Wan 2.2 Text-to-Video Pipeline...")
+                pipe = WanPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
+            # Massive model optimizations (14B params)
+            print("   ℹ️  Enabling Model CPU Offload for Wan 2.2...")
+            pipe.enable_model_cpu_offload()
+            pipe.vae.enable_tiling()
+            
+        elif "ltx-video" in model_id.lower():
+            # LTX-Video (Lightricks)
+            from diffusers import LTXPipeline
+            print(f"   ℹ️  Loading LTX-Video Pipeline...")
+            pipe = LTXPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            
+            # LTX Optimizations (Fast DiT)
+            # Default to CPU offload to be safe on consumer GPUs
+            pipe.enable_model_cpu_offload()
+            pipe.vae.enable_tiling()
+
+        elif "mochi-1" in model_id.lower():
+            # Mochi 1 (Genmo)
+            from diffusers import MochiPipeline
+            print(f"   ℹ️  Loading Mochi 1 Pipeline...")
+            pipe = MochiPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            
+            # Very heavy model (10B params), needs heavy offloading
+            print("   ℹ️  Enabling Model CPU Offload for Mochi 1...")
+            pipe.enable_model_cpu_offload()
+            pipe.vae.enable_tiling()
+
+        elif "hunyuan" in model_id.lower():
+            # HunyuanVideo (Tencent)
+            if is_i2v:
+                print(f"   ℹ️  Loading HunyuanVideo Image-to-Video Pipeline...")
+                pipe = HunyuanVideoImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            else:
+                print(f"   ℹ️  Loading HunyuanVideo Text-to-Video Pipeline...")
+                pipe = HunyuanVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
+            
+            # Massive model (13B), similar to Wan 2.2
+            print("   ℹ️  Enabling Model CPU Offload for HunyuanVideo...")
+            pipe.enable_model_cpu_offload()
+            pipe.vae.enable_tiling()
+
         elif "stable-video-diffusion" in model_id.lower():
             pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16" if dtype == torch.float16 else None)
         else:
-            # Generic / Text-to-Video - try fp16 variant first, fallback to default
+            # Generic / Text-to-Video
             try:
                 if dtype == torch.float16:
                     pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16")
                 else:
                     pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype)
             except Exception:
-                # Model doesn't have fp16 variant, load without it
                 pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype)
         
-        # Scheduler Optimization
+        # Scheduler Optimization (Skip if handled or problematic)
         if hasattr(pipe, "scheduler"):
-            # SVD works best with its default EulerDiscreteScheduler. DPMSolver is problematic.
-            is_svd = "stable-video-diffusion" in model_id.lower()
-            if not is_svd:
+            # SVD, Mochi, and LTX may have specific schedulers they prefer
+            is_sensitive_scheduler = any(x in model_id.lower() for x in ["stable-video-diffusion", "mochi", "ltx", "wan", "hunyuan"])
+            if not is_sensitive_scheduler:
                 try:
                     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
                 except: pass 
         
         # Device/Memory Optimization
-        # (CogVideoX already handled above with sequential_cpu_offload)
-        if "cogvideox" not in model_id.lower():
+        # (CogVideoX and new models handled specifically above)
+        special_handling = ["cogvideox", "wan", "ltx", "mochi", "hunyuan"]
+        if not any(x in model_id.lower() for x in special_handling):
             if device.type == "cpu":
                 pipe.to(device)
             else:
@@ -1910,7 +2003,20 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # --- Performance Tracking ---
         tracker = PerformanceTracker()
         
-        print(f"🎬 Rendering video frames at {gen_width}x{gen_height}... (This might be slow)")
+        # Fix dimensions for specific models if needed (some enforce strict aspect ratios or resolution buckets)
+        render_width, render_height = gen_width, gen_height
+        
+        # LTX-Video prefers multiples of 32
+        if "ltx-video" in model_id.lower():
+             render_width = (render_width // 32) * 32
+             render_height = (render_height // 32) * 32
+        # Mochi prefers multiples of 16 (often 848x480 native)
+        elif "mochi" in model_id.lower():
+             render_width = (render_width // 16) * 16
+             render_height = (render_height // 16) * 16
+        # Wan/Hunyuan have flexible bucket resolution but benefit from standard ratios (1280x720)
+        
+        print(f"🎬 Rendering video frames at {render_width}x{render_height}... (This might be slow)")
         
         start_time = time.time()
         with ResourceMonitor() as monitor:
@@ -1920,6 +2026,12 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 
                 if "stable-video-diffusion" in model_id.lower():
                     video_frames = pipe(init_image).frames[0]
+                elif "wan2.2" in model_id.lower():
+                    # Wan 2.2 I2V
+                    video_frames = pipe(prompt=prompt, image=init_image, num_frames=81, num_inference_steps=50).frames[0]
+                elif "hunyuan" in model_id.lower():
+                    # HunyuanVideo I2V
+                    video_frames = pipe(prompt=prompt, image=init_image, num_frames=61, num_inference_steps=50).frames[0]
                 else:
                     # CogVideoX
                     video_frames = pipe(prompt=prompt, image=init_image, num_frames=49, guidance_scale=6.0, num_inference_steps=50).frames[0]
@@ -3316,22 +3428,39 @@ def upscale_video_fast(video_path, output_path, factor=4.0, device=None, model_n
                 ffmpeg_cmd.append(temp_video_out)
             
             import subprocess
+            import tempfile
+            
+            # Use a NamedTemporaryFile for stderr to avoid pipe deadlocks
+            # delete=False is required on Windows to allow the subprocess to open it
+            err_file = tempfile.NamedTemporaryFile(delete=False, mode='w+')
+            err_path = err_file.name
+            
             try:
                  ffmpeg_proc = subprocess.Popen(
                     ffmpeg_cmd, 
                     stdin=subprocess.PIPE, 
                     stdout=subprocess.DEVNULL, 
-                    stderr=subprocess.PIPE # Capture stderr for debugging
+                    stderr=err_file # Capture stderr in file to prevent buffer deadlock
                  )
                  # Quick check for immediate startup failure
-                 time.sleep(0.2)
+                 time.sleep(0.5)
                  if ffmpeg_proc.poll() is not None:
-                     err = ffmpeg_proc.stderr.read().decode()
-                     print(f"   ❌ FFmpeg Pipe failed to start ({vcodec_lib}): {err.strip()}")
+                     # Process exited immediately
+                     err_file.seek(0)
+                     err_content = err_file.read()
+                     print(f"   ❌ FFmpeg Pipe failed to start ({vcodec_lib}): {err_content.strip()}")
+                     err_file.close() # Close handle
+                     try: os.remove(err_path)
+                     except: pass
                      return False
+                 
                  print(f"   ✅ FFmpeg Pipe initialized ({vcodec_lib}).")
+                 
             except Exception as e:
-                 print(f"   ❌ FFmpeg Pipe failed: {e}")
+                 print(f"   ❌ FFmpeg Pipe failed to launch: {e}")
+                 err_file.close()
+                 try: os.remove(err_path)
+                 except: pass
                  return False
 
         if 'start_time' not in locals():
@@ -3407,19 +3536,33 @@ def upscale_video_fast(video_path, output_path, factor=4.0, device=None, model_n
                 except:
                     pass
                 
-                # Robust wait with timeout
+                # Robust wait with timeout (Increased to 30s for MP4 moov writing)
                 try:
-                    ffmpeg_proc.wait(timeout=5)
+                    ffmpeg_proc.wait(timeout=30)
                 except subprocess.TimeoutExpired:
                     print("   ⚠️  FFmpeg process hung. Forcing termination...", flush=True)
                     ffmpeg_proc.terminate()
                     try:
-                        ffmpeg_proc.wait(timeout=2)
+                        ffmpeg_proc.wait(timeout=5)
                     except subprocess.TimeoutExpired:
                         ffmpeg_proc.kill()
-                    except subprocess.TimeoutExpired:
-                        ffmpeg_proc.kill()
-            
+                
+                # Close and remove stderr log
+                try:
+                    err_file.close()
+                    if os.path.exists(err_path):
+                        os.remove(err_path)
+                except:
+                    pass
+                
+                # Check exit code - if non-zero, it failed (or was killed)
+                if ffmpeg_proc.returncode != 0:
+                     print(f"   ❌ FFmpeg process failed/killed (Exit Code: {ffmpeg_proc.returncode}).")
+                     if os.path.exists(temp_video_out):
+                         try: os.remove(temp_video_out)
+                         except: pass
+                     return False
+
             # Friendly exit message
             if '_interrupted' in globals() and _interrupted:
                 print("👋 Goodbye!")
@@ -4624,6 +4767,10 @@ def run_interactive(jump_point=None):
                 ("Zeroscope (Default, No Watermarks)", "zeroscope"),
                 ("ModelScope (General Purpose, Has Watermarks)", "ms-1.7b"),
                 ("CogVideoX (State of the Art, Slow) ~15GB", "cogvideox"),
+                ("Wan 2.2 (Alibaba, 14B, High Quality) ~24GB", "wan-2.2"),
+                ("LTX-Video (Lightricks, Fast DiT) ~16GB", "ltx-video"),
+                ("Mochi 1 (Genmo, Motion SOTA) ~19GB", "mochi-1"),
+                ("HunyuanVideo (Tencent, Cinematic) ~24GB", "hunyuan"),
                 ("Stable Video Diffusion (Image-to-Video only)", "svd"),
             ]
             model = prompt_choice("Model", model_options)
@@ -5755,6 +5902,10 @@ Examples:
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
   python ai-media.py -v -p "Camera pans left" -ii ./start.png -o output.mp4 (Image-to-Video)
   python ai-media.py -v -p "Dancer" -ap "Techno beat" -o party.mp4 (Video+Audio Mux)
+  python ai-media.py -v -p "Future city" -o city.mp4 --video-model wan2.2 (SOTA Quality)
+  python ai-media.py -v -p "Driving car" -o car.mp4 --video-model ltx-video (Fast/High-Res)
+  python ai-media.py -v -p "Liquid simulation" --video-model mochi-1 (High Motion)
+  python ai-media.py -v -p "Cinematic panda" --video-model hunyuan (13B Model)
   
   -- Audio Generation --
   python ai-media.py -a -p "Jazz saxophone" -o jazz.mp3 -l 30s
@@ -5800,6 +5951,10 @@ Supported Models:
     - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
     - cogvideox          : ~15GB | THUDM/CogVideoX-5b (Open)
     - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
+    - wan2.2             : ~30GB | Alibaba-PAI/Wan-2.2-T2V-14B (SOTA, Heavy VRAM)
+    - ltx-video          : ~12GB | Lightricks/LTX-Video (Fast, Good Motion)
+    - mochi-1            : ~19GB | genmo/mochi-1-preview (High Motion Fidelity)
+    - hunyuan            : ~25GB | tencent/HunyuanVideo (13B Massive Scale)
     
   Audio:
     - musicgen-small           : ~2GB  | Fast, good for music sketches
@@ -5852,7 +6007,7 @@ Supported Models:
     image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
     
     video_group = parser.add_argument_group("Video Options")
-    video_group.add_argument("--video-model", default="default", help=f"Model: zeroscope (default, 576x320 native with auto-upscale), zeroscope-xl (V2V upscaler), ms-1.7b, cogvideox, svd")
+    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())} (default: zeroscope)")
     video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
     video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
     video_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")

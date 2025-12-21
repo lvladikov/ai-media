@@ -313,6 +313,46 @@
       "description": "Generate video at 720p using Zeroscope + XL + Real-ESRGAN full dynamic upscaling pipeline"
     },
     {
+      "name": "Video - Wan 2.2 (14B)",
+      "timeout": 7200,
+      "command": "-v -p \"A cinematic shot of a futuristic city\" -o tests/testData/outputs/vid_wan22.mp4 -l 2s --video-model wan2.2 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_wan22.mp4"
+      ],
+      "description": "Generate video using Wan 2.2 T2V model"
+    },
+    {
+      "name": "Video - LTX-Video",
+      "timeout": 7200,
+      "command": "-v -p \"A futuristic car driving\" -o tests/testData/outputs/vid_ltx.mp4 -l 2s --video-model ltx-video --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_ltx.mp4"
+      ],
+      "description": "Generate video using LTX-Video model"
+    },
+    {
+      "name": "Video - Mochi 1",
+      "timeout": 7200,
+      "command": "-v -p \"A fluidity simulation\" -o tests/testData/outputs/vid_mochi.mp4 -l 2s --video-model mochi-1 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_mochi.mp4"
+      ],
+      "description": "Generate video using Mochi 1 model"
+    },
+    {
+      "name": "Video - HunyuanVideo",
+      "timeout": 7200,
+      "command": "-v -p \"A panda eating bamboo\" -o tests/testData/outputs/vid_hunyuan.mp4 -l 2s --video-model hunyuan -s 720p --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_hunyuan.mp4"
+      ],
+      "description": "Generate video using HunyuanVideo model"
+    },
+    {
       "name": "Audio - AAC Format",
       "command": "-a -p \"Format test\" -o tests/testData/outputs/aud_format.aac -l 2s --audio-model musicgen-small --force",
       "expectedInputItems": [],

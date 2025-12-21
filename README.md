@@ -154,7 +154,7 @@ The script `ai-media.py` is the main entry point.
 
 | Option | Description |
 | :--- | :--- |
-| `--video-model` | Model: `zeroscope` (default), `zeroscope-xl`, `ms-1.7b`, `cogvideox`, `svd`. |
+| `--video-model` | Model: `zeroscope` (default), `ms-1.7b`, `wan2.2`, `ltx-video`, `mochi-1`, `hunyuan`, `cogvideox`, `svd`. |
 | `-s, --size` | Target resolution. For zeroscope: triggers **Dynamic Upscaling** (XL + Real-ESRGAN). |
 | `-l, --length` | Duration. Supports "2s", "5s", "1m", `{m:1, s:30}`. Default: 2s. |
 | `-ii, --input-image` | Source image path for **Image-to-Video** generation (SVD, CogVideoX I2V). |
@@ -344,6 +344,18 @@ python ai-media.py -v -p "Cyberpunk dancers" --audio-prompt "Heavy techno beat" 
 
 # Long video (1m 30s) using Zeroscope model at native resolution
 python ai-media.py -v -p "Drone flight over mountains" -l "{m:1, s:30}" -s 576x320 -o flight.mp4 --video-model zeroscope
+
+# Wan 2.2 (SOTA Quality - 14B Params)
+python ai-media.py -v -p "A cinematic drone shot of a futuristic cyberpunk city with neon lights and flying cars" -o city.mp4 --video-model wan2.2
+
+# LTX-Video (Fast & High Resolution)
+python ai-media.py -v -p "A futuristic car driving through a tunnel" -o car.mp4 --video-model ltx-video
+
+# Mochi 1 (High Motion Fidelity)
+python ai-media.py -v -p "Close up of a fluid simulation with complex splashes" -o fluid.mp4 --video-model mochi-1
+
+# HunyuanVideo (Massive Scale - 13B Params)
+python ai-media.py -v -p "A panda eating bamboo in a bamboo forest, cinematic 4k" -o panda.mp4 --video-model hunyuan --size 720p
 ```
 
 > [!NOTE]
@@ -493,11 +505,15 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 | Model | Code | Resolution | Download | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | **Default**. Fast, no watermarks. Auto-upscales with XL for higher resolutions. |
-| **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | *Internal V2V upscaler*. Auto-used on NVIDIA. **Skipped on Mac** (CPU too slow). |
-| **ModelScope** | `ms-1.7b` | Any | ~10GB | General purpose (has watermark issues). |
+| **Wan 2.2** | `wan2.2` | Any | ~30GB | **SOTA (2025)**. exceptional quality. ⚠️ **Heavy (24GB+ VRAM)**. |
+| **LTX-Video** | `ltx-video` | Any (x32) | ~12GB | Balanced speed/quality. Good motion. |
+| **Mochi 1** | `mochi-1` | Any (x16) | ~19GB | High motion fidelity. ⚠️ **Heavy (19GB+ VRAM)**. |
+| **HunyuanVideo** | `hunyuan` | Any | ~25GB | Massive scale. ⚠️ **Heavy (24GB+ VRAM)**. |
+| **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | **Default**. Fast, no watermarks. Auto-upscales with XL. |
+| **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | *Internal V2V upscaler*. |
 | **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Impractical on Mac** (~50GB+ RAM). |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
+| **ModelScope** | `ms-1.7b` | Any | ~10GB | **Legacy**. General purpose (has watermark issues). |
 
 > [!NOTE]
 > **Zeroscope Dynamic Upscaling:** When you request a resolution higher than 576×320 with the `zeroscope` model (e.g., `-s 1080p`), the script automatically:
@@ -917,6 +933,10 @@ This project uses the following open-source libraries:
 - **ModelScope** by Alibaba - [modelscope/modelscope](https://github.com/modelscope/modelscope)
 - **Zeroscope** by Cerspense - [cerspense/zeroscope](https://huggingface.co/cerspense/zeroscope_v2_576w)
 - **CogVideoX** by THUDM - [THUDM/CogVideo](https://github.com/THUDM/CogVideo)
+- **Wan 2.2** by Alibaba PAI - [Alibaba-PAI/Wan-2.2-T2V-14B](https://huggingface.co/Alibaba-PAI/Wan-2.2-T2V-14B)
+- **LTX-Video** by Lightricks - [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)
+- **Mochi 1** by Genmo - [genmo/mochi-1-preview](https://huggingface.co/genmo/mochi-1-preview)
+- **HunyuanVideo** by Tencent - [Tencent/HunyuanVideo](https://github.com/Tencent/HunyuanVideo)
 - **Stable Video Diffusion** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion x2 Latent Upscaler** by Stability AI - [stabilityai/sd-x2-latent-upscaler](https://huggingface.co/stabilityai/sd-x2-latent-upscaler)
 - **Stable Diffusion x4 Upscaler** by Stability AI - [stabilityai/stable-diffusion-x4-upscaler](https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler)

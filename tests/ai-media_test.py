@@ -1635,5 +1635,177 @@ class TestLoadingTimer(unittest.TestCase):
         self.assertTrue(ai_media._loading_shown)
 
 
+
+# =============================================================================
+# New Video Model Integration Tests (Wan 2.2, LTX, Mochi, Hunyuan)
+# =============================================================================
+
+class TestVideoModelIntegration(unittest.TestCase):
+    """
+    Unit tests to verify that the correct Diffusers pipelines are loaded
+    and configured for the new video models (Wan 2.2, LTX, Mochi, Hunyuan).
+    """
+
+    def setUp(self):
+        # Reset mocks before each test
+        # We need to ensure the mocks are attached to the imported ai_media module context
+        
+        # Ensure 'diffusers' mock exists
+        if 'diffusers' not in sys.modules or not isinstance(sys.modules['diffusers'], MagicMock):
+             sys.modules['diffusers'] = MagicMock()
+             # Mark as a package
+             sys.modules['diffusers'].__path__ = []
+        
+        # Ensure submodules are mocked in sys.modules for 'from X import Y'
+        sys.modules['diffusers.utils'] = MagicMock()
+        sys.modules['diffusers.pipelines'] = MagicMock()
+        
+        # Specific Pipeline mocks
+        sys.modules['diffusers'].WanPipeline = MagicMock()
+        sys.modules['diffusers'].LTXPipeline = MagicMock()
+        sys.modules['diffusers'].MochiPipeline = MagicMock()
+        sys.modules['diffusers'].HunyuanVideoPipeline = MagicMock()
+        sys.modules['diffusers'].DiffusionPipeline = MagicMock()
+        
+        # Mock get_optimal_device_and_dtype to return CPU/float32
+        # We need to patch it on the module instance itself
+        self.original_get_device = ai_media.get_optimal_device_and_dtype
+        ai_media.get_optimal_device_and_dtype = MagicMock(return_value=(MagicMock(type="cpu"), "float32"))
+        
+        # Mock PerformanceTracker and ResourceMonitor to avoid file I/O or threads
+        self.original_tracker = ai_media.PerformanceTracker
+        self.original_monitor = ai_media.ResourceMonitor
+        
+        ai_media.PerformanceTracker = MagicMock()
+        ai_media.ResourceMonitor = MagicMock()
+        ai_media.ResourceMonitor.return_value.__enter__.return_value = MagicMock()
+        ai_media.ResourceMonitor.return_value.__enter__.return_value.get_averages.return_value = (0,0,0,0)
+        
+        # Mock export_to_video if it exists, otherwise just set it
+        if hasattr(ai_media, 'export_to_video'):
+            self.original_export = ai_media.export_to_video
+        else:
+            self.original_export = None
+        ai_media.export_to_video = MagicMock()
+
+    def tearDown(self):
+        # Restore originals
+        ai_media.get_optimal_device_and_dtype = self.original_get_device
+        ai_media.PerformanceTracker = self.original_tracker
+        ai_media.ResourceMonitor = self.original_monitor
+        if self.original_export:
+            ai_media.export_to_video = self.original_export
+        elif hasattr(ai_media, 'export_to_video'):
+            del ai_media.export_to_video
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('ai_media.VIDEO_MODELS')
+    def test_wan_2_2_pipeline_loading(self, mock_models, mock_stdout):
+        """Test that Wan 2.2 triggers WanPipeline and CPU offload."""
+        # Setup model dict
+        mock_models.get.return_value = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+        
+        # Call generate_video
+        ai_media.generate_video(
+            prompt="test prompt",
+            output_path="test.mp4",
+            duration=2.0,
+            width=1280,
+            height=720,
+            model_name="wan2.2"
+        )
+        
+        # Verify WanPipeline was used
+        sys.modules['diffusers'].WanPipeline.from_pretrained.assert_called_once()
+        
+        # Verify offload was enabled (Mock pipeline instance)
+        pipe_instance = sys.modules['diffusers'].WanPipeline.from_pretrained.return_value
+        pipe_instance.enable_model_cpu_offload.assert_called_once()
+        pipe_instance.vae.enable_tiling.assert_called_once()
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('ai_media.VIDEO_MODELS')
+    def test_wan_2_2_i2v_pipeline_loading(self, mock_models, mock_stdout):
+        """Test that Wan 2.2 I2V triggers WanI2VPipeline."""
+        mock_models.get.return_value = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+        
+        ai_media.generate_video(
+            prompt="test prompt",
+            output_path="test.mp4",
+            duration=2.0,
+            width=1280,
+            height=720,
+            model_name="wan2.2",
+            image_input="test.jpg"
+        )
+        
+        # Verify WanImageToVideoPipeline was used
+        sys.modules['diffusers'].WanImageToVideoPipeline.from_pretrained.assert_called_once()
+        
+        # Verify offload was enabled
+        pipe_instance = sys.modules['diffusers'].WanImageToVideoPipeline.from_pretrained.return_value
+        pipe_instance.enable_model_cpu_offload.assert_called_once()
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('ai_media.VIDEO_MODELS')
+    def test_ltx_video_pipeline_loading(self, mock_models, mock_stdout):
+        """Test that LTX-Video triggers LTXPipeline and CPU offload."""
+        mock_models.get.return_value = "Lightricks/LTX-Video"
+        
+        ai_media.generate_video(
+            prompt="test prompt",
+            output_path="test.mp4",
+            duration=2.0,
+            width=1280,
+            height=720,
+            model_name="ltx-video"
+        )
+        
+        sys.modules['diffusers'].LTXPipeline.from_pretrained.assert_called_once()
+        
+        pipe_instance = sys.modules['diffusers'].LTXPipeline.from_pretrained.return_value
+        pipe_instance.enable_model_cpu_offload.assert_called_once()
+    
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('ai_media.VIDEO_MODELS')
+    def test_mochi_1_pipeline_loading(self, mock_models, mock_stdout):
+        """Test that Mochi 1 triggers MochiPipeline and CPU offload."""
+        mock_models.get.return_value = "genmo/mochi-1-preview"
+        
+        ai_media.generate_video(
+            prompt="test prompt",
+            output_path="test.mp4",
+            duration=2.0,
+            width=1280,
+            height=720,
+            model_name="mochi-1"
+        )
+        
+        sys.modules['diffusers'].MochiPipeline.from_pretrained.assert_called_once()
+        
+        pipe_instance = sys.modules['diffusers'].MochiPipeline.from_pretrained.return_value
+        pipe_instance.enable_model_cpu_offload.assert_called_once()
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('ai_media.VIDEO_MODELS')
+    def test_hunyuan_pipeline_loading(self, mock_models, mock_stdout):
+        """Test that HunyuanVideo triggers HunyuanVideoPipeline and CPU offload."""
+        mock_models.get.return_value = "hunyuanvideo-community/HunyuanVideo"
+        
+        ai_media.generate_video(
+            prompt="test prompt",
+            output_path="test.mp4",
+            duration=2.0,
+            width=1280,
+            height=720,
+            model_name="hunyuan"
+        )
+        
+        sys.modules['diffusers'].HunyuanVideoPipeline.from_pretrained.assert_called_once()
+        
+        pipe_instance = sys.modules['diffusers'].HunyuanVideoPipeline.from_pretrained.return_value
+        pipe_instance.enable_model_cpu_offload.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

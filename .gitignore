@@ -27,6 +27,7 @@ performance.json
 *.flac
 *.ogg
 *.txt
+!requirements.txt
 *.wmv
 
 # Allow screenshots folder (README images)
