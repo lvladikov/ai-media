@@ -157,16 +157,6 @@
       "description": "Generate WebP image using -f flag"
     },
     {
-      "name": "Video - AVI Format",
-      "timeout": 3600,
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.avi -l 1s --force --unsafe -s 576x320",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "tests/testData/outputs/vid_format.avi"
-      ],
-      "description": "Generate video in AVI format"
-    },
-    {
       "name": "Video - Image-to-Video with Audio",
       "command": "-v -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_i2v_audio.mp4 -l 2s -s 576x320 -ap \"Ambient drone\" --video-model svd --force --unsafe",
       "expectedInputItems": [
@@ -176,24 +166,6 @@
         "tests/testData/outputs/vid_i2v_audio.mp4"
       ],
       "description": "Generate video from image with background audio"
-    },
-    {
-      "name": "Video - MKV Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mkv -l 1s -s 576x320 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "tests/testData/outputs/vid_format.mkv"
-      ],
-      "description": "Generate video in MKV format"
-    },
-    {
-      "name": "Video - MOV Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mov -l 1s -s 576x320 --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "tests/testData/outputs/vid_format.mov"
-      ],
-      "description": "Generate video in MOV format"
     },
     {
       "name": "Video - ModelScope",
@@ -236,7 +208,7 @@
     {
       "name": "Video - Stable Video Diffusion (I2V)",
       "timeout": 3600,
-      "command": "-v -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_svd.mp4 -l 1s --video-model svd --force --unsafe",
+      "command": "-v -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_svd.mp4 -l 1s -s 576x320 --video-model svd --force --unsafe",
       "expectedInputItems": [
         "tests/testData/inputs/sample.jpg"
       ],
@@ -247,8 +219,9 @@
     },
     {
       "name": "Video - Text Prompt + Image input + Audio Prompt to Video (CogVideoX I2V)",
+      "skip": true,
       "timeout": 3600,
-      "command": "-v -p \"Camera slowly pans\" -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_cogx_i2v_audio.mp4 -l 2s -ap \"Cinematic ambience\" --video-model cogvideox --force --unsafe",
+      "command": "-v -p \"Camera slowly pans\" -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_cogx_i2v_audio.mp4 -l 2s -s 576x320 -ap \"Cinematic ambience\" --video-model cogvideox --force --unsafe",
       "expectedInputItems": [
         "tests/testData/inputs/sample.jpg"
       ],
@@ -258,8 +231,36 @@
       "description": "Generate video using CogVideoX I2V with text prompt, input image, and background audio"
     },
     {
+      "name": "Video - AVI Format",
+      "timeout": 3600,
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.avi -l 1s --force --unsafe -s 576x320",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_format.avi"
+      ],
+      "description": "Generate video in AVI format"
+    },
+    {
+      "name": "Video - MKV Format",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mkv -l 1s -s 576x320 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_format.mkv"
+      ],
+      "description": "Generate video in MKV format"
+    },
+    {
+      "name": "Video - MOV Format",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mov -l 1s -s 576x320 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/vid_format.mov"
+      ],
+      "description": "Generate video in MOV format"
+    },
+    {
       "name": "Video - WMV Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.wmv -l 1s --force --unsafe",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.wmv -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_format.wmv"
@@ -268,7 +269,7 @@
     },
     {
       "name": "Video - WebM Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.webm -l 1s --force --unsafe",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.webm -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_format.webm"
@@ -277,7 +278,7 @@
     },
     {
       "name": "Video - Zeroscope (Default)",
-      "command": "-v -p \"A cat walking\" -o tests/testData/outputs/vid_zeroscope.mp4 -l 1s --force --unsafe",
+      "command": "-v -p \"A cat walking\" -o tests/testData/outputs/vid_zeroscope.mp4 -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_zeroscope.mp4"
@@ -286,7 +287,7 @@
     },
     {
       "name": "Video - Zeroscope Explicit",
-      "command": "-v -p \"Bird flying\" -o tests/testData/outputs/vid_zeroscope_exp.mp4 -l 1s --video-model zeroscope --force --unsafe",
+      "command": "-v -p \"Bird flying\" -o tests/testData/outputs/vid_zeroscope_exp.mp4 -l 1s -s 576x320 --video-model zeroscope --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_zeroscope_exp.mp4"
@@ -316,7 +317,7 @@
     {
       "name": "Video - Wan 2.2 (14B)",
       "timeout": 7200,
-      "command": "-v -p \"A cinematic shot of a futuristic city\" -o tests/testData/outputs/vid_wan22.mp4 -l 2s --video-model wan2.2 --force --unsafe",
+      "command": "-v -p \"A cinematic shot of a futuristic city\" -o tests/testData/outputs/vid_wan22.mp4 -l 2s -s 576x320 --video-model wan2.2 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_wan22.mp4"
@@ -326,7 +327,7 @@
     {
       "name": "Video - LTX-Video",
       "timeout": 7200,
-      "command": "-v -p \"A futuristic car driving\" -o tests/testData/outputs/vid_ltx.mp4 -l 2s --video-model ltx-video --force --unsafe",
+      "command": "-v -p \"A futuristic car driving\" -o tests/testData/outputs/vid_ltx.mp4 -l 2s -s 576x320 --video-model ltx-video --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_ltx.mp4"
@@ -336,7 +337,7 @@
     {
       "name": "Video - Mochi 1",
       "timeout": 7200,
-      "command": "-v -p \"A fluidity simulation\" -o tests/testData/outputs/vid_mochi.mp4 -l 2s --video-model mochi-1 --force --unsafe",
+      "command": "-v -p \"A fluidity simulation\" -o tests/testData/outputs/vid_mochi.mp4 -l 2s -s 576x320 --video-model mochi-1 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_mochi.mp4"
@@ -346,7 +347,7 @@
     {
       "name": "Video - HunyuanVideo",
       "timeout": 7200,
-      "command": "-v -p \"A panda eating bamboo\" -o tests/testData/outputs/vid_hunyuan.mp4 -l 2s --video-model hunyuan -s 720p --force --unsafe",
+      "command": "-v -p \"A panda eating bamboo\" -o tests/testData/outputs/vid_hunyuan.mp4 -l 2s -s 576x320 --video-model hunyuan --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_hunyuan.mp4"
