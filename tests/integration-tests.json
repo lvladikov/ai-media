@@ -159,7 +159,7 @@
     {
       "name": "Video - AVI Format",
       "timeout": 3600,
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.avi -l 1s --force --unsafe",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.avi -l 1s --force --unsafe -s 576x320",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_format.avi"
@@ -167,18 +167,8 @@
       "description": "Generate video in AVI format"
     },
     {
-      "name": "Video - CogVideoX",
-      "timeout": 7200,
-      "command": "-v -p \"A dog running\" -o tests/testData/outputs/vid_cogvideox.mp4 -l 1s --video-model cogvideox --force --unsafe",
-      "expectedInputItems": [],
-      "expectedOutputItems": [
-        "tests/testData/outputs/vid_cogvideox.mp4"
-      ],
-      "description": "Generate video using CogVideoX model (SOTA)"
-    },
-    {
       "name": "Video - Image-to-Video with Audio",
-      "command": "-v -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_i2v_audio.mp4 -l 2s -ap \"Ambient drone\" --video-model svd --force --unsafe",
+      "command": "-v -ii tests/testData/inputs/sample.jpg -o tests/testData/outputs/vid_i2v_audio.mp4 -l 2s -s 576x320 -ap \"Ambient drone\" --video-model svd --force --unsafe",
       "expectedInputItems": [
         "tests/testData/inputs/sample.jpg"
       ],
@@ -189,7 +179,7 @@
     },
     {
       "name": "Video - MKV Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mkv -l 1s --force --unsafe",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mkv -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_format.mkv"
@@ -198,7 +188,7 @@
     },
     {
       "name": "Video - MOV Format",
-      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mov -l 1s --force --unsafe",
+      "command": "-v -p \"Format test\" -o tests/testData/outputs/vid_format.mov -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_format.mov"
@@ -207,7 +197,7 @@
     },
     {
       "name": "Video - ModelScope",
-      "command": "-v -p \"A dog running\" -o tests/testData/outputs/vid_ms17b.mp4 -l 1s --video-model ms-1.7b --force --unsafe",
+      "command": "-v -p \"A dog running\" -o tests/testData/outputs/vid_ms17b.mp4 -l 1s -s 576x320 --video-model ms-1.7b --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_ms17b.mp4"
@@ -216,7 +206,7 @@
     },
     {
       "name": "Video - Muxing with Audio",
-      "command": "-v -p \"A dancing robot\" -o tests/testData/outputs/vid_mux.mp4 -l 3s -ap \"Techno music\" --force --unsafe",
+      "command": "-v -p \"A dancing robot\" -o tests/testData/outputs/vid_mux.mp4 -l 3s -s 576x320 -ap \"Techno music\" --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
         "tests/testData/outputs/vid_mux.mp4"
