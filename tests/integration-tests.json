@@ -346,6 +346,7 @@
     },
     {
       "name": "Video - HunyuanVideo",
+      "skip": true,
       "timeout": 7200,
       "command": "-v -p \"A panda eating bamboo\" -o tests/testData/outputs/vid_hunyuan.mp4 -l 2s -s 576x320 --video-model hunyuan --force --unsafe",
       "expectedInputItems": [],

@@ -507,15 +507,25 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 
 | Model | Code | Resolution | Download | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Wan 2.2** | `wan2.2` | Any | ~30GB | **SOTA (2025)**. exceptional quality. ⚠️ **Heavy (24GB+ VRAM)**. |
-| **LTX-Video** | `ltx-video` | Any (x32) | ~12GB | Balanced speed/quality. Good motion. |
-| **Mochi 1** | `mochi-1` | Any (x16) | ~19GB | High motion fidelity. ⚠️ **Heavy (19GB+ VRAM)**. |
-| **HunyuanVideo** | `hunyuan` | Any | ~25GB | Massive scale. ⚠️ **Heavy (24GB+ VRAM)**. |
+| **Wan 2.2** | `wan2.2` | Any | ~30GB | **SOTA (2025)**. Excellent quality. ⚠️ **Impractical on Mac** (Too slow). |
+| **LTX-Video** | `ltx-video` | Any (x32) | ~12GB | Balanced speed/quality (~35s for 2s on Mac). Good motion. |
+| **Mochi 1** | `mochi-1` | Any (x16) | ~19GB | High motion fidelity. ⚠️ **Slow on Mac** (Sequential Offload). |
+| **HunyuanVideo** | `hunyuan` | Any | ~25GB | Massive scale. ❌ **Incompatible with <64GB Mac** (80GB+ alloc). |
 | **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | **Default**. Fast, no watermarks. Auto-upscales with XL. |
 | **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | *Internal V2V upscaler*. |
 | **CogVideoX** | `cogvideox` | Any | ~22GB | High fidelity. **WARNING: Very Heavy on all Systems** (~50GB+ RAM). |
 | **Stable Video Diffusion** | `svd` | Any | ~4GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
 | **ModelScope** | `ms-1.7b` | Any | ~10GB | **Legacy**. General purpose (has watermark issues). |
+
+> [!IMPORTANT]
+> **Mac M-Series (MPS) Performance Note:**
+> Massive video models require enormous unified memory and specific optimizations on Mac:
+> *   **LTX-Video**: ✅ Runs great natively (~35s total for 2s video). Best choice for Mac.
+> *   **Mochi 1**: ⚠️ Works but is slow (~50s/step, ~25m total) due to required **Sequential CPU Offload**.
+> *   **Wan 2.2**: ⚠️ Technically runs but is **imprafctical** (4+ hours for 2s video).
+> *   **HunyuanVideo**: ❌ **Fails** on 64GB Macs. Attempts to allocate >80GB buffer even with offloading.
+> *   **XL V2V**: ⚠️ **Diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster but may have slight frame-to-frame variation.
+> *   **Text-to-Video** models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
 
 > [!NOTE]
 > **Zeroscope Dynamic Upscaling:** When you request a resolution higher than 576×320 with the `zeroscope` model (e.g., `-s 1080p`), the script automatically:
@@ -524,15 +534,10 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 > 3. Further upscales using Real-ESRGAN if target > 1024×576
 > 4. Final FFmpeg resize to exact target dimensions if needed
 >
-> **⚠️ Apple Silicon (MPS):** XL V2V diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster nbut may have slight frame-to-frame variation. LTX-Video and Mochi 1 work reasonably well on MPS.
-
 > **ℹ️ NVIDIA/CUDA:** XL V2V diffusion is confirmed to work well on NVIDIA/CUDA.
 
 > [!WARNING]
 > **Watermarks in Output:** Some models (especially `ms-1.7b`) may produce videos with Shutterstock watermarks. This is because these open-source research models were trained on datasets that included watermarked stock footage. The model learned to reproduce the watermark as part of the visual pattern. This is baked into the model weights.
-
-> [!IMPORTANT]
-> **MacOS/Apple Silicon - Video Generation:** Text-to-Video models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
 
 > [!NOTE]
 > **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.

@@ -1989,10 +1989,18 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             if device.type == "mps":
                 print("   ℹ️  MPS: Enabling Sequential CPU Offload for HunyuanVideo (memory-safe)...")
                 pipe.enable_sequential_cpu_offload()
+                # MPS Optimization: Force VAE to float16 to save memory (even if unstable? worth a try)
+                # and enable slicing + tiling
+                try:
+                    pipe.vae.enable_tiling()
+                    pipe.vae.enable_slicing()
+                    print("   ℹ️  Enabled VAE Tiling & Slicing for HunyuanVideo")
+                except Exception as e:
+                    print(f"   ⚠️  Could not enable VAE optimizations: {e}")
             else:
                 print("   ℹ️  Enabling Model CPU Offload for HunyuanVideo...")
                 pipe.enable_model_cpu_offload()
-            pipe.vae.enable_tiling()
+                pipe.vae.enable_tiling()
 
         elif "stable-video-diffusion" in model_id.lower():
             pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16" if dtype == torch.float16 else None)
