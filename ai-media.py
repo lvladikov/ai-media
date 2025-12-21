@@ -114,6 +114,8 @@ logging.getLogger("diffusers").setLevel(logging.ERROR)
 # Set environment variable to suppress transformers warnings (must be before import)
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["DIFFUSERS_VERBOSITY"] = "error"
+# Suppress resource_tracker warnings in subprocesses (caused by os._exit)
+os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:multiprocessing.resource_tracker"
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Fix for deadlock warning
 
 # CUDA Memory Optimization - Reduce fragmentation on Windows/NVIDIA
