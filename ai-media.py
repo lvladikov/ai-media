@@ -461,28 +461,9 @@ def signal_handler(sig, frame):
     else:
         _interrupted = True
         
-        # If this is the first interrupt, start a force-kill timer
-        if _first_interrupt_time is None:
-            import time
-            _first_interrupt_time = time.time()
-            print("\n\n⚠️  Interrupted! Cleaning up... (Press Ctrl+C again or wait 5s to force-kill)")
-            
-            # Start a timer to force-kill after 5 seconds
-            import threading
-            _force_kill_timer = threading.Timer(5.0, _force_exit)
-            _force_kill_timer.daemon = True
-            _force_kill_timer.start()
-            
-            # Attempt graceful exit
-            try:
-                sys.exit(0)
-            except SystemExit:
-                pass
-        else:
-            # Second interrupt: force-kill immediately
-            if _force_kill_timer:
-                _force_kill_timer.cancel()
-            _force_exit()
+        # Immediately exit - GPU/multiprocessing cleanup causes hangs
+        print("\n\n⚠️  Interrupted!")
+        os._exit(0)  # Immediate exit, no cleanup (cleanup hangs with model_cpu_offload)
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -1958,8 +1939,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 pipe = WanPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             # Massive model optimizations (14B params)
-            print("   ℹ️  Enabling Model CPU Offload for Wan 2.2...")
-            pipe.enable_model_cpu_offload()
+            # MPS: Use sequential CPU offload for memory-constrained unified memory
+            if device.type == "mps":
+                print("   ℹ️  MPS: Enabling Sequential CPU Offload for Wan 2.2 (memory-safe)...")
+                pipe.enable_sequential_cpu_offload()
+            else:
+                print("   ℹ️  Enabling Model CPU Offload for Wan 2.2...")
+                pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
             
         elif "ltx-video" in model_id.lower():
@@ -1980,8 +1966,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             pipe = MochiPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             # Very heavy model (10B params), needs heavy offloading
-            print("   ℹ️  Enabling Model CPU Offload for Mochi 1...")
-            pipe.enable_model_cpu_offload()
+            # MPS: Use sequential CPU offload for memory-constrained unified memory
+            if device.type == "mps":
+                print("   ℹ️  MPS: Enabling Sequential CPU Offload for Mochi 1 (memory-safe)...")
+                pipe.enable_sequential_cpu_offload()
+            else:
+                print("   ℹ️  Enabling Model CPU Offload for Mochi 1...")
+                pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
 
         elif "hunyuan" in model_id.lower():
@@ -1994,8 +1985,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 pipe = HunyuanVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             # Massive model (13B), similar to Wan 2.2
-            print("   ℹ️  Enabling Model CPU Offload for HunyuanVideo...")
-            pipe.enable_model_cpu_offload()
+            # MPS: Use sequential CPU offload for memory-constrained unified memory
+            if device.type == "mps":
+                print("   ℹ️  MPS: Enabling Sequential CPU Offload for HunyuanVideo (memory-safe)...")
+                pipe.enable_sequential_cpu_offload()
+            else:
+                print("   ℹ️  Enabling Model CPU Offload for HunyuanVideo...")
+                pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
 
         elif "stable-video-diffusion" in model_id.lower():
