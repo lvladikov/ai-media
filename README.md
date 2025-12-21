@@ -522,7 +522,7 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 > Massive video models require enormous unified memory and specific optimizations on Mac:
 > *   **LTX-Video**: ✅ Runs great natively (~35s total for 2s video). Best choice for Mac.
 > *   **Mochi 1**: ⚠️ Works but is slow (~50s/step, ~25m total) due to required **Sequential CPU Offload**.
-> *   **Wan 2.2**: ⚠️ Technically runs but is **imprafctical** (4+ hours for 2s video).
+> *   **Wan 2.2**: ⚠️ Technically runs but is **impractical** (4+ hours for 2s video).
 > *   **HunyuanVideo**: ❌ **Fails** on 64GB Macs. Attempts to allocate >80GB buffer even with offloading.
 > *   **XL V2V**: ⚠️ **Diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster but may have slight frame-to-frame variation.
 > *   **Text-to-Video** models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
