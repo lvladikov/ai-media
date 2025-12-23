@@ -258,7 +258,7 @@ The script `ai-media.py` is the main entry point.
 | `-ri, --research-iter` | Deep Research iterations (number of sources to read). Default: `3`. |
 | `-al, --article-length` | Article length: `quick` (~500 words, fast, default), `standard` (~1500), `detailed` (~3000). |
 
-[See Article & Chat Examples](#article-chat-examples) and [Models](#text-models-article-chat).
+[See Article & Chat Examples](#article--chat-examples) and [Models](#text-models-article-chat--code-generation).
 
 ### Code Options
 
@@ -268,7 +268,7 @@ The script `ai-media.py` is the main entry point.
 | `-cdm, --code-model` | Model for code generation. Default: `llama-3.1-8b`. |
 | `-o, --output` | **Optional** Output path. **Empty**: Uses filenames/paths from your prompt (Recommended). **Dir**: Saves all files inside this folder. **File**: Overrides filename (single-file output only). |
 
-[See Code Generation Examples](#code-generation-examples) and [Models](#text-models-article-chat-code-generation).
+[See Code Generation Examples](#code-generation-examples) and [Models](#text-models-article-chat--code-generation).
 
 ### Description Generation Options
 
