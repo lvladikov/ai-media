@@ -1,8 +1,8 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface. It also includes unit and integration tests to verify the functionality of the tool. 
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Write articles, chat interactively, and generate code—all powered by local LLMs running entirely on your machine. Optionally enable live web search for deep research and real-time context in chat. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert media and documents between formats instantly. This tool wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a simple, unified command-line interface or via interactive menus. It also includes unit and integration tests to verify the functionality of the tool.
 
-Consider using these models more for personal use and experimenting, as most of them require a lot of resources, especially for video generation. The idea was to prove that local AI Media models can be run on personal computers, and to build a python wrapper that allows for easy execution of these models.
+Consider using these models more for personal use and experimenting, as most of them require a lot of resources, especially for video generation. Highly recommend giving the chat models like DeepSeek and LLaMA a go first, try them also for Code and Article Generation, then the Image Generation and Transformation tools, and give yourself some more time for the Video Generation. The idea was to prove that local AI Media and Text models can be run on personal computers, and to build a Python wrapper that allows for easy execution of these models.
 
 ![Infographic created with NotebookLM](screenshots/infographic.png) 
 
@@ -12,8 +12,10 @@ Consider using these models more for personal use and experimenting, as most of 
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Text/Image + Audio (prompt) to Video**. See [Video Options](#video-options), [Examples](#video-generation-examples) and [Models](#video-models).
 - 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning + Audio Generation). Models: MusicGen, AudioLDM 2. See [Audio Options](#audio-options), [Examples](#audio-generation-examples) and [Models](#audio-models).
 - 📝 **Description Generation** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](#description-generation-options), [Examples](#description-generation-examples) and [Models](#description-generation-models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+- ✍️ **Article/Research/Code Generation** - Generate comprehensive **Articles** (offline), perform **Deep Research** (online search + summary), and generate **Code** for scripts/projects (offline). Includes an interactive **Chat** session that runs on **fully offline models** but can dynamically pull live web content via the `/search` command. Chat can **read, discuss, generate, and save content (code or otherwise)**. See [Article Options](#article-text-options), [Code Options](#code-options), [Examples](#article-chat-examples) and [Models](#text-models-article-chat-code-generation).
 - 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Creative Image Transformations Options](#creative-image-transformations-options), [Examples](#creative-image-transformation-examples) and [Models](#creative-image-transformation-models).
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](#media-conversion-options) and [Examples](#media-conversion-examples).
+- 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](#document-conversion-options).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](#ai-upscaling-options), [Examples](#ai-upscaling-examples) and [Models](#upscaling-models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](#testing).
@@ -47,6 +49,12 @@ Consider using these models more for personal use and experimenting, as most of 
     - **scipy**: Audio signal processing & file handling
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
     - **imageio-ffmpeg**: FFmpeg bindings for video export (used by diffusers)
+    - **ddgs**: Deep research (free web search)
+    - **markdown**, **python-docx**, **xhtml2pdf**: Document format conversion
+    - **rich**: Beautiful terminal formatting, syntax highlighting, and progress spinners
+    - **prompt_toolkit**: Interactive command line features (history, arrow keys, tab autocomplete)
+    - **psutil**: System resource monitoring (RAM/CPU tracking)
+    - **beautifulsoup4**: Web scraping for Deep Research
 
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
@@ -59,10 +67,64 @@ Consider using these models more for personal use and experimenting, as most of 
         | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
         | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
         | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
+        | Llama 3.1 8B Instruct (`llama-3.1-8b`) | [Accept License](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) |
+    
+    > [!NOTE]
+    > **Llama 3.1 Approval**: Access to Meta models often requires valid affiliation details and manual approval, which typically takes **15 minutes to 1 hour** (rarely up to 24h). You will receive an email from Hugging Face once approved.
     4.  **Create an Access Token**: Go to [Settings → Access Tokens](https://huggingface.co/settings/tokens) and create a new token:
         - **Quick option**: Select **"Read"** token type for simple read access to all repos.
         - **Fine-grained option**: Select **"Fine-grained"** and enable **"Read access to contents of all public gated repos you can access"** under Repositories.
     5.  **Login**: Run `hf auth login` in your terminal, paste your Access Token, and answer **`n`** to "Add token as git credential?" (only needed for pushing to HF repos).
+
+5.  **Models Storage and Cache (Important)**
+
+    As you use more models and their variants, the cache can grow significantly—easily reaching **hundreds of gigabytes**. By default, Hugging Face stores downloaded models in your home directory, which may fill up your OS disk and cause system issues (especially if your boot drive isn't your largest):
+
+    | Platform | Default Cache Location |
+    | :--- | :--- |
+    | **macOS** | `~/.cache/huggingface/` |
+    | **Linux** | `~/.cache/huggingface/` |
+    | **Windows** | `C:\Users\<username>\.cache\huggingface\` |
+
+    **Recommended: Configure a Custom Location**
+
+    Before installing dependencies and downloading models, set this environment variable to redirect the cache to a larger disk:
+
+    - **`HF_HOME`**: Sets the root directory for all Hugging Face data (models, datasets, tokens).
+
+    **Setup Instructions:**
+
+    1. Create your cache directory on a disk with sufficient space (e.g., external drive, secondary partition):
+       ```bash
+       mkdir -p /path/to/your/huggingface
+       ```
+
+    2. Add the environment variable to your shell configuration:
+
+       **macOS / Linux (zsh):** Add to `~/.zshrc`:
+       ```bash
+       export HF_HOME="/path/to/your/huggingface"
+       ```
+
+       **macOS / Linux (bash):** Add to `~/.bashrc`:
+       ```bash
+       export HF_HOME="/path/to/your/huggingface"
+       ```
+
+       **Windows:** Set via System Properties → Environment Variables → New User Variable:
+       - Variable name: `HF_HOME`
+       - Variable value: `D:\huggingface`
+       - (Or run `setx HF_HOME "D:\huggingface"` in Command Prompt to set permanently)
+
+    3. Reload your shell configuration (or restart your terminal):
+       - **macOS / Linux (zsh):** `source ~/.zshrc`
+       - **macOS / Linux (bash):** `source ~/.bashrc`
+       - **Windows:** Close and reopen your terminal (or start a new Command Prompt/PowerShell window)
+    
+    4. Proceed with the [Installation](#installation) steps.
+
+    > [!TIP]
+    > **Avoid symlinks.** While symlinking the default cache folder may seem convenient, it can cause intermittent "file not found" errors in some model loaders. Using the official `HF_HOME` environment variable is the recommended approach.
 
 ---
 
@@ -126,6 +188,11 @@ The script `ai-media.py` is the main entry point.
 - `-i, --generate-image`: Generate an image
 - `-v, --generate-video`: Generate a video
 - `-a, --generate-audio`: Generate audio/music
+- `-ga, --generate-article`: Generate an article (Offline)
+- `-gr, --generate-research`: Generate an article with Deep Research (Online)
+- `-c, --chat`: Interactive chat mode
+- `-I, --interactive`: Launch the full Interactive Menu (with Mouse Support!) 🖱️
+- `-gc, --generate-code`: Generate code (scripts, projects, etc.)
 - `-gd, --generate-description`: Describe an image or video
 - `-ti, --transform-image`: Creatively transform/edit an image
 - `-ci/-cv/-ca`: Convert media formats
@@ -178,6 +245,31 @@ The script `ai-media.py` is the main entry point.
 
 [See Audio Generation Examples](#audio-generation-examples) and [Models](#audio-models).
 
+### Article & Text Options
+
+| Option | Description |
+| :--- | :--- |
+| `-ga, --generate-article` | Generate an article offline (using model knowledge only). |
+| `-gr, --generate-research` | Generate an article with "Deep Research" (uses DuckDuckGo to search & summarize). |
+| `-c, --chat` | Start an interactive chat session. |
+| `-atm, --article-model` | Model for article generation. Default: `default` (Llama-3.1-8B). |
+| `-chm, --chat-model` | Model for chat. Default: `default`. |
+| `--output-format` | Output format: `md` (default), `pdf`, `docx`, `html`, `json`. |
+| `-ri, --research-iter` | Deep Research iterations (number of sources to read). Default: `3`. |
+| `-al, --article-length` | Article length: `quick` (~500 words, fast, default), `standard` (~1500), `detailed` (~3000). |
+
+[See Article & Chat Examples](#article-chat-examples) and [Models](#text-models-article-chat).
+
+### Code Options
+
+| Option | Description |
+| :--- | :--- |
+| `-gc, --generate-code` | Generate code based on a text prompt. |
+| `-cdm, --code-model` | Model for code generation. Default: `llama-3.1-8b`. |
+| `-o, --output` | **Optional** Output path. **Empty**: Uses filenames/paths from your prompt (Recommended). **Dir**: Saves all files inside this folder. **File**: Overrides filename (single-file output only). |
+
+[See Code Generation Examples](#code-generation-examples) and [Models](#text-models-article-chat-code-generation).
+
 ### Description Generation Options
 
 | Option | Description |
@@ -208,9 +300,10 @@ Edit existing images using AI instructions or remove backgrounds.
 **Transformation Recipe Book 🪄**
 Here are prompt examples for common editing tasks.
 
+#### Styles
+
 | Goal | Command Pattern |
 | :--- | :--- |
-| **Styles** | |
 | Anime / Manga | `-tp "Turn the subject into an anime character"` |
 | Disney / Pixar | `-tp "Make the subject look like a 3D Pixar character"` |
 | Studio Ghibli | `-tp "Make it look like a Studio Ghibli movie"` |
@@ -220,7 +313,11 @@ Here are prompt examples for common editing tasks.
 | Cartoon | `-tp "Turn this into a flat cartoon"` |
 | Coloring Page | `-tp "Make it a black and white coloring page"` |
 | Sticker | `-tp "Turn this into a sticker with a white outline"` |
-| **Photo Manipulations** | |
+
+#### Photo Manipulations
+
+| Goal | Command Pattern |
+| :--- | :--- |
 | Remove Beard | `-tp "Remove the beard"` |
 | Change Hairstyle | `-tp "Give the subject a mohawk hairstyle"` |
 | Facial Expressions | `-tp "Make the subject smile"`, `-tp "Make the subject look surprised"` |
@@ -229,7 +326,11 @@ Here are prompt examples for common editing tasks.
 | Recolor | `-tp "Change the red dress to blue"` |
 | Colorize B&W | `-tp "Colorize this photo"` |
 | Sketch to Image | `-tp "Turn this sketch into a photo of an apple"` |
-| **Removal** | |
+
+#### Removal
+
+| Goal | Command Pattern |
+| :--- | :--- |
 | Background | `--remove-background` (No prompt needed) |
 | Silhouette | `--remove-background --silhouette` |
 | Text / Objects | `-tp "Remove the text"`, `-tp "Remove the cup"` (Experimental) |
@@ -248,7 +349,32 @@ Here are prompt examples for common editing tasks.
 | `-cat, --convert-audio-to` | Output format (mp3, .flac, out.ogg). |
 | `--convert-image-engine` | pil (default) or ffmpeg. |
 
-[See Conversion Examples](#media-conversion-examples).
+[See Conversion Examples](#media-conversion-examples). See also: [Document Conversion](#document-conversion-options).
+
+### Document Conversion Options
+
+Convert between document formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON).
+
+| Option | Description |
+| :--- | :--- |
+| `-cd, --convert-document` | Input document file (e.g., report.docx). |
+| `-cdt, --convert-document-to` | Output format: md, html, pdf, docx, rtf, txt, json. |
+
+**Conversion Matrix:**
+
+| From → | MD | HTML | PDF | DOCX | RTF | TXT | JSON |
+|--------|:--:|:----:|:---:|:----:|:---:|:---:|:----:|
+| **MD** | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **HTML** | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **PDF** | ⚠️ | ⚠️ | - | ⚠️ | ⚠️ | ✅ | ⚠️ |
+| **DOCX** | ✅ | ✅ | ✅ | - | ✅ | ✅ | ✅ |
+| **RTF** | ⚠️ | ⚠️ | ⚠️ | ⚠️ | - | ✅ | ⚠️ |
+| **TXT** | ✅ | ✅ | ✅ | ✅ | ✅ | - | ✅ |
+| **JSON** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+
+✅ = Full support | ⚠️ = Text extraction only (formatting/images may be lost)
+
+See also: [Media Conversion](#media-conversion-options).
 
 ### AI Upscaling Options
 
@@ -388,6 +514,88 @@ python ai-media.py -a -ii "./beach.jpg" -o beach_sounds.mp3
 # Video-to-Audio (Auto-Caption Video Frames + Audio Gen)
 python ai-media.py -a -ii "./clip.mp4" -l 10s -o soundcheck.mp3
 ```
+
+#### Article & Chat Examples
+```bash
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 📝 ARTICLE GENERATION (-ga)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Basic article (auto-names file from prompt: the_future_of_ai.md)
+python ai-media.py -ga -p "The future of AI"
+
+# Specify output filename and format
+python ai-media.py -ga -p "History of Jazz Music" -o jazz_history.pdf
+
+# Use a specific model
+python ai-media.py -ga -p "Healthy eating habits" -atm deepseek-r1-qwen-7b
+
+# Different output formats: md, pdf, docx, rtf, html, json, txt
+python ai-media.py -ga -p "Climate change solutions" -o report.docx
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🔍 DEEP RESEARCH (-gr) - Live Web Search + AI Summarization
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Basic research (auto-names: latest_quantum_computing_news.md)
+python ai-media.py -gr -p "Latest Quantum Computing News"
+
+# More iterations = more sources (default: 3)
+python ai-media.py -gr -p "Electric vehicle market trends 2024" -ri 5
+
+# Research with specific model and format
+python ai-media.py -gr -p "Premier League standings December 2024" -atm qwen3-8b -o football.pdf
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 💬 INTERACTIVE CHAT (-c)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Default chat (uses llama-3.1-8b)
+python ai-media.py -c
+
+# Chat with different models
+python ai-media.py -c --chat-model mistral-nemo-12b
+python ai-media.py -c --chat-model deepseek-r1-llama-8b  # Reasoning-focused
+
+# Chat commands: /read <file> (load file) | /save <file> (save last code)
+```
+
+#### Code Generation Examples
+
+Generate source code files with smart naming, extension inference, and multi-file support.
+
+```bash
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🔧 CODE GENERATION (-gc)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Basic code gen (auto-names from content: e.g., calculator.py)
+python ai-media.py -gc "Write a python calculator class"
+
+# Explicit output filename
+python ai-media.py -gc "Write a script to resize images" -o resize.py
+
+# Output to EXISTING folder (saves all files inside codeOutput/)
+# Note: Folder must exist!
+mkdir codeOutput
+python ai-media.py -gc "Write a JS hello world" -o codeOutput
+
+# Multi-file project with folders (creates directory structure)
+python ai-media.py -gc "Write a Python calculator with tests in a project folder"
+# Creates: project/src/calculator.py, project/tests/test_calculator.py
+
+# Use reasoning-focused model for complex code
+python ai-media.py -gc "Implement a red-black tree with balancing" -cdm deepseek-r1-qwen-7b
+
+python ai-media.py -gc "Write a Go CLI tool for parsing JSON"
+python ai-media.py -gc "Write a TypeScript React component for a todo list"
+```
+
+**Chat Examples** (llama-3.1-8b)
+
+![Chat Example](screenshots/chat.png)
+
+![Chat Code Example](screenshots/chat-code.png)
 
 #### Description Generation Examples
 ```bash
@@ -543,16 +751,37 @@ python ai-media.py -i -p "Cat" -o my_image -f png   # Auto-saves as "my_image.pn
 > **FFmpeg Re-encoding:** Generated videos are automatically re-encoded with FFmpeg (`libx264` + `yuv420p`) for universal playback. The raw output from `diffusers` uses a codec that macOS Finder/QuickTime cannot preview (shows green frames), but the re-encoded version works in all players and displays proper thumbnails.
 
 ### Audio Models
+- **`musicgen-small`**: Fast, lightweight (300M parameters). Good for quick sketches.
+- **`musicgen-medium`** (Default): Balanced quality/speed (1.5B parameters).
+- **`musicgen-large`**: High fidelity (3.3B parameters). Slower.
+- **`audioldm2`**: Specialized in Sound Effects (SFX), foley, and environmental audio.
+- **`stable-audio`**: (Gated) Variable-length, high-quality music/SFX/ambient generation. Top-tier for sound design.
+- **`bark`**: Transformer-based text-to-audio model. Capable of realistic speech, music, and sound effects. Supports various languages and voice presets.
 
-| Model | Code | Download | VRAM | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **MusicGen Small** | `musicgen-small` | ~2GB | ~4GB | Fast, good for music sketches. |
-| **MusicGen Medium** | `musicgen-medium` | ~6GB | ~8GB | **Default**. Better composition & fidelity. |
-| **MusicGen Large** | `musicgen-large` | ~10GB | ~16GB | Highest quality music generation. |
-| **AudioLDM 2** | `audioldm2` | ~4GB | ~8GB | Sound effects (SFX), foley, environmental. |
-| **Stable Audio** | `stable-audio` | ~10GB | ~16GB | 🔒 **Gated**. Best for Sound Effects (SFX), Drums, Ambient. |
-| **Bark** | `bark` | ~4GB | ~12GB | Speech (TTS) & creative audio. Transformer-based. |
+### Text Models (Article, Chat & Code Generation)
 
+**Reasoning-Focused (Chain-of-Thought):**
+
+> **What is "distilled"?** DeepSeek R1 is a massive reasoning model trained to show step-by-step thinking (Chain-of-Thought). "Distillation" transfers R1's reasoning capabilities into smaller, faster base models like Qwen or Llama. The result: you get R1's explicit reasoning style on consumer hardware, using the efficient architecture of the base model.
+
+| Model | VRAM | RAM | Notes |
+| :--- | :--- | :--- | :--- |
+| **`deepseek-r1-qwen-7b`** | ~7GB | ~16GB | Lightweight, fast. Good starting point. |
+| **`deepseek-r1-qwen-14b`** | ~14GB | ~32GB | Better reasoning quality. |
+| **`deepseek-r1-qwen-32b`** | ~24GB | ~48GB | High quality. Requires RTX 4090 or Mac 64GB+. |
+| **`deepseek-r1-llama-8b`** | ~8GB | ~16GB | Llama architecture variant. |
+| **`deepseek-r1-llama-70b`** | ~40GB | ~80GB | Best quality. **Requires high-end GPU (A100/H100) or Mac 128GB+.** |
+
+> [!NOTE]
+> All DeepSeek R1 distilled models are **fully open and ungated** (MIT license). No HuggingFace login required.
+
+**General-Purpose:**
+- **`qwen3-8b`** (Default): 🔒 **Gated**. Latest Qwen model with strong instruction-following. *Knowledge cutoff: ~Early 2025.*
+- **`qwen-2.5-14b`**: Larger Qwen model, great at following detailed formatting instructions. *Knowledge cutoff: Mid 2024.*
+- **`llama-3.1-8b`**: 🔒 **Gated**. Open SOTA 8B model. Excellent for general writing, chat, and reasoning. *Knowledge cutoff: December 2023.*
+- **`mistral-nemo-12b`**: Powerful 12B model from Mistral AI. Larger context window and strong reasoning. *Knowledge cutoff: Late 2023.*
+
+- All models are quantized (4-bit) on CUDA where possible to fit in consumer GPU memory.
 
 #### Bark Configuration
 
@@ -658,6 +887,19 @@ The tool supports natural language and object-style inputs:
 
 The interactive mode offers a guided menu system for all features. It runs automatically if no arguments are provided, or explicitly via `--interactive`.
 
+**🖱️ Mouse Support:**
+The interactive menu supports full mouse interaction in modern terminals (iTerm2, VSCode, Terminal.app, etc.):
+- **Click to Select**: Click any menu item to select it instantly.
+- **Scroll Wheel**: Scroll up/down through long lists.
+- **Navigation**: Click "⬆️ ... more above" or "⬇️ ... more below" to jump pages.
+- **Click Back**: Click the "⬅️ Back" button to return.
+
+**⌨️ Enhanced Navigation:**
+- **Arrow Keys**: Navigate Up/Down.
+- **PageUp/PageDown/Home/End**: Fast navigation.
+- **vim keys**: Use `g` (Top) and `G` (Bottom) if your terminal intercepts Home/End.
+- **0**: Quick Back/Exit.
+
 ```bash
 # Run interactive menu
 python ai-media.py
@@ -692,24 +934,30 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `3/4` | | `audio/audioldm2` | AudioLDM2 (SFX) |
 | `3/5` | | `audio/bark` | Bark (TTS) |
 | `4` | **Description** | `caption` | Description Generation Menu |
-| `5` | **Edit** | `transform` | Transform Menu |
-| `5/1` | | `transform/edit` | Creative Edit |
-| `5/2` | | `transform/rembg` | Background Removal |
-| `5/3` | | `transform/silhouette` | Silhouette |
-| `6` | **Convert** | `convert` | Convert Menu |
-| `7` | **Upscale** | `upscale` | Upscale Menu |
-| `8` | **Test** | `test` | Run Tests |
-| `8/1` | | `test/unit` | Unit Tests |
-| `8/2` | | `test/integration` | Integration Tests |
-| `8/3` | | `test/codec` | Codec Limits Test |
-| `9` | **Sysinfo** | `sysinfo` | System Information |
+| `5` | **Article** | `article` | Article/Research Menu |
+| `5/1` | | `article/offline` | Offline Article |
+| `5/2` | | `article/online` | Online Research |
+| `6` | **Code** | `code` | Generate Code |
+| `7` | **Chat** | `chat` | Interactive Chat |
+| `8` | **Edit** | `transform` | Transform Menu |
+| `8/1` | | `transform/edit` | Creative Edit |
+| `8/2` | | `transform/rembg` | Background Removal |
+| `8/3` | | `transform/silhouette` | Silhouette |
+| `9` | **Convert** | `convert` | Convert Menu |
+| `10` | **Upscale** | `upscale` | Upscale Menu |
+| `11` | **Test** | `test` | Run Tests |
+| `11/1` | | `test/unit` | Unit Tests |
+| `11/2` | | `test/integration` | Integration Tests |
+| `11/3` | | `test/codec` | Codec Limits Test |
+| `12` | **Sysinfo** | `sysinfo` | System Information |
 
 ```bash
 python ai-media.py --interactive "image/sdxl"
 python ai-media.py --interactive "audio/bark"
-python ai-media.py --interactive 9
+python ai-media.py --interactive code
+python ai-media.py --interactive chat
 python ai-media.py --interactive "5/2"
-python ai-media.py --interactive 3/5
+python ai-media.py --interactive 12
 ```
 
 ## Codec Analysis Tool
@@ -928,8 +1176,19 @@ This project uses the following open-source libraries:
 | [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Real-ESRGAN upscaling | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
 | [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | FFmpeg bindings for video export | [imageio/imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) |
+| [rich](https://github.com/Textualize/rich) | Beautiful terminal formatting & syntax highlighting | [Textualize/rich](https://github.com/Textualize/rich) |
+| [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) | Interactive CLI history and navigation | [prompt-toolkit/python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) |
+| [ddgs](https://github.com/deedy5/duckduckgo_search) | Internet search for Deep Research | [deedy5/duckduckgo_search](https://github.com/deedy5/duckduckgo_search) |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | Web content parsing for research | [w3c/beautifulsoup4](https://git.launchpad.net/beautifulsoup) |
+| [markdown](https://github.com/Python-Markdown/markdown) | Markdown to HTML conversion | [Python-Markdown/markdown](https://github.com/Python-Markdown/markdown) |
+| [python-docx](https://github.com/python-openxml/python-docx) | DOCX document creation | [python-openxml/python-docx](https://github.com/python-openxml/python-docx) |
+| [xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) | HTML to PDF conversion | [xhtml2pdf/xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) |
+| [psutil](https://github.com/giampaolo/psutil) | System resource monitoring | [giampaolo/psutil](https://github.com/giampaolo/psutil) |
+| [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
+| [ftfy](https://github.com/rspeer/python-ftfy) | Text encoding fixes | [rspeer/python-ftfy](https://github.com/rspeer/python-ftfy) |
 
 **AI Models used:**
+
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
 - **Stable Diffusion XL** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion](https://github.com/runwayml/stable-diffusion)

@@ -1040,6 +1040,109 @@
         "Codec Limits Test"
       ],
       "description": "Test interactive menu jump by path (test/codec)"
+    },
+    {
+      "name": "Article - Offline (Default Model)",
+      "timeout": 600,
+      "command": "-ga -p \"The history of computers\" -o tests/testData/outputs/article_offline.md --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/article_offline.md"
+      ],
+      "expectedStdoutItems": [
+        "Saving"
+      ],
+      "description": "Generate offline article using default model"
+    },
+    {
+      "name": "Article - PDF Format",
+      "timeout": 600,
+      "command": "-ga -p \"Healthy eating\" -o tests/testData/outputs/article.pdf --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/article.pdf"
+      ],
+      "description": "Generate article in PDF format"
+    },
+    {
+      "name": "Article - DOCX Format",
+      "timeout": 600,
+      "command": "-ga -p \"Climate change\" -o tests/testData/outputs/article.docx --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/article.docx"
+      ],
+      "description": "Generate article in DOCX format"
+    },
+    {
+      "name": "Research - Online (Deep Research)",
+      "timeout": 900,
+      "command": "-gr -p \"Latest AI news 2024\" -ri 2 -o tests/testData/outputs/research_online.md --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/research_online.md"
+      ],
+      "expectedStdoutItems": [
+        "Research",
+        "Searching"
+      ],
+      "description": "Generate deep research article with web search"
+    },
+    {
+      "name": "Code - Python Script",
+      "timeout": 600,
+      "command": "-gc \"Write a python hello world script\" -o tests/testData/outputs/hello.py --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "tests/testData/outputs/hello.py"
+      ],
+      "expectedStdoutItems": [
+        "Code",
+        "saved to"
+      ],
+      "description": "Generate Python code file"
+    },
+    {
+      "name": "Interactive - Jump to article",
+      "command": "--interactive article",
+      "interactive": true,
+      "interactiveWait": 15.0,
+      "expectedStdoutItems": [
+        "Article",
+        "Offline",
+        "Online"
+      ],
+      "description": "Test interactive menu jump to article menu"
+    },
+    {
+      "name": "Interactive - Jump to code",
+      "command": "--interactive code",
+      "interactive": true,
+      "interactiveWait": 15.0,
+      "expectedStdoutItems": [
+        "Generate Code"
+      ],
+      "description": "Test interactive menu jump to code generation"
+    },
+    {
+      "name": "Interactive - Jump to chat",
+      "command": "--interactive chat",
+      "interactive": true,
+      "interactiveWait": 15.0,
+      "expectedStdoutItems": [
+        "Chat"
+      ],
+      "description": "Test interactive menu jump to chat"
+    },
+    {
+      "name": "Interactive - Jump to research",
+      "command": "--interactive research",
+      "interactive": true,
+      "interactiveWait": 15.0,
+      "expectedStdoutItems": [
+        "Research"
+      ],
+      "description": "Test interactive menu jump to research (deep web search)"
     }
   ]
 }

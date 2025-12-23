@@ -13,6 +13,10 @@ Usage:
 
 import argparse
 import warnings
+import signal
+import sys
+import os
+import time
 
 # Suppress common library warnings
 # (Some libraries use different warning categories or print directly)
@@ -42,10 +46,12 @@ from pathlib import Path
 from datetime import datetime
 import PIL.Image
 import PIL.ImageOps
+import markdown
+from bs4 import BeautifulSoup
+from ddgs import DDGS
+import docx
+from xhtml2pdf import pisa
 
-# --- Delayed Loading Message (only shown if imports take > 3 seconds) ---
-# This avoids showing the message on fast "warm" starts when modules are cached
-# Only applies to interactive mode (no CLI arguments)
 import threading
 _loading_timer = None
 _loading_shown = False
@@ -55,10 +61,33 @@ def _show_loading_message():
     print("⏳ Loading... (May take a moment on first boot while modules initialize and cache)", flush=True)
 
 # Only start timer if likely interactive mode (no args or just --interactive)
-if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-int')):
-    _loading_timer = threading.Timer(3.0, _show_loading_message)
+# We do this early so it can run while heavy modules load
+if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-I')):
+    _loading_timer = threading.Timer(1.0, _show_loading_message) # Reduced to 1s for better UX
     _loading_timer.daemon = True
     _loading_timer.start()
+
+# --- UI & Terminal Frameworks ---
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.status import Status
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.completion import PathCompleter, NestedCompleter, FuzzyCompleter
+from prompt_toolkit.lexers import Lexer
+from prompt_toolkit.styles import Style
+
+# --- Core AI Frameworks ---
+try:
+    import torch
+except ImportError:
+    torch = None
+
+try:
+    from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+except ImportError:
+    pipeline = None
 
 # --- Monkey Patch for basicsr/torchvision compatibility ---
 try:
@@ -178,6 +207,24 @@ VIDEO_MODELS = {
     "default": "cerspense/zeroscope_v2_576w"
 }
 
+TEXT_MODELS = {
+    # Reasoning-focused (Chain-of-Thought) - DeepSeek R1 Distilled
+    # These show step-by-step reasoning before the final answer
+    "deepseek-r1-qwen-7b": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",      # ~7GB VRAM
+    "deepseek-r1-qwen-14b": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",    # ~14GB VRAM
+    "deepseek-r1-qwen-32b": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",    # ~24GB VRAM
+    "deepseek-r1-llama-8b": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",    # ~8GB VRAM
+    "deepseek-r1-llama-70b": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",  # ~40GB VRAM (requires high-end GPU)
+    # General-purpose (Newer knowledge cutoffs)
+    "qwen3-8b": "Qwen/Qwen3-8B",  # Note: May have MPS issues on Apple Silicon
+    "qwen-2.5-14b": "Qwen/Qwen2.5-14B-Instruct",
+    # Established models
+    "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "mistral-nemo-12b": "mistralai/Mistral-Nemo-Instruct-2407",
+    # Default: Llama 3.1 (stable on all platforms)
+    "default": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+}
+
 # Resolution Presets
 RESOLUTIONS = {
     "480p": (854, 480),
@@ -237,6 +284,10 @@ MODEL_REQUIREMENTS = {
     "timbrooks/instruct-pix2pix": {"vram": 8, "ram": 12, "max_resolution": (1024, 1024)},
     "diffusers/sdxl-instructpix2pix-768": {"vram": 10, "ram": 16, "max_resolution": (1024, 1024)},
     "briaai/RMBG-1.4": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
+    # Text Models
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": {"vram": 16, "ram": 24, "max_resolution": None},
+    "mistralai/Mistral-Nemo-Instruct-2407": {"vram": 24, "ram": 32, "max_resolution": None},
+    "Qwen/Qwen2.5-14B-Instruct": {"vram": 28, "ram": 48, "max_resolution": None},
 }
 
 
@@ -4094,6 +4145,152 @@ def convert_audio_file(input_path, target):
         print(f"❌ Conversion failed: {e}")
         return False
 
+
+def convert_document_file(input_path, target):
+    """Convert document format using MD as intermediate hub.
+    
+    Supported formats: md, html, pdf, docx, rtf, txt, json
+    """
+    from pathlib import Path
+    import json as json_module
+    
+    SUPPORTED_FORMATS = ["md", "html", "pdf", "docx", "rtf", "txt", "json", "xhtml"]
+    
+    # Determine output path and format
+    target = target.strip().lower()
+    if '/' in target or '\\' in target:
+        output_path = target
+        output_format = Path(target).suffix.lstrip('.').lower()
+    elif target.startswith('.'):
+        output_path = f"{Path(input_path).stem}{target}"
+        output_format = target.lstrip('.').lower()
+    else:
+        output_path = f"{Path(input_path).stem}.{target}"
+        output_format = target.lower()
+    
+    if output_format not in SUPPORTED_FORMATS:
+        print(f"❌ Unsupported output format: {output_format}")
+        print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
+        return False
+    
+    # Determine input format
+    input_format = Path(input_path).suffix.lstrip('.').lower()
+    if input_format not in SUPPORTED_FORMATS:
+        print(f"❌ Unsupported input format: {input_format}")
+        print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
+        return False
+    
+    print(f"📄 Converting Document: {input_path}")
+    print(f"   {input_format.upper()} → {output_format.upper()}")
+    
+    # Overwrite protection
+    if Path(output_path).exists():
+        if os.environ.get("AI_MEDIA_FORCE", "0") != "1":
+            confirm = input(f"⚠️  '{output_path}' exists. Overwrite? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("❌ Aborted.")
+                return False
+    
+    try:
+        # Step 1: Convert input to Markdown (intermediate format)
+        markdown_content = ""
+        
+        if input_format == "md":
+            with open(input_path, "r", encoding="utf-8") as f:
+                markdown_content = f.read()
+        
+        elif input_format in ["html", "xhtml"]:
+            # HTML to Markdown using html2text
+            try:
+                import html2text
+                h = html2text.HTML2Text()
+                h.ignore_links = False
+                h.ignore_images = False
+                with open(input_path, "r", encoding="utf-8") as f:
+                    markdown_content = h.handle(f.read())
+            except ImportError:
+                # Fallback: strip HTML tags with BeautifulSoup
+                with open(input_path, "r", encoding="utf-8") as f:
+                    soup = BeautifulSoup(f.read(), "html.parser")
+                    markdown_content = soup.get_text()
+                print("   ⚠️ html2text not installed, using basic text extraction")
+        
+        elif input_format == "docx":
+            doc = docx.Document(input_path)
+            lines = []
+            for para in doc.paragraphs:
+                if para.style.name.startswith('Heading 1'):
+                    lines.append(f"# {para.text}")
+                elif para.style.name.startswith('Heading 2'):
+                    lines.append(f"## {para.text}")
+                elif para.style.name.startswith('Heading 3'):
+                    lines.append(f"### {para.text}")
+                else:
+                    lines.append(para.text)
+            markdown_content = "\n\n".join(lines)
+        
+        elif input_format == "txt":
+            with open(input_path, "r", encoding="utf-8") as f:
+                markdown_content = f.read()
+        
+        elif input_format == "json":
+            with open(input_path, "r", encoding="utf-8") as f:
+                data = json_module.load(f)
+            # Try common JSON article structures
+            if isinstance(data, dict):
+                markdown_content = data.get("content", "") or data.get("markdown", "") or data.get("text", "") or str(data)
+            else:
+                markdown_content = str(data)
+        
+        elif input_format == "pdf":
+            # PDF text extraction (limited)
+            try:
+                from PyPDF2 import PdfReader
+                reader = PdfReader(input_path)
+                text_parts = []
+                for page in reader.pages:
+                    text_parts.append(page.extract_text() or "")
+                markdown_content = "\n\n".join(text_parts)
+                print("   ⚠️ PDF conversion extracts text only (formatting/images lost)")
+            except ImportError:
+                print("❌ PyPDF2 required for PDF reading. Install: pip install PyPDF2")
+                return False
+        
+        elif input_format == "rtf":
+            # RTF is complex - basic text extraction only
+            try:
+                from striprtf.striprtf import rtf_to_text
+                with open(input_path, "r", encoding="utf-8") as f:
+                    markdown_content = rtf_to_text(f.read())
+                print("   ⚠️ RTF conversion extracts text only (formatting lost)")
+            except ImportError:
+                print("❌ striprtf required for RTF reading. Install: pip install striprtf")
+                return False
+        
+        if not markdown_content.strip():
+            print("❌ No content extracted from input file")
+            return False
+        
+        # Step 2: Convert Markdown to output format (reuse ArticleGenerator logic)
+        # Create a minimal ArticleGenerator just for saving
+        class DocConverter:
+            pass
+        
+        converter = DocConverter()
+        converter._save_formatted = ArticleGenerator._save_formatted.__get__(converter, DocConverter)
+        
+        # Ensure directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        converter._save_formatted(markdown_content, output_path, output_format)
+        return True
+        
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 # --- Interactive Mode ---
 
 def emoji(emoji_char, fallback=""):
@@ -4173,6 +4370,55 @@ def run_self_command(cmd_string):
 
 # --- Interactive Navigation Helpers ---
 
+
+def get_cursor_position():
+    """Query cursor position (row, col). Returns None if not supported/timeout."""
+    if os.name == 'nt': return None
+    import sys, tty, termios, select, re
+    
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        sys.stdout.write("\033[6n")
+        sys.stdout.flush()
+        
+        # Wait for potential response
+        if select.select([sys.stdin], [], [], 0.1)[0]:
+            # Read until R
+            resp = ""
+            while True:
+                ch = sys.stdin.read(1)
+                resp += ch
+                if ch == 'R': break
+            
+            # Parse \033[<row>;<col>R
+            match = re.search(r'\x1b\[(\d+);(\d+)R', resp)
+            if match:
+                return int(match.group(1)), int(match.group(2))
+    except (termios.error, IOError):
+        pass
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return None
+
+def set_raw_mode(fd):
+    """Enter raw mode, return old settings."""
+    if os.name == 'nt' or not sys.stdin.isatty(): return None
+    import termios, tty
+    try:
+        old = termios.tcgetattr(fd)
+        tty.setraw(fd)
+        return old
+    except termios.error:
+        return None
+
+def restore_mode(fd, old_settings):
+    """Restore terminal to old settings."""
+    if os.name == 'nt' or not old_settings or fd is None: return
+    import termios
+    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
 def get_key():
     """Read a single key press from stdin (cross-platform)."""
     if os.name == 'nt':  # Windows
@@ -4180,7 +4426,7 @@ def get_key():
         ch = msvcrt.getch()
         
         # Handle special keys (arrow keys, etc.)
-        if ch in (b'\x00', b'\xe0'):  # Special key prefix
+        if ch in (b'\x00', b'\xe0'):
             ch2 = msvcrt.getch()
             if ch2 == b'H': return 'UP'
             if ch2 == b'P': return 'DOWN'
@@ -4191,50 +4437,95 @@ def get_key():
             return ch2.decode('utf-8', errors='ignore')
         
         if ch == b'\r': return 'ENTER'
-        if ch == b'\x03': raise KeyboardInterrupt  # CTRL+C
+        if ch == b'\x03': raise KeyboardInterrupt
         return ch.decode('utf-8', errors='ignore')
     else:  # Unix/Mac
-        import tty, termios
+        import sys, tty, termios, select
         fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
+        
+        # Only set raw mode if we are actually interactive (stdout is TTY)
+        # Otherwise (e.g. tests) we might be sharing stdin with parent, and setting raw mode breaks parent output
+        is_interactive_mode = sys.stdout.isatty()
+        
+        old_settings = None
+        if is_interactive_mode:
+             old_settings = termios.tcgetattr(fd)
+        
         try:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1)
+            if is_interactive_mode:
+                tty.setraw(fd)
+            
+            # Helper to read N bytes
+            def read_bytes(n=1):
+                return os.read(fd, n).decode('utf-8', errors='ignore')
+
+            ch = read_bytes(1)
+            
             if ch == '\x1b':  # Escape sequence
-                ch2 = sys.stdin.read(1)
+                # Use select to check if more characters are waiting
+                if not select.select([sys.stdin], [], [], 0.05)[0]:
+                    return 'ESC'
+                    
+                ch2 = read_bytes(1)
                 
                 # Handle [ sequences
                 if ch2 == '[':
-                    ch3 = sys.stdin.read(1)
+                    ch3 = read_bytes(1)
+                    
+                    # SGR Mouse: \033[<0;10;20M
+                    if ch3 == '<':
+                        mouse_seq = ""
+                        while True:
+                            char = read_bytes(1)
+                            if char in ('m', 'M'):
+                                end_char = char
+                                break
+                            mouse_seq += char
+                        
+                        parts = mouse_seq.split(';')
+                        if len(parts) >= 3:
+                            btn = parts[0]
+                            x = int(parts[1])
+                            y = int(parts[2])
+                            # Standard left click is 0, Right is 2
+                            # Scroll Up is 64, Scroll Down is 65
+                            if end_char == 'M':
+                                if btn == '0': return ('MOUSE', x, y)
+                                if btn == '64': return 'SCROLL_UP'
+                                if btn == '65': return 'SCROLL_DOWN'
+                            return None
+
                     if ch3 == 'A': return 'UP'
                     if ch3 == 'B': return 'DOWN'
+                    if ch3 == 'C': return 'RIGHT'
+                    if ch3 == 'D': return 'LEFT'
                     if ch3 == 'H': return 'HOME'
                     if ch3 == 'F': return 'END'
-                    # Handle [1~ (Home), [4~ (End), [5~ (PgUp), [6~ (PgDn)
                     if ch3 in ['1', '4', '5', '6']:
-                        ch4 = sys.stdin.read(1)
+                        ch4 = read_bytes(1)
                         if ch4 == '~':
                             if ch3 == '1': return 'HOME'
                             if ch3 == '4': return 'END'
                             if ch3 == '5': return 'PAGE_UP'
                             if ch3 == '6': return 'PAGE_DOWN'
                 
-                # Handle O sequences (OH = Home, OF = End)
+                # Handle O sequences
                 if ch2 == 'O':
-                    ch3 = sys.stdin.read(1)
+                    ch3 = read_bytes(1)
                     if ch3 == 'H': return 'HOME'
                     if ch3 == 'F': return 'END'
                     
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            if is_interactive_mode and old_settings:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         
         if ch == '\r' or ch == '\n': return 'ENTER'
-        if ch == '\x03': raise KeyboardInterrupt  # CTRL+C
+        if ch == '\x03': raise KeyboardInterrupt
         return ch
 
 def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15):
     """
-    Show interactive menu with arrow key navigation and pagination.
+    Show interactive menu with arrow key navigation, pagination, & MOUSE support.
     Returns: value of selected option or None (if Back/Exit)
     """
     # ... (header omitted, unchanged)
@@ -4252,9 +4543,43 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
     # Hide cursor
     print("\033[?25l", end="")
     
-    if prompt:
-        print(f"{prompt}")
+    # --- MOUSE SUPPORT START ---
+    mouse_enabled = False
+    menu_start_row = None
     
+    # Enter persistent raw mode
+    fd_raw = None
+    old_raw = None
+    if os.name != 'nt' and sys.stdout.isatty():
+         fd_raw = sys.stdin.fileno()
+         old_raw = set_raw_mode(fd_raw)
+
+    if os.name != 'nt' and sys.stdout.isatty():
+        # Enable Mouse Reporting (1000: basic, 1006: SGR extended)
+        # Note: In raw mode we need \r for new lines usually, but here print handles it via end="" or default
+        # But wait, print() uses \n. In raw mode \n is just LF. We need \r\n.
+        # Python's print() writes to stdout. We haven't set stdout to raw, only stdin?
+        # tty.setraw() sets the file descriptor. If we set stdin, does it affect stdout processing?
+        # Usually Output processing (OPOST) is part of termios.
+        # tty.setraw() disables OPOST. So \n becomes just LF.
+        # We need to explicitly print \r.
+        print("\033[?1000h\033[?1006h", end="", flush=True)
+        # Query start row if possible
+        pos = get_cursor_position()
+        if pos:
+            menu_start_row = pos[0] # ABS row (1-based)
+            mouse_enabled = True
+    # --- MOUSE SUPPORT END ---
+
+    if prompt:
+        # In raw mode, \n is just LF (line feed) without carriage return
+        # Replace \n with \r\n to ensure proper line formatting
+        prompt_formatted = prompt.replace('\n', '\r\n')
+        print(f"{prompt_formatted}\r")
+        # Count actual lines in prompt for menu_start_row adjustment
+        prompt_lines = prompt.count('\n') + 1
+        if mouse_enabled: menu_start_row += prompt_lines
+
     # ANSI constants
     UP = "\033[F"
     CLEAR_LINE = "\033[K"
@@ -4262,14 +4587,26 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
     RESET = "\033[0m"
     DIM = "\033[90m"
 
-    # Reserve space for menu (Max visible lines)
-    # We reserve space for: page_size + 2 (indicators) + 1 (hint footer)
+    # Reserve space for menu
     max_view_lines = min(len(items), page_size) + 3
     for _ in range(max_view_lines):
-        print()
+        print(f"\r") # Just newline with CR
     
     # Move cursor back up to start of menu
-    print(UP * max_view_lines, end="")
+    print(UP * max_view_lines, end="", flush=True)
+    
+    # Query cursor position NOW that we are at the top of the menu
+    # This ensures we account for any scrolling that happened during reservation
+    if mouse_enabled:
+        pos = get_cursor_position()
+        if pos:
+            menu_start_row = pos[0] # ABS row (1-based)
+            # Adjust if prompt was printed?
+            # get_cursor_position returns current row.
+            # If we printed PROMPT then reserved lines, then moved up:
+            # We are at the line AFTER the prompt (start of the items list + indicators).
+            # So menu_start_row is exactly where the FIRST line of our drawing area is.
+            pass
 
     try:
         while True:
@@ -4284,9 +4621,17 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
             
             lines_printed = 0
             
+            # --- MOUSE TARGET MAP ---
+            # Map absolute screen rows to item indices
+            # Only valid if we know menu_start_row reliably
+            # Since reserving lines might scroll, we should really update start_row 
+            # by re-querying, but that's slow.
+            # Alternative: Assume we are at top row of reserved block relative to cursor?
+            # We are currently at top of reserved block.
+            
             # Render Up Indicator
             if start_idx > 0:
-                print(f"{DIM}   ⬆️  ... ({start_idx} more above){RESET}{CLEAR_LINE}")
+                print(f"{DIM}   ⬆️  ... ({start_idx} more above){RESET}{CLEAR_LINE}\r")
                 lines_printed += 1
             
             # Render Menu Items
@@ -4301,23 +4646,23 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
                 else:
                     line = f"{prefix}{number:<4}  {label}"
                 
-                print(f"{line}{CLEAR_LINE}")
+                print(f"{line}{CLEAR_LINE}\r")
                 lines_printed += 1
             
             # Render Down Indicator
             if end_idx < len(items):
                 remaining = len(items) - end_idx
-                print(f"{DIM}   ⬇️  ... ({remaining} more below){RESET}{CLEAR_LINE}")
+                print(f"{DIM}   ⬇️  ... ({remaining} more below){RESET}{CLEAR_LINE}\r")
                 lines_printed += 1
                 
             # Clear remaining reserved lines (leave 1 for hint)
             extra_lines = (max_view_lines - 1) - lines_printed
             for _ in range(extra_lines):
-                print(f"{CLEAR_LINE}")
+                print(f"{CLEAR_LINE}\r")
             
             # Render Hint Footer
             hint_back = ", '0' for Back" if allow_back else ""
-            print(f"{DIM}(Tip: 'Home'/'End' for top/bottom{hint_back}){RESET}{CLEAR_LINE}")
+            print(f"{DIM}(Tip: 'Home'/'End' or 'g'/'G' for top/bottom{hint_back}){RESET}{CLEAR_LINE}\r")
             
             # Move cursor back up
             print(UP * max_view_lines, end="", flush=True)
@@ -4325,7 +4670,89 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
             # Handle Input
             key = get_key()
             
-            if key == 'UP':
+            if key == 'SCROLL_UP':
+                 current_idx = max(0, current_idx - 1)
+                 # Adjust start_idx to scroll smoothly
+                 if current_idx < start_idx: start_idx = current_idx
+                 continue
+            
+            if key == 'SCROLL_DOWN':
+                 current_idx = min(len(items)-1, current_idx + 1)
+                 # Adjust start_idx
+                 if current_idx >= start_idx + page_size:
+                     start_idx = current_idx - page_size + 1
+                 continue
+            
+            if isinstance(key, tuple) and key[0] == 'MOUSE':
+                 # ('MOUSE', x, y)
+                 mx, my = key[1], key[2]
+                 if mouse_enabled and menu_start_row:
+                     # Calculate clicked line relative to menu top
+                     # PROBLEM: If screen scrolled, menu_start_row is outdated.
+                     # We might need to refresh menu_start_row occasionally or check relative?
+                     # A robust way: query DSR only on Click?
+                     # Let's try: get_cursor_position *now* matches our write cursor (top of menu)
+                     # So we can just query it once per loop or on key press?
+                     # Querying on every loop is flicker-prone.
+                     # Querying only on click is better.
+                     
+                     # Wait, we are at top of menu block when reading key.
+                     # So get_cursor_position() NOW returns the row of the top of the menu!
+                     # Let's get it right now to calibrate.
+                     # But get_key was blocking. We already have the key.
+                     # We can't query DSR *after* the click because the mouse event already happened at Y.
+                     # We need to know where we *were*.
+                     
+                     # Hack: Assume menu stays put unless we print newlines outside loop.
+                     # But we can query it *if* we are unsure.
+                     
+                     # Let's try to just use menu_start_row calculate at start.
+                     # If inaccurate, user might mis-click.
+                     # But we can update it: when we enter key loop, we are at top.
+                     # We could update menu_start_row = get_cursor_position() at top of while true?
+                     # It adds default 30-100ms latency per loop. Might feel sluggish.
+                     
+                     # Compromise: Re-query start_row if we detect a click?
+                     # No, because click Y is absolute.
+                     # Let's try just using the initial one. If it breaks on scroll,
+                     # we can add a check. OR we update it once every loop?
+                     pass
+                     
+                 # Basic Relative Logic if we assume static:
+                 if menu_start_row:
+                     # Calculate row offset
+                     # 1 line for prompt (maybe) - prompt printed *before* max_view loops
+                     # prompt_message printed at: menu_start_row - 1 (if prompt existed)
+                     # Actually we printed prompt, THEN reserved space.
+                     # So we are at prompt + 1 (or 0 if no prompt).
+                     
+                     rel_y = my - menu_start_row
+                     
+                     # Account for Up indicator
+                     header_offset = 1 if start_idx > 0 else 0
+                     
+                     # Item index = (rel_y - header_offset)
+                     clicked_item_idx = rel_y - header_offset
+                     
+                     if 0 <= clicked_item_idx < len(visible_items):
+                         # Clicked on valid item line
+                         current_idx = start_idx + clicked_item_idx
+                         break # Select!
+                     
+                     # Handle Indicators?
+                     if start_idx > 0 and rel_y == 0:
+                         # Clicked Up arrow area
+                         current_idx = max(0, current_idx - page_size)
+                         continue
+                     
+                     # Handle Down
+                     footer_row = len(visible_items) + header_offset
+                     if end_idx < len(items) and rel_y == footer_row:
+                         # Clicked Down arrow
+                         current_idx = min(len(items)-1, current_idx + page_size)
+                         continue
+
+            elif key == 'UP':
                 current_idx = (current_idx - 1) % len(items)
             elif key == 'DOWN':
                 current_idx = (current_idx + 1) % len(items)
@@ -4333,9 +4760,9 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
                 current_idx = max(0, current_idx - page_size)
             elif key == 'PAGE_DOWN' or key == ']':
                 current_idx = min(len(items) - 1, current_idx + page_size)
-            elif key == 'HOME':
+            elif key == 'HOME' or key == 'g':
                 current_idx = 0
-            elif key == 'END':
+            elif key == 'END' or key == 'G':
                 current_idx = len(items) - 1
             elif key == 'ENTER':
                 # Confirm selection
@@ -4350,12 +4777,18 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
                  
     except KeyboardInterrupt:
         # Clean exit on CTRL+C
-        print(RESET + "\n" * max_view_lines) # Move past menu
+        print(RESET + "\n" * max_view_lines + "\r") # Move past menu
+        if os.name != 'nt' and sys.stdout.isatty(): 
+             print("\033[?1000l\033[?1006l", end="", flush=True) # Disable Mouse
+             restore_mode(fd_raw, old_raw)
         print("\033[?25h", end="") # Show cursor
         return None
     finally:
-        # Restore cursor
-        print(RESET + "\n" * max_view_lines) # Move past menu
+        # Restore cursor & mouse
+        print(RESET + "\n" * max_view_lines + "\r") # Move past menu
+        if os.name != 'nt' and sys.stdout.isatty(): 
+             print("\033[?1000l\033[?1006l", end="", flush=True) # Disable Mouse
+             restore_mode(fd_raw, old_raw)
         print("\033[?25h", end="") # Show cursor
 
     selected_label, selected_val = items[current_idx]
@@ -4367,6 +4800,11 @@ def prompt_choice(prompt, options, allow_back=True):
 
 def prompt_text(prompt, default=None, required=True):
     """Get text input from user."""
+    try:
+        import readline  # Enable arrow key support for input()
+    except ImportError:
+        pass  # Windows doesn't have readline
+    
     default_str = f" [{default}]" if default else ""
     while True:
         try:
@@ -4379,6 +4817,52 @@ def prompt_text(prompt, default=None, required=True):
             return value
         except KeyboardInterrupt:
             return None
+
+
+
+def check_overwrite(filepath, always_overwrite=False, never_overwrite=False):
+    """
+    Check if file exists and prompt user.
+    Returns: (should_write, final_path, always_overwrite, never_overwrite)
+    """
+    if never_overwrite:
+        return False, filepath, False, True
+        
+    if not os.path.exists(filepath) or always_overwrite:
+        return True, filepath, always_overwrite, False
+        
+    print(f"\n⚠️  File already exists: {filepath}")
+    choice = prompt_choice("Overwrite?", [
+        ("Yes", "y"),
+        ("No (skip file)", "n"), 
+        ("Always (overwrite all remaining)", "a"),
+        ("Never (skip all remaining)", "v"),
+        ("Rename (auto-increment)", "r")
+    ])
+    
+    if choice == "y":
+        return True, filepath, False, False
+    elif choice == "a":
+        return True, filepath, True, False
+    elif choice == "v":
+        print(f"⏭️  Skipping {os.path.basename(filepath)} (and all remaining)")
+        return False, filepath, False, True
+    elif choice == "r":
+        # Auto-increment rename
+        base, ext = os.path.splitext(filepath)
+        counter = 1
+        new_path = f"{base}_{counter}{ext}"
+        while os.path.exists(new_path):
+            counter += 1
+            new_path = f"{base}_{counter}{ext}"
+        print(f"📝 Renaming to: {new_path}")
+        return True, new_path, False, False
+    elif choice is None: # Back/Cancel
+        print("❌ Operation cancelled.")
+        return False, None, False, False # Signal abort with None path
+    else:
+        print(f"⏭️  Skipping {os.path.basename(filepath)}")
+        return False, filepath, False, False
 
 def browse_files(start_dir="."):
     """Interactively browse file system and return selected file path."""
@@ -4497,13 +4981,19 @@ def run_interactive(jump_point=None):
         'audio/musicgen-large': ('audio', 'musicgen-large'),
         'audio/audioldm2': ('audio', 'audioldm2'),
         'audio/bark': ('audio', 'bark'),
+        'caption': ('caption', None),
+        'article': ('article', None),
+        'article/offline': ('article', 'offline'),
+        'article/online': ('article', 'online'),
+        'code': ('code', None),
+        'chat': ('chat', None),
+        'research': ('article', 'online'),  # Alias for deep research/online article
         'transform': ('transform', None),
         'transform/edit': ('transform', 'edit'),
         'transform/rembg': ('transform', 'rembg'),
         'transform/silhouette': ('transform', 'silhouette'),
         'upscale': ('upscale', None),
         'convert': ('convert', None),
-        'caption': ('caption', None),
         'test': ('test', None),
         'test/unit': ('test', 'unit'),
         'test/integration': ('test', 'integration'),
@@ -4527,17 +5017,22 @@ def run_interactive(jump_point=None):
         '3/4': ('audio', 'audioldm2'),
         '3/5': ('audio', 'bark'),
         '4': ('caption', None),
-        '5': ('transform', None),
-        '5/1': ('transform', 'edit'),
-        '5/2': ('transform', 'rembg'),
-        '5/3': ('transform', 'silhouette'),
-        '6': ('convert', None),
-        '7': ('upscale', None),
-        '8': ('test', None),
-        '8/1': ('test', 'unit'),
-        '8/2': ('test', 'integration'),
-        '8/3': ('test', 'codec'),
-        '9': ('sysinfo', None),
+        '5': ('article', None),
+        '5/1': ('article', 'offline'),
+        '5/2': ('article', 'online'),
+        '6': ('code', None),
+        '7': ('chat', None),
+        '8': ('transform', None),
+        '8/1': ('transform', 'edit'),
+        '8/2': ('transform', 'rembg'),
+        '8/3': ('transform', 'silhouette'),
+        '9': ('convert', None),
+        '10': ('upscale', None),
+        '11': ('test', None),
+        '11/1': ('test', 'unit'),
+        '11/2': ('test', 'integration'),
+        '11/3': ('test', 'codec'),
+        '12': ('sysinfo', None),
     }
     
     # Parse jump point
@@ -4688,7 +5183,7 @@ def run_interactive(jump_point=None):
         print(f"🎮 GPU:      {gpu_info}")
         print()
         
-        input("Press Enter to return...")
+        prompt_menu(None, [], allow_back=True)
 
     def main_menu():
         """Show main menu and return action."""
@@ -4701,8 +5196,12 @@ def run_interactive(jump_point=None):
             ("🎬  Generate Video", "video"),
             ("🎵  Generate Audio", "audio"),
             ("📝  Generate Description", "caption"),
+            ("📰  Generate Article", "article"),
+            ("💻  Generate Code", "code"),
+            ("💬  Chat", "chat"),
             ("✨  Transform/Edit Image", "transform"),
             ("🔄  Convert Media", "convert"),
+            ("📄  Convert Document", "doc_convert"),
             ("📈  Upscale Media", "upscale"),
             ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
@@ -5189,6 +5688,38 @@ def run_interactive(jump_point=None):
         run_self_command(cmd)
         input("\nPress Enter to continue...")
     
+    def document_convert_menu():
+        """Convert document format submenu."""
+        clear_screen()
+        show_header("Convert Document")
+        
+        # Input file
+        print("📂 Select input document:\n")
+        input_file = prompt_file("Enter file path")
+        if input_file is None:
+            return
+        
+        # Target format
+        print("\n🎯 Select Target Format:\n")
+        format_options = [
+            ("PDF - Portable Document", "pdf"),
+            ("DOCX - Microsoft Word", "docx"),
+            ("HTML - Web Page", "html"),
+            ("MD - Markdown", "md"),
+            ("RTF - Rich Text Format", "rtf"),
+            ("TXT - Plain Text", "txt"),
+            ("JSON - Structured Data", "json"),
+        ]
+        target_format = prompt_choice("Format", format_options)
+        if target_format is None:
+            return
+        
+        # Build command
+        cmd = f"-cd \"{input_file}\" -cdt {target_format}"
+        
+        run_self_command(cmd)
+        input("\nPress Enter to continue...")
+    
     def caption_menu(preset_model=None):
         """Generate caption submenu."""
         clear_screen()
@@ -5219,6 +5750,194 @@ def run_interactive(jump_point=None):
         
         run_self_command(cmd)
         input("\nPress Enter to continue...")
+    
+    def article_menu(preset_mode=None):
+        """Generate article/research submenu."""
+        while True:
+            clear_screen()
+            show_header("Generate Article")
+            
+            # Mode selection (Offline/Online) - skip if preset
+            if preset_mode:
+                mode = preset_mode
+            else:
+                print("📝 Select article mode:\n")
+                mode_options = [
+                    ("Offline (Model's internal knowledge)", "offline"),
+                    ("Online Research (Live web search)", "online"),
+                ]
+                mode = prompt_choice("Mode", mode_options)
+                if mode is None:
+                    return
+            
+            online = mode == "online"
+            mode_label = "Deep Research (Online)" if online else "Article (Offline)"
+            
+            clear_screen()
+            show_header(mode_label)
+            
+            # Topic/Prompt
+            print("✏️  Enter your topic or prompt:\n")
+            topic = prompt_text("Topic")
+            if not topic:
+                return
+            
+            # Model selection
+            print("\n📦 Select Model:\n")
+            model_options = [
+                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
+                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
+                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
+                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
+                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
+                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
+                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
+                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Mistral Nemo-12B", "mistral-nemo-12b"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+            
+            # Output format
+            print("\n📄 Select output format:\n")
+            format_options = [
+                ("Markdown (.md)", "md"),
+                ("PDF (.pdf)", "pdf"),
+                ("Word Document (.docx)", "docx"),
+                ("HTML (.html)", "html"),
+                ("Plain Text (.txt)", "txt"),
+            ]
+            output_format = prompt_choice("Format", format_options)
+            if output_format is None:
+                return
+            
+            # Research iterations (online only)
+            research_iter = 3
+            if online:
+                print("\n🔄 Research iterations (sources to read):\n")
+                iter_options = [
+                    ("3 sources (Default)", "3"),
+                    ("5 sources", "5"),
+                    ("10 sources", "10"),
+                    ("Custom", "custom"),
+                ]
+                iter_choice = prompt_choice("Iterations", iter_options)
+                if iter_choice is None:
+                    return
+                if iter_choice == "custom":
+                    custom_iter = prompt_text("Number of sources")
+                    if custom_iter and custom_iter.isdigit():
+                        research_iter = int(custom_iter)
+                else:
+                    research_iter = int(iter_choice)
+            
+            # Article length
+            print("\n📏 Article Length:\n")
+            length_options = [
+                ("Quick (~500 words, fast) (Default)", "quick"),
+                ("Standard (~1500 words)", "standard"),
+                ("Detailed (~3000 words, comprehensive)", "detailed"),
+            ]
+            length = prompt_choice("Length", length_options)
+            if length is None:
+                return
+            
+            # Output file path (optional)
+            print("\n📁 Output file path (leave empty for auto-name):\n")
+            output_path = prompt_text("File path", required=False)
+            
+            # Build command
+            flag = "-gr" if online else "-ga"
+            cmd = f'{flag} -p "{topic}" -atm {model} --output-format {output_format} -al {length}'
+            if online:
+                cmd += f" -ri {research_iter}"
+            if output_path:
+                cmd += f' -o "{output_path}"'
+            
+            run_self_command(cmd)
+            
+            # Interactive result wait
+            prompt_menu(None, [], allow_back=True)
+    
+    def code_menu(preset_model=None):
+        """Generate code submenu."""
+        while True:
+            clear_screen()
+            show_header("Generate Code")
+            
+            # Code description/prompt
+            print("✏️  Describe what code you want to generate:")
+            print("   (be more specific for better results)\n")
+            print("💡 Tip: Include folder name for multi-file projects, e.g.:")
+            print('   "Create React example in folder react-example"\n')
+            print("(Leave empty to go back)\n")
+            description = prompt_text("Description", required=False)
+            if not description:
+                return
+            
+            # Model selection
+            print("\n📦 Select Code Model:\n")
+            model_options = [
+                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
+                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
+                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
+                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
+                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
+                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
+                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
+                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+            
+            # Output path (optional)
+            print("\n📁 Output path (optional):")
+            print("   (Leave empty: uses paths/filenames from your description)")
+            print("   (Existing folder: saves all generated files inside it)")
+            print("   (Filename: override output name if single file)\n")
+            output_path = prompt_text("Output path", required=False)
+            
+            # Build command
+            cmd = f'-gc -p "{description}" -cdm {model}'
+            if output_path:
+                cmd += f' -o "{output_path}"'
+            
+            run_self_command(cmd)
+            input("\nPress Enter to continue...")
+    
+    def chat_menu(preset_model=None):
+        """Interactive chat submenu."""
+        clear_screen()
+        show_header("Chat")
+        
+        # Model selection (skip if preset)
+        if preset_model:
+            model = preset_model
+            print(f"📦 Model: {model}\n")
+        else:
+            print("📦 Select Chat Model:\n")
+            model_options = [
+                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
+                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
+                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
+                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
+                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
+                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
+                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
+                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Mistral Nemo-12B", "mistral-nemo-12b"),
+            ]
+            model = prompt_choice("Model", model_options)
+            if model is None:
+                return
+        
+        # Build command and run
+        cmd = f"-c --chat-model {model}"
+        
+        run_self_command(cmd)
+        # No "Press Enter" needed - chat exits naturally
     
     def test_menu(preset_submenu=None):
         """Test selection submenu - choose between Unit Tests and Integration Tests."""
@@ -5395,7 +6114,7 @@ def run_interactive(jump_point=None):
                 print("=" * 60)
                 os.system(f'"{sys.executable}" -m unittest tests.ai-media_test.{choice} -v')
 
-            input("\nPress Enter to continue...")
+            prompt_menu("Press Enter to continue...", [], allow_back=True)
 
     def integration_test_menu():
         """Integration Tests submenu - tests from tests/integration-tests.json."""
@@ -5410,7 +6129,7 @@ def run_interactive(jump_point=None):
             clear_screen()
             show_header("App Run Tests")
             print(f"❌ Error loading tests: {e}")
-            input("Press Enter...")
+            prompt_menu("Press Enter...", [], allow_back=True)
             return
 
         if not tests:
@@ -5490,8 +6209,19 @@ def run_interactive(jump_point=None):
             upscale_menu()
         elif action == "convert":
             convert_menu()
+        elif action == "doc_convert":
+            document_convert_menu()
         elif action == "caption":
             caption_menu(initial_model if first_run or initial_action == 'caption' else None)
+            initial_model = None
+        elif action == "article":
+            article_menu(initial_model if first_run or initial_action == 'article' else None)
+            initial_model = None
+        elif action == "code":
+            code_menu(initial_model if first_run or initial_action == 'code' else None)
+            initial_model = None
+        elif action == "chat":
+            chat_menu(initial_model if first_run or initial_action == 'chat' else None)
             initial_model = None
         elif action == "test":
             test_menu(initial_model if first_run or initial_action == 'test' else None)
@@ -5699,6 +6429,7 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                 cwd=script_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, # Merge stderr into stdout for simple streaming
+                stdin=subprocess.DEVNULL if is_interactive else None,  # Isolate interactive tests from parent tty
                 text=True,
                 encoding='utf-8',
                 errors='replace',
@@ -5748,7 +6479,7 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                             break
                         
                         if line:
-                            # Only stream to user if verbose mode is on
+                            # Stream to user if verbose mode is on (but not for interactive tests)
                             if verbose:
                                 print(line, end='', flush=True) 
                             stdout_lines.append(line)
@@ -5759,12 +6490,8 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                 stdout = "".join(stdout_lines) 
                 # stderr is merged into stdout via Popen(stderr=subprocess.STDOUT)
                 
-                # Show verbose output (already streamed for batch, just marking end)
-                if verbose:
-                    if is_interactive:
-                         # Interactive output wasn't streamed, so print it now if verbose
-                         print(f"\n--- STDOUT (Captured) ---")
-                         print(stdout)
+                # Show verbose output marking
+                if verbose and not is_interactive:
                     print(f"\n--- END ---\n")
                 
                 if current_process.returncode != 0 and not is_interactive:
@@ -5823,7 +6550,6 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
                 else:
                     # Unix: kill process group
                     try:
-                        import signal
                         os.killpg(os.getpgid(pid), signal.SIGKILL)
                     except:
                         current_process.kill()
@@ -5955,7 +6681,1366 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
     
     sys.exit(0 if failed == 0 else 1)
 
+# -------------------------------------------------------------------------
+# NEW: Article Generation & Deep Research
+# -------------------------------------------------------------------------
+
+class ArticleGenerator:
+    def __init__(self, model_name="llama-3.1-8b", device=None):
+        self.model_name = TEXT_MODELS.get(model_name.lower(), model_name)
+        if model_name.lower() == "default": self.model_name = TEXT_MODELS["default"]
+        
+        self.device = device or get_optimal_device_and_dtype(quiet=True)[0]
+        self.pipeline = None
+        self.ddgs = DDGS()
+        
+    def _load_model(self):
+        if self.pipeline: return
+        
+        print(f"📚 Loading Text Model: {self.model_name}...")
+        try:
+            dtype = torch.float16 if self.device.type in ["cuda", "mps"] else torch.float32
+            
+            
+            # Workaround: Qwen3/Llama3 have numerical instability on MPS float16, use fp32
+            # Note: This increases RAM usage significantly (e.g. 8B model -> ~32GB RAM)
+            if self.device.type == "mps" and any(m in self.model_name.lower() for m in ["qwen3", "llama"]):
+                print(f"   ⚠️  {self.model_name} detected on MPS - using fp32 for stability...")
+                dtype = torch.float32
+                import os
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+            
+            # Load tokenizer and model separately to handle chat templates
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            
+            # Memory optimization: 4-bit/8-bit if CUDA, otherwise standard
+            quantization_config = None
+            if self.device.type == "cuda":
+                try:
+                    from transformers import BitsAndBytesConfig
+                    quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+                except ImportError:
+                    pass
+            
+            model_kwargs = {"torch_dtype": dtype}
+            if quantization_config:
+                model_kwargs["quantization_config"] = quantization_config
+                # device_map="auto" is usually required for quantization
+                model_kwargs["device_map"] = "auto"
+            else:
+                model_kwargs["device_map"] = self.device
+                
+            self.pipeline = pipeline(
+                "text-generation",
+                model=self.model_name,
+                tokenizer=tokenizer,
+                **model_kwargs
+            )
+            print("✅ Model loaded.")
+        except RuntimeError as e:
+            error_msg = str(e)
+            if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
+                # Extract the size if present (e.g., "59.58 GiB")
+                import re
+                size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
+                size_info = f" (model requires ~{size_match.group(0)})" if size_match else ""
+                
+                print(f"\n❌ Model too large for this system{size_info}")
+                print(f"   The model '{self.model_name}' cannot fit in available memory.")
+                print(f"   💡 Try a smaller model like:")
+                print(f"      - deepseek-r1-qwen-7b (~7GB)")
+                print(f"      - deepseek-r1-llama-8b (~8GB)")
+                print(f"      - llama-3.1-8b (~16GB)")
+                return  # Return gracefully without raising
+            else:
+                print(f"❌ Failed to load model: {e}")
+                raise
+        except OSError as e:
+            error_msg = str(e)
+            if "not a valid model identifier" in error_msg or "Repository Not Found" in error_msg:
+                print(f"\n❌ Model not found: '{self.model_name}'")
+                print(f"   This model doesn't exist on HuggingFace.")
+                print(f"   💡 Available models:")
+                print(f"      - deepseek-r1-qwen-7b, deepseek-r1-qwen-14b, deepseek-r1-qwen-32b")
+                print(f"      - deepseek-r1-llama-8b, deepseek-r1-llama-70b")
+                print(f"      - llama-3.1-8b, qwen3-8b, qwen-2.5-14b, mistral-nemo-12b")
+                return  # Return gracefully without raising
+            else:
+                print(f"❌ Failed to load model: {e}")
+                raise
+        except (ValueError, Exception) as e:
+            error_msg = str(e)
+            # Check if this is a wrapped memory error (transformers wraps RuntimeError in ValueError)
+            if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
+                import re
+                size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
+                size_info = f" (model requires ~{size_match.group(0)})" if size_match else ""
+                
+                print(f"\n❌ Model too large for this system{size_info}")
+                print(f"   The model '{self.model_name}' cannot fit in available memory.")
+                print(f"   💡 Try a smaller model like:")
+                print(f"      - deepseek-r1-qwen-7b (~7GB)")
+                print(f"      - deepseek-r1-llama-8b (~8GB)")
+                print(f"      - llama-3.1-8b (~16GB)")
+                return  # Return gracefully without raising
+            else:
+                print(f"❌ Failed to load model: {e}")
+                raise
+
+    def deep_research(self, query, iterations=3):
+        """Perform recursive web search and summarization."""
+        print(f"\n🔎 Deep Researching: '{query}' ({iterations} iterations)...")
+        results = []
+        
+        # 1. Initial Broad Search
+        try:
+            search_results = list(self.ddgs.text(query, max_results=iterations))
+            pad_width = len(str(iterations))
+            for i, res in enumerate(search_results, 1):
+                num_str = str(i).zfill(pad_width)
+                print(f"   Reading [{num_str}]: {res['title']}...")
+                # Basic scraping (just using description/snippet for now to be safe/fast)
+                content = res.get('body', '') or res.get('snippet', '')
+                
+                # Attempt deep scraping for better context
+                try:
+                    import requests
+                    from bs4 import BeautifulSoup
+                    
+                    # 5 second timeout to keep it snappy
+                    page = requests.get(res['href'], timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+                    if page.status_code == 200:
+                        soup = BeautifulSoup(page.text, 'html.parser')
+                        # Extract text from paragraphs (simple generic scraper)
+                        paragraphs = [p.get_text().strip() for p in soup.find_all('p')]
+                        full_text = ' '.join(p for p in paragraphs if p)
+                        
+                        # Only use if we got substantial content (>200 chars), otherwise fallback to snippet
+                        if len(full_text) > 200:
+                            # Limit to ~4000 chars per source to save context window
+                            content = full_text[:4000] + "..."
+                except Exception:
+                    # Silently fail back to snippet
+                    pass
+                
+                results.append(f"Source: {res['title']}\nURL: {res['href']}\nContent: {content}\n")
+                
+                # Rate limit handling (pause)
+                time.sleep(1.0) 
+        except Exception as e:
+            print(f"⚠️ Search error: {e}")
+        
+        # 2. Image Search - Find real, publicly accessible images
+        image_results = []
+        try:
+            image_query = f"{query} photos"
+            print(f"   🖼️  Searching for images...")
+            image_search = list(self.ddgs.images(image_query, max_results=5))
+            
+            for img in image_search:
+                img_url = img.get('image', '')
+                img_title = img.get('title', 'Image')
+                if img_url and img_url.startswith('http'):
+                    image_results.append(f"![{img_title}]({img_url})")
+            
+            if image_results:
+                print(f"   ✅ Found {len(image_results)} images")
+        except Exception as e:
+            print(f"   ⚠️  Image search failed: {e}")
+            
+        research_context = "\n\n".join(results)
+        
+        # Append image URLs to research context
+        if image_results:
+            research_context += "\n\n## Available Images (use these exact URLs)\n"
+            research_context += "\n".join(image_results)
+        
+        return research_context
+
+    def chat_session(self):
+        """Interactive Chat Loop."""
+        console = Console()
+        
+        self._load_model()
+        history = []
+        pending_context = "" # Buffer for file context
+        
+        # Custom Lexer for command highlighting
+        class ChatLexer(Lexer):
+            def lex_document(self, document):
+                def get_line_tokens(line_number):
+                    line = document.lines[line_number]
+                    # Colors the command part of the string
+                    for cmd in ['/read', '/save', '/search', '/online-search']:
+                        if line.startswith(cmd):
+                            # Check for iteration modifier (e.g. /search|5)
+                            base_len = len(cmd)
+                            if len(line) > base_len and line[base_len] == '|':
+                                # Find end of command (space or end of line)
+                                end_pos = line.find(' ', base_len)
+                                if end_pos == -1: end_pos = len(line)
+                                return [
+                                    ('class:command', line[:end_pos]),
+                                    ('', line[end_pos:])
+                                ]
+                            return [
+                                ('class:command', cmd),
+                                ('', line[base_len:])
+                            ]
+                    return [('', line)]
+                return get_line_tokens
+
+        chat_style = Style.from_dict({
+            'command': '#ff00ff bold', # Magenta/Pink to match header
+        })
+
+        # Initialize PromptSession for arrow key support / history
+        session = PromptSession(
+            history=InMemoryHistory(),
+            lexer=ChatLexer(),
+            style=chat_style
+        )
+
+        # Setup Autocomplete for Slash Commands (Fuzzy + Case Insensitive)
+        path_completer = FuzzyCompleter(PathCompleter(expanduser=True))
+        completer = NestedCompleter.from_nested_dict({
+            '/read': path_completer,
+            '/save': path_completer,
+            '/search': None,
+            '/online-search': None,
+            'exit': None,
+            'quit': None,
+        })
+        
+        console.print(f"\n💬 [bold]Chat Session Started[/bold] (Model: [bold cyan]{self.model_name}[/bold cyan])")
+        console.print("   Type '[bold]exit[/bold]' or '[bold]quit[/bold]' to end.")
+        console.print("   Commands: [bold]/read <path>[/bold], [bold]/save[/bold][bold]|all[/bold] [bold]<path>[/bold], [bold]/search[/bold][bold]|N[/bold] [bold]<query>[/bold]")
+        console.print("   [dim]💡 Tip: /save saves last code or full response. Use |all for full history.[/dim]")
+        console.print("   [dim]💡 Tip: Use /search query or /search|5 query for deeper results.[/dim]\n")
+        
+        while True:
+            try:
+                # Use prompt_toolkit for input (enables arrow keys & autocomplete)
+                user_input = session.prompt(HTML('<b fg="blue">You:</b> '), completer=completer, complete_while_typing=True)
+                if user_input.strip().lower() in ['exit', 'quit']:
+                    break
+                
+                # --- Slash Commands ---
+                if user_input.startswith("/read "):
+                    file_path = user_input[6:].strip()
+                    if os.path.exists(file_path):
+                        try:
+                            with open(file_path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            
+                            # Append to pending context instead of history immediately
+                            pending_context += f"\n\n[File Context: {file_path}]\n{content}\n"
+                            console.print(f"📄 [bold green]Added file context:[/bold green] {file_path} [dim](Stored in memory. You can now ask questions or provide prompts about its content!)[/dim]")
+                        except Exception as e:
+                            console.print(f"[bold red]❌ Error reading file:[/bold red] {e}")
+                    else:
+                        console.print(f"[bold red]❌ File not found:[/bold red] {file_path}")
+
+                    continue # Skip generation for this turn
+
+                is_search = False
+                for s_cmd in ["/search", "/online-search"]:
+                    if user_input.startswith(s_cmd + " ") or user_input.startswith(s_cmd + "|") or user_input == s_cmd:
+                        is_search = True
+                        break
+
+                if is_search:
+                    # Parse command and optional iterations: /search|5 query
+                    parts = user_input.split(' ', 1)
+                    cmd_part = parts[0]
+                    query = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    # Extract iterations if pipe exists
+                    iterations = 3
+                    if '|' in cmd_part:
+                        try:
+                            iter_str = cmd_part.split('|', 1)[1]
+                            if iter_str.isdigit():
+                                iterations = int(iter_str)
+                        except:
+                            pass
+                    
+                    if query:
+                        try:
+                            # Use existing deep_research method
+                            search_results = self.deep_research(query, iterations=iterations)
+                            
+                            if search_results:
+                                pending_context += f"\n\n[Online Search Context: '{query}']\n{search_results}\n"
+                                console.print(f"🌍 [bold green]Added search results for:[/bold green] '{query}' [dim](Context enriched. Ask your question now to analyze these findings!)[/dim]")
+                            else:
+                                console.print(f"[bold yellow]⚠️ No results found for:[/bold yellow] '{query}'")
+                        except Exception as e:
+                             console.print(f"[bold red]❌ Search error:[/bold red] {e}")
+                    else:
+                        console.print("[bold red]❌ Please provide a search query.[/bold red]")
+                    continue
+
+                if user_input.startswith("/save"):
+                    # Handle /save|all syntax or regular /save
+                    parts = user_input.split(' ', 1)
+                    cmd_part = parts[0]
+                    file_path = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    save_all = "|all" in cmd_part.lower()
+                    content_to_save = None
+                    label = "response"
+                    ext_suggestion = ".md"
+
+                    if save_all:
+                        # Format full history as markdown
+                        history_content = "# Chat Conversation History\n\n"
+                        for msg in history:
+                            role = "User" if msg["role"] == "user" else "Assistant"
+                            history_content += f"## {role}\n{msg['content']}\n\n"
+                        content_to_save = history_content
+                        label = "full conversation history"
+                        ext_suggestion = ".md"
+                    else:
+                        # 1. Try to find last code block
+                        for msg in reversed(history):
+                            if msg["role"] == "assistant":
+                                content = msg["content"]
+                                import re
+                                # Attempt to find code blocks and language
+                                matches = re.findall(r"```(.*?)\n(.*?)```", content, re.DOTALL)
+                                if matches:
+                                    lang, code = matches[-1]
+                                    content_to_save = code
+                                    label = "code block"
+                                    # Suggest extension based on language
+                                    lang_map = {"python": ".py", "bash": ".sh", "javascript": ".js", "html": ".html", "css": ".css", "markdown": ".md"}
+                                    ext_suggestion = lang_map.get(lang.strip().lower(), ".txt")
+                                    
+                                    # Heuristic: look for filename in the text before the block (only if user didn't provide one)
+                                    if not file_path:
+                                        fn_match = re.search(r"(\w+[\.\w]+)", content[:content.find("```")].split("\n")[-1])
+                                        if fn_match and "." in fn_match.group(1):
+                                            suggested_fn = fn_match.group(1)
+                                            # Only use if it has a valid extension
+                                            if os.path.splitext(suggested_fn)[1] in lang_map.values():
+                                                file_path = suggested_fn
+                                    break
+                                else:
+                                    # 2. Fallback to full last response
+                                    content_to_save = content
+                                    label = "last response"
+                                    ext_suggestion = ".md"
+                                    break
+
+                    if not file_path:
+                        # Try to get a descriptive name from context
+                        context_str = ""
+                        if save_all and history:
+                            # Use first user message that isn't a command
+                            for msg in history:
+                                if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
+                                    context_str = msg["content"]
+                                    break
+                        elif history:
+                            # Use last user message that isn't a command
+                            for msg in reversed(history):
+                                if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
+                                    context_str = msg["content"]
+                                    break
+                        
+                        # Slugify: lowercase, alphanumeric and underscores only
+                        import re
+                        # Clean up: remove Markdown, special chars, etc.
+                        clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', context_str).strip()
+                        slug = re.sub(r'\s+', '_', clean_text[:25]).lower()
+                        
+                        ts = int(time.time())
+                        if save_all:
+                            prefix = f"chat_{slug}" if slug else "chat_all"
+                        else:
+                            type_prefix = "code" if label == "code block" else "resp"
+                            prefix = f"{type_prefix}_{slug}" if slug else type_prefix
+                            
+                        file_path = f"{prefix}_{ts}{ext_suggestion}"
+                    elif "." not in os.path.basename(file_path):
+                        # Add suggested extension if missing
+                        file_path += ext_suggestion
+
+
+                    if content_to_save:
+                        # Check overwrite before saving
+                        always_overwrite = self.args.force if hasattr(self, 'args') else False
+                        should_write, final_path, _, _ = check_overwrite(file_path, always_overwrite=always_overwrite)
+                        if should_write:
+                            try:
+                                with open(final_path, "w", encoding="utf-8") as f:
+                                    f.write(content_to_save)
+                                console.print(f"💾 [bold green]Exported {label} to:[/bold green] {final_path}")
+                            except Exception as e:
+                                console.print(f"[bold red]❌ Error saving file:[/bold red] {e}")
+                        else:
+                            console.print(f"\n[bold yellow]⏭️  Save cancelled (skipped).[/bold yellow]")
+                    else:
+                         console.print("[bold red]❌ No conversation content found to save.[/bold red]")
+                    continue
+
+                # Construct Chat Prompt (using apply_chat_template if available)
+                final_content = user_input
+                if pending_context:
+                    final_content = pending_context + "\n" + user_input
+                    pending_context = "" # Clear buffer
+                
+                history.append({"role": "user", "content": final_content})
+                
+                # Check context length (simple trimming)
+                if len(history) > 20: history = history[-10:] # Keep last 10 turns
+                
+                prompt = self.pipeline.tokenizer.apply_chat_template(
+                    history, tokenize=False, add_generation_prompt=True
+                )
+                
+                # Rich "Thinking..." Spinner
+                mps_switch_needed = False
+                with console.status("[yellow]Thinking...[/yellow]", spinner="dots"):
+                    try:
+                        # Generate
+                        outputs = self.pipeline(
+                            prompt, 
+                            max_new_tokens=512, 
+                            do_sample=True, 
+                            temperature=0.7,
+                            top_p=0.9,
+                        )
+                    except RuntimeError as e:
+                        # Handle MPS probability tensor error (large context instability)
+                        if ("probability tensor" in str(e) or "out of range integral" in str(e)) and self.device.type == "mps":
+                            mps_switch_needed = True
+                        else:
+                            raise
+                
+                # Handle MPS model switch OUTSIDE the spinner context
+                if mps_switch_needed:
+                    console.print("\n[bold yellow]⚠️  MPS precision issue with large context[/bold yellow]")
+                    console.print("[dim]This model struggles with large file contexts on Apple Silicon.[/dim]\n")
+                    
+                    # Offer interactive model switch
+                    console.print("[bold]Switch to a more stable model?[/bold]")
+                    console.print("  1. [cyan]llama-3.1-8b[/cyan] - Most stable on MPS")
+                    console.print("  2. [cyan]deepseek-r1-llama-8b[/cyan] - Llama-based, good stability")
+                    console.print("  3. [cyan]deepseek-r1-qwen-7b[/cyan] - Reasoning-focused")
+                    console.print("  0. Continue with current model (may fail again)\n")
+                    
+                    try:
+                        # Use prompt_toolkit's prompt (not input()) since it's managing the terminal
+                        choice = session.prompt("Choice [1]: ").strip() or "1"
+                        
+                        model_map = {
+                            "1": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                            "2": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+                            "3": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                        }
+                        
+                        if choice in model_map:
+                            new_model = model_map[choice]
+                            
+                            # Unload current model and load new one with status spinner
+                            with console.status("[yellow]🔄 Switching model...[/yellow]", spinner="dots"):
+                                self.pipeline = None
+                                self.model_name = new_model
+                                self._load_model()
+                            
+                            console.print("[bold green]✅ Model switched![/bold green]")
+                            
+                            # Re-build prompt with new tokenizer and retry
+                            prompt = self.pipeline.tokenizer.apply_chat_template(
+                                history, tokenize=False, add_generation_prompt=True
+                            )
+                            
+                            with console.status("[yellow]Retrying with new model...[/yellow]", spinner="dots"):
+                                outputs = self.pipeline(
+                                    prompt, 
+                                    max_new_tokens=512, 
+                                    do_sample=True, 
+                                    temperature=0.7,
+                                    top_p=0.9,
+                                )
+                        else:
+                            console.print("[dim]Continuing with current model...[/dim]\n")
+                            continue
+                    except KeyboardInterrupt:
+                        console.print("\n[dim]Cancelled[/dim]")
+                        continue
+                
+                console.print("[bold green]Bot:[/bold green] ", end="")
+                
+                generated_text = outputs[0]['generated_text']
+                # Extract only new response (remove prompt)
+                response = generated_text[len(prompt):].strip()
+                
+                # Detect DeepSeek R1 reasoning: everything before </think> is reasoning
+                # The opening <think> is in the prompt template, closing </think> is in response
+                if '</think>' in response:
+                    parts = response.split('</think>', 1)
+                    reasoning = parts[0].strip()
+                    final_answer = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    # Display reasoning in dim italic
+                    console.print("")
+                    console.print("[dim italic]💭 Reasoning:[/dim italic]")
+                    console.print(f"[dim italic]{reasoning}[/dim italic]")
+                    console.print("")  # Spacer
+                    if final_answer:
+                        console.print("[bold]Answer:[/bold]")
+                        console.print(Markdown(final_answer))
+                else:
+                    # No reasoning tags, render normally
+                    console.print(Markdown(response))
+                console.print("")
+                
+                history.append({"role": "assistant", "content": response})
+                
+            except KeyboardInterrupt:
+                console.print("\n")
+                break
+            except Exception as e:
+                console.print(f"[bold red]❌ Error:[/bold red] {e}")
+
+    def generate_article(self, topic, output_file, format="md", online=False, research_iter=3, length="quick"):
+        """Generate full article with optional research.
+        
+        Args:
+            length: 'quick' (512 tokens), 'standard' (2048), 'detailed' (4096 - default)
+        """
+        
+        # Length presets
+        from rich.console import Console
+        console = Console()
+        
+        length_config = {
+            "quick": {"tokens": 512, "desc": "concise"},
+            "standard": {"tokens": 2048, "desc": "balanced"},
+            "detailed": {"tokens": 4096, "desc": "comprehensive"},
+        }
+        config = length_config.get(length, length_config["detailed"])
+        max_tokens = config["tokens"]
+        style = config["desc"]
+        
+        research_data = ""
+        if online:
+            with console.status(f"[bold green]Thinking... (Deep Research Iterations {research_iter})[/bold green]", spinner="dots"): 
+                research_data = self.deep_research(topic, iterations=research_iter)
+        
+        self._load_model()
+        
+        print(f"✍️  Writing {style} article on '{topic}'...")
+        
+        # Prompt Engineering (adjusted based on length)
+        if research_data:
+            system_prompt = (
+                f"You are an expert investigative journalist. Write a {style}, well-structured "
+                "article based on the following research context. Use Markdown formatting. "
+                "Cite sources where appropriate."
+            )
+            user_prompt = f"Topic: {topic}\n\nResearch Context:\n{research_data}\n\nArticle:"
+        else:
+            system_prompt = (
+                f"You are a creative writer and expert knowledge base. Write a {style}, "
+                "well-structured article on the following topic. Use Markdown formatting."
+            )
+            user_prompt = f"Topic: {topic}\n\nArticle:"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # Apply Template
+        full_prompt = self.pipeline.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        
+        # Generate Content
+        # Generate Content
+        with console.status("[bold green]Thinking... (Writing Article)[/bold green]", spinner="dots"):
+            outputs = self.pipeline(
+                full_prompt, 
+                max_new_tokens=max_tokens, 
+                do_sample=True, 
+                temperature=0.7
+            )
+        
+        # Extract markdown
+        final_md = outputs[0]['generated_text'][len(full_prompt):].strip()
+        
+        # Extract and save <think> blocks separately (for reasoning models like DeepSeek R1, Qwen3)
+        import re
+        think_matches = re.findall(r'<think>(.*?)</think>', final_md, re.DOTALL)
+        if think_matches:
+            # Remove all think blocks from main output
+            final_md = re.sub(r'<think>.*?</think>\s*', '', final_md, flags=re.DOTALL).strip()
+            # Save all think blocks to separate file
+            base, ext = os.path.splitext(output_file)
+            think_file = f"{base}-think.md"
+            try:
+                with open(think_file, "w", encoding="utf-8") as f:
+                    f.write("# Reasoning Process\n\n")
+                    for i, block in enumerate(think_matches, 1):
+                        if len(think_matches) > 1:
+                            f.write(f"## Block {i}\n\n")
+                        f.write(block.strip() + "\n\n")
+                print(f"💭 Reasoning saved to: {think_file}")
+            except Exception as e:
+                print(f"⚠️  Could not save reasoning: {e}")
+        
+        # Save Formats (pass online flag to track image failures)
+        failed_images = self._save_formatted(final_md, output_file, format, online=online)
+        
+        # If offline and images failed, offer to retry with research
+        if not online and failed_images > 0:
+            print(f"\n⚠️  {failed_images} image(s) could not be fetched (hallucinated URLs).")
+            print("💡 Tip: Offline models (-ga) cannot provide real image URLs.")
+            print("   Options:")
+            print("   • Use Deep Research (-gr) to find real images from the web")
+            print("   • Remove 'images' from your prompt for text-only articles")
+            
+            # Offer retry
+            retry = prompt_choice("What would you like to do?", [
+                ("Retry with Deep Research (online)", "y"),
+                ("Keep current output (no images)", "n")
+            ])
+            
+            if retry == "y":
+                print("\n🔄 Retrying with Deep Research...")
+                self.generate_article(
+                    topic=topic,
+                    output_file=output_file,
+                    format=format,
+                    online=True,
+                    research_iter=research_iter,
+                    length=length
+                )
+
+    def generate_code(self, prompt, output_file=None):
+        """Generate Code from Prompt (supports multi-file output)."""
+        self._load_model()
+        
+        from rich.console import Console
+        console = Console()
+        console.print(f"💻 Generating Code for: '{prompt}'...")
+        
+        system_prompt = (
+            "You are an expert coding assistant. Write clean, efficient, and well-commented code "
+            "based on the user's request. Return ONLY the code blocks. "
+            "IMPORTANT: Before EACH code file, include a comment line with the filename, "
+            "e.g., '# filename: my_script.py' or '// filename: src/utils.js'. "
+            "You can use folder paths like 'src/module/file.py'. "
+            "If multiple files are needed, separate them with filename comments. "
+            "Do not include markdown backticks or explanations unless asked. "
+            "Make sure the filename extension matches the code language."
+        )
+        user_prompt = f"Request: {prompt}\n\nCode:"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        full_prompt = self.pipeline.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        
+        # Show thinking spinner during generation
+        # Add space to text to align with '💻' icon above (which is often double-width)
+        console.print()
+        with console.status("[yellow] Thinking...[/yellow]", spinner="dots"):
+            outputs = self.pipeline(
+                full_prompt, 
+                max_new_tokens=4096, 
+                do_sample=True, 
+                temperature=0.2,
+                top_p=0.9,
+            )
+        
+        generated_text = outputs[0]['generated_text']
+        response = generated_text[len(full_prompt):].strip()
+        
+        # Remove markdown code fences if present
+        import re
+        response = re.sub(r"```\w*\n?", "", response)
+        
+        # Parse multiple files from response
+        # Matches: "# filename: path.ext" OR "# path.ext" OR "// filename: path.ext" OR "// path.ext"
+        # The filename must contain at least one "/" or have a file extension
+        file_pattern = re.compile(
+            r"^(?:#|//)\s*(?:filename:\s*)?([^\s]+\.(?:py|js|ts|jsx|tsx|html|css|java|cpp|c|h|go|rs|rb|php|sh|sql|json|yaml|yml|md|txt))\s*$",
+            re.IGNORECASE | re.MULTILINE
+        )
+        
+        # Split response by filename markers
+        parts = file_pattern.split(response)
+        
+        files_to_write = []
+        
+        if len(parts) > 1:
+            # Multi-file output: parts = [preamble, filename1, content1, filename2, content2, ...]
+            # Skip preamble (parts[0]), then pair (filename, content)
+            for i in range(1, len(parts), 2):
+                if i + 1 < len(parts):
+                    filename = parts[i].strip()
+                    content = parts[i + 1].strip()
+                    if filename and content:
+                        files_to_write.append((filename, content))
+                elif parts[i].strip():
+                    # Last filename without content (edge case)
+                    pass
+        else:
+            # Single file output (no filename marker found)
+            content = response.strip()
+            if output_file:
+                if "." in os.path.basename(output_file):
+                    files_to_write.append((output_file, content))
+                else:
+                    ext = self._infer_extension(content)
+                    files_to_write.append((f"{output_file}{ext}", content))
+            else:
+                ext = self._infer_extension(content)
+                files_to_write.append((f"generated_code_{int(time.time())}{ext}", content))
+        
+        # Write all files
+        # Check if output_file is an existing directory once
+        output_is_dir = output_file and os.path.isdir(output_file)
+        
+        # Respect --force flag to bypass overwrite prompts
+        always_overwrite = self.args.force if hasattr(self, 'args') else False
+        never_overwrite = False
+        
+        for filepath, content in files_to_write:
+            try:
+                final_path = filepath
+                
+                if output_file:
+                    if output_is_dir:
+                        # User provided an EXISTING directory -> Use as base
+                        final_path = os.path.join(output_file, filepath)
+                    elif len(files_to_write) == 1:
+                        # User provided non-directory path (or non-existent) AND single file
+                        # Treat as filename
+                        final_path = output_file
+                    else:
+                        # Multi-file AND non-directory output path
+                        pass 
+
+                # Overwrite check
+                should_write, final_path, always_overwrite, never_overwrite = check_overwrite(
+                    final_path, always_overwrite, never_overwrite
+                )
+                
+                if final_path is None: # User cancelled/Back
+                    print("🛑 Code generation cancelled.")
+                    break
+                
+                if not should_write:
+                    continue
+
+                # Create directories if needed
+                dir_path = os.path.dirname(final_path)
+                if dir_path:
+                    os.makedirs(dir_path, exist_ok=True)
+                
+                with open(final_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print(f"✅ Code saved to: {final_path}")
+            except Exception as e:
+                print(f"❌ Error saving {filepath}: {e}")
+                
+    def _infer_extension(self, code_content):
+        """Infer file extension from code content."""
+        if "import " in code_content or "def " in code_content or "print(" in code_content or "class " in code_content:
+            return ".py"
+        elif "function " in code_content or "const " in code_content or "let " in code_content or "console.log" in code_content:
+            return ".js"
+        elif "#include" in code_content:
+            return ".cpp"
+        elif "public class" in code_content:
+            return ".java"
+        elif "<html" in code_content:
+            return ".html"
+        elif "package main" in code_content:
+            return ".go"
+        elif "fn main" in code_content or "use std::" in code_content:
+            return ".rs"
+        return ".txt"
+
+    def _save_formatted(self, markdown_text, filename, fmt, online=False):
+        """Convert and save to specific format.
+        
+        Returns:
+            int: Number of failed image fetches (for offline mode warning)
+        """
+        failed_image_count = 0
+        
+        base, _ = os.path.splitext(filename)
+        
+        # Ensure we have the right extension
+        if not filename.lower().endswith(f".{fmt}"):
+            filename = f"{base}.{fmt}"
+            
+        print(f"💾 Saving as {fmt.upper()}...")
+        
+        if fmt == "md":
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(markdown_text)
+                
+        elif fmt == "html" or fmt == "xhtml":
+            html = markdown.markdown(markdown_text, extensions=['extra', 'codehilite'])
+            # Wrap in basic HTML structure
+            enc = "utf-8"
+            full_html = (
+                f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Article</title>"
+                f"<style>body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}"
+                f"pre{{background:#f4f4f4;padding:1em;border-radius:5px}}</style></head>"
+                f"<body>{html}</body></html>"
+            )
+            with open(filename, "w", encoding=enc) as f:
+                f.write(full_html)
+                
+        elif fmt == "json":
+            import json
+            data = {"content": markdown_text, "html": markdown.markdown(markdown_text)}
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+        elif fmt == "docx":
+            import io
+            import urllib.request
+            import re as re_module
+            from docx.shared import Inches
+            
+            doc = docx.Document()
+            MIN_IMAGE_SIZE = 5 * 1024  # 5KB threshold
+            
+            def fetch_image_for_docx(url):
+                """Fetch image and return as BytesIO for docx embedding."""
+                nonlocal failed_image_count
+                try:
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        image_data = response.read()
+                    
+                    if len(image_data) < MIN_IMAGE_SIZE:
+                        failed_image_count += 1
+                        print(f"⚠️  Image too small (likely placeholder): {url[:50]}...")
+                        return None
+                    
+                    return io.BytesIO(image_data)
+                except Exception as e:
+                    failed_image_count += 1
+                    print(f"⚠️  Could not fetch image: {url[:50]}... ({e})")
+                    return None
+            
+            # Process markdown line by line
+            for line in markdown_text.split('\n'):
+                # Check for markdown image: ![alt](url)
+                img_match = re_module.match(r'!\[([^\]]*)\]\((https?://[^\)]+)\)', line)
+                if img_match:
+                    alt_text = img_match.group(1)
+                    img_url = img_match.group(2)
+                    img_stream = fetch_image_for_docx(img_url)
+                    if img_stream:
+                        try:
+                            doc.add_picture(img_stream, width=Inches(5))
+                            # Add caption if alt text exists
+                            if alt_text:
+                                caption = doc.add_paragraph(alt_text)
+                                caption.alignment = 1  # Center
+                        except Exception as e:
+                            print(f"⚠️  Could not embed image: {e}")
+                            doc.add_paragraph(f"[Image: {alt_text}]")
+                    else:
+                        doc.add_paragraph(f"[Image: {alt_text}]")
+                elif line.startswith('# '):
+                    doc.add_heading(line[2:], level=1)
+                elif line.startswith('## '):
+                    doc.add_heading(line[3:], level=2)
+                elif line.startswith('### '):
+                    doc.add_heading(line[4:], level=3)
+                else:
+                    doc.add_paragraph(line)
+            doc.save(filename)
+        
+        elif fmt == "rtf":
+            # Markdown -> RTF conversion with image support
+            import urllib.request
+            import re as re_module
+            import binascii
+            
+            MIN_IMAGE_SIZE = 5 * 1024  # 5KB threshold
+            
+            def rtf_escape(text):
+                return text.replace('\\', '\\\\').replace('{', '\\{').replace('}', '\\}')
+            
+            def fetch_image_for_rtf(url):
+                """Fetch image and return hex-encoded data with format info."""
+                nonlocal failed_image_count
+                try:
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        image_data = response.read()
+                    
+                    if len(image_data) < MIN_IMAGE_SIZE:
+                        failed_image_count += 1
+                        print(f"⚠️  Image too small (likely placeholder): {url[:50]}...")
+                        return None
+                    
+                    # Determine format from header bytes
+                    if image_data[:3] == b'\xff\xd8\xff':
+                        img_format = 'jpegblip'
+                    elif image_data[:8] == b'\x89PNG\r\n\x1a\n':
+                        img_format = 'pngblip'
+                    else:
+                        # Default to JPEG
+                        img_format = 'jpegblip'
+                    
+                    # Hex encode the image data
+                    hex_data = binascii.hexlify(image_data).decode('ascii')
+                    return (img_format, hex_data)
+                except Exception as e:
+                    failed_image_count += 1
+                    print(f"⚠️  Could not fetch image: {url[:50]}... ({e})")
+                    return None
+            
+            rtf_lines = []
+            rtf_lines.append(r'{\rtf1\ansi\deff0')
+            rtf_lines.append(r'{\fonttbl{\f0 Helvetica;}{\f1 Courier;}}')
+            rtf_lines.append(r'{\colortbl;\red0\green0\blue0;\red51\green51\blue51;}')
+            rtf_lines.append(r'\f0\fs24')  # Default font 12pt
+            
+            for line in markdown_text.split('\n'):
+                # Check for markdown image: ![alt](url)
+                img_match = re_module.match(r'!\[([^\]]*)\]\((https?://[^\)]+)\)', line)
+                if img_match:
+                    alt_text = img_match.group(1)
+                    img_url = img_match.group(2)
+                    img_data = fetch_image_for_rtf(img_url)
+                    if img_data:
+                        img_format, hex_data = img_data
+                        # RTF picture: width ~400 pixels (8000 twips), scale to fit
+                        rtf_lines.append(r'\pard\qc\sb200\sa100')
+                        rtf_lines.append(r'{\pict\\' + img_format + r'\picwgoal6000\pichgoal4000')
+                        rtf_lines.append(hex_data)
+                        rtf_lines.append(r'}')
+                        if alt_text:
+                            rtf_lines.append(r'\pard\qc\i\fs20 ' + rtf_escape(alt_text) + r'\i0\fs24\par')
+                    else:
+                        rtf_lines.append(r'\pard\sa100 [Image: ' + rtf_escape(alt_text) + r']\par')
+                    continue
+                
+                line = rtf_escape(line)
+                if line.startswith('# '):
+                    rtf_lines.append(r'\pard\sb400\sa200\b\fs48 ' + line[2:] + r'\b0\fs24\par')
+                elif line.startswith('## '):
+                    rtf_lines.append(r'\pard\sb300\sa150\b\fs36 ' + line[3:] + r'\b0\fs24\par')
+                elif line.startswith('### '):
+                    rtf_lines.append(r'\pard\sb200\sa100\b\fs28 ' + line[4:] + r'\b0\fs24\par')
+                elif line.startswith('- ') or line.startswith('* '):
+                    rtf_lines.append(r'\pard\li720\fi-360\bullet  ' + line[2:] + r'\par')
+                elif line.startswith('```'):
+                    continue
+                elif line.strip():
+                    rtf_lines.append(r'\pard\sa100 ' + line + r'\par')
+                else:
+                    rtf_lines.append(r'\par')
+            
+            rtf_lines.append('}')
+            
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write('\n'.join(rtf_lines))
+        elif fmt == "pdf":
+            # Download remote images and convert to base64 data URIs
+            import base64
+            import urllib.request
+            import re as re_module
+            
+            # Pre-process: Convert markdown links that look like images to proper image syntax
+            # Model often outputs [Image: ...](url) instead of ![Image: ...](url)
+            processed_md = re_module.sub(
+                r'\[([Ii]mage[^\]]*)\]\((https?://[^\)]+\.(jpg|jpeg|png|gif|webp)[^\)]*)\)',
+                r'![\1](\2)',
+                markdown_text
+            )
+            
+            # Remove bolding from table rows to prevent xhtml2pdf artifacts (double printing)
+            # Line-by-line approach is more robust than regex
+            md_lines = processed_md.split('\n')
+            for idx, line in enumerate(md_lines):
+                if line.strip().startswith('|'):
+                    md_lines[idx] = line.replace('**', '')
+            processed_md = '\n'.join(md_lines)
+            
+            # Convert MD -> HTML with fenced code blocks support
+            # 'toc' extension generates IDs for headers (e.g. #header-name), needed for internal links
+            html_content = markdown.markdown(processed_md, extensions=['extra', 'fenced_code', 'tables', 'toc'])
+            
+            # Replace symbols with text equivalents - xhtml2pdf doesn't support Unicode symbols
+            # Map common symbols to ASCII equivalents
+            symbol_replacements = {
+                '✓': '[Y]', '✔': '[Y]', '☑': '[Y]',  # Checkmarks
+                '✗': '[N]', '✘': '[N]', '☐': '[ ]',  # X marks and empty boxes
+                '■': '[*]', '□': '[ ]', '●': '[*]',  # Filled/empty shapes
+                '★': '[*]', '☆': '[ ]',              # Stars
+                '→': '->', '←': '<-', '↔': '<->',    # Arrows
+                '📦': '', '📚': '', '📄': '',        # Common emojis
+                '🖼': '', '🎬': '', '🎵': '',
+                '📝': '', '📰': '', '💻': '',
+                '💬': '', '✨': '', '🔄': '',
+                '📈': '', '🧪': '', 'ℹ': '',
+                '❌': '[X]', '⚠': '[!]', '✅': '[Y]',
+                '🪄': '', '🔒': '[LOCK]',
+            }
+            
+            for symbol, replacement in symbol_replacements.items():
+                html_content = html_content.replace(symbol, replacement)
+            
+            # Strip remaining emojis that weren't explicitly mapped
+            def strip_emojis(text):
+                """Remove emoji characters that xhtml2pdf can't render."""
+                result = []
+                for char in text:
+                    code = ord(char)
+                    # Skip emoji and symbol ranges
+                    if (0x1F300 <= code <= 0x1FFFF or  # All emoji ranges
+                        0x2600 <= code <= 0x27BF or    # Misc Symbols & Dingbats
+                        0x2300 <= code <= 0x23FF or    # Misc Technical
+                        0xFE00 <= code <= 0xFE0F):     # Variation selectors
+                        continue
+                    result.append(char)
+                return ''.join(result)
+            
+            html_content = strip_emojis(html_content)
+            
+            html_content = strip_emojis(html_content)
+            
+            def fetch_and_encode_image(url):
+                """Fetch remote image and return base64 data URI."""
+                nonlocal failed_image_count
+                MIN_IMAGE_SIZE = 5 * 1024  # 5KB - filter out placeholder/blocked images
+                try:
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        image_data = response.read()
+                    
+                    # Check for likely placeholder/geo-blocked images (too small)
+                    if len(image_data) < MIN_IMAGE_SIZE:
+                        failed_image_count += 1
+                        print(f"⚠️  Image too small (likely placeholder): {url[:50]}... ({len(image_data)//1024}KB)")
+                        return None
+                    
+                    # Determine MIME type
+                    content_type = response.headers.get('Content-Type', 'image/jpeg')
+                    if 'png' in url.lower():
+                        content_type = 'image/png'
+                    elif 'gif' in url.lower():
+                        content_type = 'image/gif'
+                    elif 'webp' in url.lower():
+                        content_type = 'image/webp'
+                    
+                    b64_data = base64.b64encode(image_data).decode('utf-8')
+                    return f'data:{content_type};base64,{b64_data}'
+                except Exception as e:
+                    failed_image_count += 1
+                    print(f"⚠️  Could not fetch image: {url[:60]}... ({e})")
+                    return None
+            
+            def replace_src(match):
+                url = match.group(1)
+                data_uri = fetch_and_encode_image(url)
+                if data_uri:
+                    return f'src="{data_uri}"'
+                return match.group(0)
+            
+            def replace_href_with_img(match):
+                """Convert <a href="image_url">text</a> to <img src="data:...">"""
+                url = match.group(1)
+                alt_text = match.group(2)
+                data_uri = fetch_and_encode_image(url)
+                if data_uri:
+                    return f'<img src="{data_uri}" alt="{alt_text}" style="max-width:100%">'
+                return match.group(0)
+            
+            # Replace img src attributes
+            html_content = re_module.sub(r'src="(https?://[^"]+)"', replace_src, html_content)
+            
+            # Also convert anchor links that point to images
+            html_content = re_module.sub(
+                r'<a href="(https?://[^"]+\.(?:jpg|jpeg|png|gif|webp)[^"]*)">([^<]+)</a>',
+                replace_href_with_img,
+                html_content,
+                flags=re_module.IGNORECASE
+            )
+            
+            # Add ID attributes to headings for internal anchor links
+            # This makes #section-name links work in PDF
+            def add_heading_ids(match):
+                tag = match.group(1)
+                content = match.group(2)
+                # Generate ID from heading text (lowercase, replace spaces with dashes)
+                heading_id = re_module.sub(r'[^\w\s-]', '', content.lower())
+                heading_id = re_module.sub(r'[-\s]+', '-', heading_id).strip('-')
+                return f'<{tag} id="{heading_id}">{content}</{tag}>'
+            
+            html_content = re_module.sub(
+                r'<(h[1-6])>([^<]+)</\1>',
+                add_heading_ids,
+                html_content
+            )
+            
+            # CRITICAL: xhtml2pdf doesn't handle <pre> whitespace properly
+            # Convert newlines in <pre> and <code> blocks to <br/> tags
+            def fix_pre_blocks(match):
+                content = match.group(1)
+                # Replace newlines with <br/> and preserve indentation with &nbsp;
+                lines = content.split('\n')
+                fixed_lines = []
+                for line in lines:
+                    # Count leading spaces and convert to &nbsp;
+                    stripped = line.lstrip(' ')
+                    indent = len(line) - len(stripped)
+                    nbsp_indent = '&nbsp;' * indent
+                    fixed_lines.append(nbsp_indent + stripped)
+                return '<pre><code>' + '<br/>'.join(fixed_lines) + '</code></pre>'
+            
+            html_content = re_module.sub(r'<pre><code[^>]*>(.*?)</code></pre>', fix_pre_blocks, html_content, flags=re_module.DOTALL)
+            html_content = re_module.sub(r'<pre>(.*?)</pre>', fix_pre_blocks, html_content, flags=re_module.DOTALL)
+            
+            # Add explicit column widths via inline styles on header cells
+            # xhtml2pdf needs explicit widths for proper table layout
+            def add_table_column_widths(html):
+                """Add width styles to table header cells based on column count."""
+                
+                def add_width_to_th(th_html, width_pct):
+                    """Add or merge width style into a th element."""
+                    # Check if th has existing style
+                    if 'style="' in th_html:
+                        # Append width to existing style
+                        return th_html.replace('style="', f'style="width:{width_pct}%; ')
+                    else:
+                        # Add new style attribute
+                        return th_html.replace('<th', f'<th style="width:{width_pct}%"', 1)
+                
+                def process_table(table_match):
+                    table_html = table_match.group(0)
+                    
+                    # Find all th elements in thead
+                    thead_match = re_module.search(r'<thead>(.*?)</thead>', table_html, flags=re_module.DOTALL)
+                    if not thead_match:
+                        return table_html
+                    
+                    thead_content = thead_match.group(1)
+                    th_elements = re_module.findall(r'<th[^>]*>.*?</th>', thead_content, flags=re_module.DOTALL)
+                    col_count = len(th_elements)
+                    
+                    if col_count == 0:
+                        return table_html
+                    
+                    headers_text = [re_module.sub(r'<[^>]+>', '', th).strip().lower() for th in th_elements]
+                    
+                    # Content-aware width maps
+                    if 'menu #' in headers_text or 'jump point' in headers_text:
+                         # Fast Jump Points: | Menu # | Task | Jump Point | Description |
+                         widths = [10, 20, 30, 40]
+                    elif 'model' in headers_text and 'vram' in headers_text:
+                         # Text Models: | Model | VRAM | RAM | Notes |
+                         widths = [35, 12, 12, 41]
+                    elif 'argument' in headers_text:
+                         # Upscaling: | Argument | Description | Default |
+                         widths = [35, 45, 20]
+                    elif 'goal' in headers_text and col_count == 2:
+                         # Transformation: | Goal | Command Pattern |
+                         widths = [25, 75]
+                    else:
+                        # Fallback defaults
+                        width_maps = {
+                            2: [25, 75],
+                            3: [33, 34, 33],
+                            4: [25, 25, 25, 25],
+                            5: [10, 15, 25, 25, 25],
+                            6: [10, 15, 15, 15, 15, 30],
+                            7: [10, 12, 12, 12, 12, 12, 30],
+                            8: [8, 12, 10, 10, 10, 10, 10, 30],
+                        }
+                        widths = width_maps.get(col_count, [100 // col_count] * col_count)
+                    
+                    # Replace each th with width-styled version
+                    new_thead_content = thead_content
+                    for i, th in enumerate(th_elements):
+                        if i < len(widths):
+                            styled_th = add_width_to_th(th, widths[i])
+                            new_thead_content = new_thead_content.replace(th, styled_th, 1)
+                    
+                    return table_html.replace(thead_match.group(1), new_thead_content)
+                
+                return re_module.sub(r'<table>.*?</table>', process_table, html, flags=re_module.DOTALL)
+            
+            html_content = add_table_column_widths(html_content)
+            
+            # Fix internal anchor links - ensure href anchors match heading IDs exactly
+            # xhtml2pdf needs explicit name attributes on targets
+            def fix_anchor_targets(match):
+                tag = match.group(1)
+                heading_id = match.group(2)
+                content = match.group(3)
+                # Add both id and name attributes for maximum compatibility
+                return f'<{tag} id="{heading_id}"><a name="{heading_id}"></a>{content}</{tag}>'
+            
+            html_content = re_module.sub(
+                r'<(h[1-6]) id="([^"]+)">([^<]+)</\1>',
+                fix_anchor_targets,
+                html_content
+            )
+            
+            # Wrap in full HTML document for xhtml2pdf
+            full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page {{
+    size: a4 portrait;
+    margin: 1.5cm;
+}}
+body {{ 
+    font-family: Helvetica, sans-serif; 
+    font-size: 9pt; 
+    line-height: 1.4; 
+}}
+h1 {{ font-size: 18pt; color: #333; margin-top: 0.8em; margin-bottom: 0.4em; page-break-after: avoid; }}
+h2 {{ font-size: 14pt; color: #444; margin-top: 0.6em; margin-bottom: 0.3em; page-break-after: avoid; }}
+h3 {{ font-size: 12pt; color: #555; margin-top: 0.5em; margin-bottom: 0.2em; page-break-after: avoid; }}
+h4 {{ font-size: 10pt; color: #666; margin-top: 0.4em; margin-bottom: 0.2em; }}
+p {{ margin: 0.3em 0; }}
+pre {{ 
+    background: #f4f4f4; 
+    padding: 6px; 
+    border: 1px solid #ddd;
+    font-family: Courier, monospace; 
+    font-size: 6pt;
+    line-height: 1.2;
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}}
+code {{ 
+    background: #f0f0f0; 
+    padding: 1px 2px;
+    font-family: Courier, monospace;
+    font-size: 6pt;
+    word-wrap: break-word;
+    word-break: break-all;
+}}
+/* Lists - explicit styling for xhtml2pdf */
+ul {{ 
+    margin: 0.4em 0 0.4em 1.5em; 
+    padding: 0;
+}}
+ol {{ 
+    margin: 0.4em 0 0.4em 1.5em; 
+    padding: 0;
+}}
+li {{ 
+    margin: 0.15em 0; 
+    padding-left: 0.3em;
+}}
+ul li {{ list-style-type: disc; }}
+ul ul li {{ list-style-type: circle; }}
+ol li {{ list-style-type: decimal; }}
+img {{ max-width: 100%; height: auto; }}
+/* Tables - auto layout for content-aware column sizing */
+table {{ 
+    border-collapse: collapse; 
+    width: 100%; 
+    font-size: 6pt;
+    margin: 0.4em 0;
+}}
+th, td {{ 
+    border: 1px solid #999; 
+    padding: 2px 4px; 
+    text-align: left;
+    word-wrap: break-word;
+}}
+th {{ background: #e8e8e8; font-weight: bold; }}
+a {{ color: #0066cc; text-decoration: underline; }}
+blockquote {{
+    border-left: 2px solid #999;
+    margin: 0.4em 0;
+    padding-left: 0.8em;
+    color: #555;
+    font-size: 8pt;
+}}
+/* GitHub-style alerts */
+.alert {{
+    border-left: 3px solid #999;
+    padding: 0.5em 0.8em;
+    margin: 0.5em 0;
+    background: #f8f8f8;
+    font-size: 8pt;
+}}
+</style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+            
+            with open(filename, "wb") as f:
+                pisa_status = pisa.CreatePDF(full_html, dest=f)
+            
+            if pisa_status.err:
+                print("❌ PDF conversion failed")
+            else:
+                 print(f"✅ PDF saved: {filename}")
+                 
+        elif fmt == "txt":
+            # Strip markdown chars via BS4
+            html = markdown.markdown(markdown_text)
+            text = BeautifulSoup(html, "html.parser").get_text()
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(text)
+                
+        else:
+            print(f"⚠️ Unknown format '{fmt}', saving as MD.")
+            with open(f"{base}.md", "w", encoding="utf-8") as f:
+                f.write(markdown_text)
+
+        print(f"✅ Saved to {filename}")
+        return failed_image_count
+
+
 # --- Main Logic ---
+
+def run_unit_tests(module_name=None, verbose=False):
+    """Run unit tests using python's unittest module."""
+    import subprocess
+    target = module_name if module_name else "tests.ai-media_test"
+    
+    print(f"{emoji('🧪 ', '')}Running Unit Tests: {target}\n")
+    print("=" * 60)
+    
+    cmd = [sys.executable, "-m", "unittest", target]
+    if verbose:
+        cmd.append("-v")
+    
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    
+    # Run synchronously
+    try:
+        subprocess.run(cmd, env=env, check=False) # check=False to custom handle exit
+    except Exception as e:
+        print(f"Error running tests: {e}")
+        sys.exit(1)
+
+
 
 class CleanHelpFormatter(argparse.RawTextHelpFormatter):
     """Custom formatter that hides metavar and uses wider columns."""
@@ -6003,6 +8088,13 @@ Examples:
   python ai-media.py -a -ii ./video.mp4 (Auto-caption Video + Audio)
   python ai-media.py -a -p "♪ In the jungle ♪ [laughter]" --audio-model bark (Bark Creative)
 
+  -- Text Generation (Articles, Research, Chat, Code) --
+  python ai-media.py -ga -p "Future of AI" -o article.md (Offline)
+  python ai-media.py -gr -p "Latest Quantum Computing News" -o research.pdf (Online Deep Research)
+  python ai-media.py -c --chat-model llama-3.1-8b (Interactive Chat)
+  python ai-media.py -gc 'Write a Snake game in Python' (Code Gen)
+  python ai-media.py -ga -p "Story about a cat" -o story.docx -atm mistral-nemo-12b
+
   -- Generate Description --
   python ai-media.py -gd -ii video.mp4
   python ai-media.py -gd -ii image.jpg -cm blip (Use simpler model)
@@ -6028,42 +8120,53 @@ Examples:
 
 Supported Models:
   Images:
-    - sdxl (default)    : ~8GB  | stabilityai/sdxl-turbo (Open)
-    - sd-1.5            : ~4GB  | runwayml/stable-diffusion-v1-5 (Open, No Login)
-    - flux              : ~24GB | black-forest-labs/FLUX.1-schnell (🔒 Gated - Free Login Required)
-    - flux-dev          : ~24GB | black-forest-labs/FLUX.1-dev (🔒 Gated - Free Login Required)
+    - sdxl (default)           : ~8GB  | Fast, high quality.
+    - sd-1.5                   : ~4GB  | Lightweight, lower VRAM.
+    - flux                     : ~24GB | High quality (🔒 Gated - Free Login Required)
+    - flux-dev                 : ~24GB | Professional creative work (🔒 Gated - Free Login Required)
   
   Video:
-    - zeroscope (default): ~4GB  | cerspense/zeroscope_v2_576w (Open, 576x320)
-    - ms-1.7b            : ~10GB | damo-vilab/text-to-video-ms-1.7b (Has watermarks)
-    - cogvideox          : ~15GB | THUDM/CogVideoX-5b (Open)
-    - svd                : ~4GB  | stabilityai/stable-video-diffusion-img2vid-xt (Open, I2V Only)
-    - wan2.2             : ~30GB | Alibaba-PAI/Wan-2.2-T2V-14B (SOTA, Heavy VRAM)
-    - ltx-video          : ~12GB | Lightricks/LTX-Video (Fast, Good Motion)
-    - mochi-1            : ~19GB | genmo/mochi-1-preview (High Motion Fidelity)
-    - hunyuan            : ~25GB | tencent/HunyuanVideo (13B Massive Scale)
+    - zeroscope (default)      : ~4GB  | Fast, no watermarks. Auto-upscales with XL.
+    - ms-1.7b                  : ~10GB | General purpose (has watermark issues).
+    - cogvideox                : ~15GB | High fidelity.
+    - svd                      : ~4GB  | I2V Only.
+    - wan2.2                   : ~30GB | SOTA (2025). Excellent quality.
+    - ltx-video                : ~12GB | Balanced speed/quality. Good motion.
+    - mochi-1                  : ~19GB | High motion fidelity.
+    - hunyuan                  : ~25GB | Massive scale.
     
   Audio:
-    - musicgen-small           : ~2GB  | Fast, good for music sketches
-    - musicgen-medium (default): ~6GB  | Better composition & fidelity
-    - musicgen-large           : ~10GB | Highest quality music generation
-    - audioldm2                : ~4GB  | Sound effects (SFX), foley, environmental
-    - stable-audio             : ~10GB | 🔒 Gated. Best for Sound Effects (SFX), Drums, Ambient.
-    - bark                     : ~4GB  | Speech (TTS) & creative audio. Transformer-based
+    - musicgen-small           : ~2GB  | Fast, lightweight. Good for quick sketches.
+    - musicgen-medium (default): ~6GB  | Balanced quality/speed.
+    - musicgen-large           : ~10GB | High fidelity. Slower.
+    - audioldm2                : ~4GB  | Specialized in Sound Effects (SFX), foley, environmental.
+    - stable-audio             : ~10GB | Variable-length, high-quality music/SFX (🔒 Gated - Free Login Required)
+    - bark                     : ~4GB  | Realistic speech, music, and sound effects.
     
+  Text (Articles, Research, Chat, Code):
+    - deepseek-r1-qwen-7b      : ~7GB  | R1 distilled to Qwen-7B. Step-by-step reasoning. (Ungated)
+    - deepseek-r1-qwen-14b     : ~14GB | R1 distilled to Qwen-14B. Better reasoning. (Ungated)
+    - deepseek-r1-qwen-32b     : ~24GB | ⚠️ HIGH RAM! R1 distilled to Qwen-32B. (Ungated)
+    - deepseek-r1-llama-8b     : ~8GB  | R1 distilled to Llama-8B. Reasoning-focused. (Ungated)
+    - deepseek-r1-llama-70b    : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B. (Ungated)
+    - llama-3.1-8b (default)   : ~16GB | Writing, chat, and reasoning (🔒 Gated - Free Login Required)
+    - mistral-nemo-12b         : ~24GB | Powerful 12B model. Large context and reasoning.
+    - qwen3-8b                 : ~16GB | Latest Qwen model. Strong instruction-following.
+    - qwen-2.5-14b             : ~28GB | Larger Qwen model. Great at detailed formatting.
+
   Description Generation:
-    - florence (default) : ~1.5GB | microsoft/Florence-2-large (SOTA Details)
-    - blip               : ~1GB   | Salesforce/blip-image-captioning-large (Simple)
+    - florence (default)       : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene.
+    - blip                     : ~1GB   | Simple, concise captions. Faster but less detailed.
 
   Creative Image Transformation:
-    - instruct-pix2pix     : ~4GB  | timbrooks/instruct-pix2pix (Edit via prompts)
-    - instruct-pix2pix-sdxl: ~8GB  | diffusers/sdxl-instructpix2pix-768 (High Quality)
-    - remove-bg            : ~1GB  | briaai/RMBG-1.4 (State of the art BG Removal)
+    - instruct-pix2pix         : ~4GB  | Instructional image editing (e.g., "Make it anime").
+    - instruct-pix2pix-sdxl    : ~8GB  | High quality, slow.
+    - remove-bg                : ~1GB  | Background removal and silhouette creation.
 
   Upscaling:
-    - x2 (≤2x factor)   : ~4GB  | stabilityai/sd-x2-latent-upscaler (64px alignment)
-    - x4 (>2x factor)   : ~8GB  | stabilityai/stable-diffusion-x4-upscaler (8px alignment)
-    - Real-ESRGAN x4plus: ~0.3GB| ai-forever/Real-ESRGAN (Fast, Faithful)
+    - x2 (≤2x factor)          : ~4GB  | Fast, preserves original style.
+    - x4 (>2x factor)          : ~8GB  | High detail, sharpens textures.
+    - Real-ESRGAN x4plus       : ~0.3GB| Fast, faithful upscaling, better temporal consistency.
         """
     )
     
@@ -6072,6 +8175,14 @@ Supported Models:
     mode_group.add_argument("-i", "--generate-image", action="store_true", help="Generate Image")
     mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
     mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
+    
+    # NEW: Article Modes
+    mode_group.add_argument("-ga", "--generate-article", action="store_true", help="Generate Article (Offline)")
+    mode_group.add_argument("-gr", "--generate-research", action="store_true", help="Generate Article + Research (Online)")
+    mode_group.add_argument("-c", "--chat", action="store_true", help="Interactive Chat Mode")
+    mode_group.add_argument("-gc", "--generate-code", nargs="?", const=True, default=False, 
+                            help="Generate code. Supports multi-file projects & auto-naming. E.g.: -gc 'Write a REST API'")
+    
     mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video.")
     mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
     
@@ -6080,15 +8191,15 @@ Supported Models:
     common_group.add_argument("-p", "--prompt", required=False, help="Text prompt description (Required for generation modes)")
     common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
     common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
-    common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3).")
+    common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3). Article: md/pdf/doc/html.")
     common_group.add_argument("-s", "--size", help="Resolution for Image/Video: '720p', '1080p', '4k', '1280x720'. For zeroscope: triggers dynamic upscaling (XL + Real-ESRGAN) for targets > 576x320. Default: 720p")
     common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
     
-
     
     # Specific options
     image_group = parser.add_argument_group("Image Options")
-    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(IMAGE_MODELS.keys())}")
+    image_models_help = [k + " (Gated)" if k in ["flux", "flux-dev"] else k for k in IMAGE_MODELS.keys()]
+    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(image_models_help)}")
     image_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
                               help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
     image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
@@ -6102,21 +8213,34 @@ Supported Models:
                              help="Video Codec: h264, hevc, av1, or auto. AV1 uses hardware encoder (av1_nvenc) when available. Default: auto")
     
     audio_group = parser.add_argument_group("Audio Options")
-    audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(AUDIO_MODELS.keys())}")
-    audio_group.add_argument("--voice-preset", default="v2/en_speaker_6", help="Bark Voice Preset (e.g. 'v2/en_speaker_6', 'v2/fr_speaker_1'). Default: v2/en_speaker_6")
-    audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k, 48k). Default: 32000.")
+    audio_models_help = [k + " (Gated)" if k in ["stable-audio"] else k for k in AUDIO_MODELS.keys()]
+    audio_group.add_argument("-am", "--audio-model", default="default", help=f"Model: {', '.join(audio_models_help)}")
+    audio_group.add_argument("--voice-preset", default="v2/en_speaker_6", help="Bark Voice Preset (e.g. 'v2/en_speaker_6'). Default: v2/en_speaker_6")
+    audio_group.add_argument("-m", "--sampling-rate", type=str, default="32000", help="Sampling rate (e.g. 32000, 44.1k). Default: 32000.")
     audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
     audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
     
+    # NEW: Text Options
+    text_group = parser.add_argument_group("Text/Article Options (Articles, Research, Chat, Code)")
+    text_models_help = [k + " (Gated)" if k in ["llama-3.1-8b"] else k for k in TEXT_MODELS.keys()]
+    text_group.add_argument("-atm", "--article-model", default="default", 
+                            help=f"Model for articles/research (-ga/-gr). Options: {', '.join(text_models_help)}")
+    text_group.add_argument("-chm", "--chat-model", default="default", 
+                            help=f"Model for chat (-c). Options: {', '.join(text_models_help)}")
+    text_group.add_argument("-cdm", "--code-model", default="default", 
+                            help=f"Model for code gen (-gc). Options: {', '.join(text_models_help)}")
+    text_group.add_argument("--output-format", choices=["md", "pdf", "docx", "rtf", "html", "xhtml", "json", "txt"], default="md", 
+                            help="Article/research output format. Default: md")
+    text_group.add_argument("-ri", "--research-iter", type=int, default=3, 
+                            help="Deep research: number of sources to read. Default: 3")
+    text_group.add_argument("-al", "--article-length", choices=["quick", "standard", "detailed"], default="quick",
+                            help="Article length: quick (fast, ~500 words, default), standard (~1500 words), detailed (comprehensive, ~3000 words).")
+
     # Description Generation Options
     caption_group = parser.add_argument_group("Description Generation Options")
     caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip"], help="Model for description generation: 'florence' (default, SOTA) or 'blip'.")
     
-    
-    # Safety Checker
-    # common_group.add_argument("--unsafe", action="store_true",
-    #                           help="Disable NSFW safety checker (reduces false positives but allows adult content).")
-
+    # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
     transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
     transform_group.add_argument("-rb", "--remove-background", action="store_true", help="Remove background (Transparent PNG).")
@@ -6133,28 +8257,17 @@ Supported Models:
     convert_group.add_argument("-cat", "--convert-audio-to", metavar="FMT", help="Output format (mp3, .flac, out.ogg)")
     convert_group.add_argument("--convert-image-engine", choices=["pil", "ffmpeg"], default="pil", help="pil (default) or ffmpeg")
     
+    # Document Conversion
+    doc_conv_group = parser.add_argument_group("Document Conversion Options")
+    doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document format (e.g., report.docx→pdf)")
+    doc_conv_group.add_argument("-cdt", "--convert-document-to", metavar="FMT", help="Output format: md, html, pdf, docx, rtf, txt, json")
+    
     # AI Upscaling (Standalone Mode)
     upscale_mode_group = parser.add_argument_group("AI Upscaling Options")
     upscale_mode_group.add_argument("-ui", "--upscale-image", metavar="FILE", help="Upscale an existing image")
     upscale_mode_group.add_argument("-uv", "--upscale-video", metavar="FILE", help="Upscale an existing video")
     upscale_mode_group.add_argument("-iu", "--image-upscaler", choices=["sd", "realesrgan"], default="realesrgan", help="Model for image upscaling: 'realesrgan' (Fast, faithful, default) or 'sd' (Stable Diffusion, slower, creative)")
     upscale_mode_group.add_argument("-vu", "--video-upscaler", choices=["sd", "realesrgan"], default="realesrgan", help="Model for video upscaling: 'realesrgan' (Fast, faithful, default) or 'sd' (Stable Diffusion, slow, detailed)")
-    # transform_group.add_argument("--vignette", action="store_true", help="Add a vignette effect.")
-    # transform_group.add_argument("--add-noise", type=float, help="Add noise strength (0.0-1.0).")
-
-    # Time/Length
-    # common_group.add_argument("-l", "--length", default=DEFAULT_DURATION,
-    #                           help="Duration: '15s', '1h', '{m:2, s:30}'. Default: 15s")
-                              
-    # Model Selection
-    # model_group = parser.add_argument_group("Model Selection")
-    # model_group.add_argument("--image-model", default="default", help="Model code or ID for image generation. Default: sdxl")
-    # model_group.add_argument("--audio-model", default="default", help="Model code or ID for audio generation. Default: musicgen-small")
-    # model_group.add_argument("--video-model", default="default", help="Model code or ID for video generation. Default: zeroscope")
-    
-    # Audio Specific
-
-
 
     # Upscaling Options (applies to both standalone and chained upscaling)
     upscale_group = parser.add_argument_group("Upscaling Options")
@@ -6182,739 +8295,289 @@ Supported Models:
     global args
     args = parser.parse_args()
     
-    # Combined Test Execution Logic
-    exit_code = 0
-    run_any_tests = False
-    
-    # Propagate Force Flag globally (Must be done before tests)
-    if args.force:
-        os.environ["AI_MEDIA_FORCE"] = "1"
-
-    # 1. Run unit tests if requested
-    if args.unittests is not None or args.unittests_verbose is not None:
-        run_any_tests = True
-        
-        # Determine target and verbosity
-        target = args.unittests if args.unittests else args.unittests_verbose
-        is_verbose = args.unittests_verbose is not None
-        
-        print(f"{emoji('🧪 ', '')}Running Unit Tests: {target}\n")
-        print("=" * 60)
-        
-        import subprocess
-        
-        # Build command
-        cmd = [sys.executable, "-m", "unittest", target]
-        if is_verbose:
-            cmd.append("-v")
-        
-        # Run and capture output
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            env=env
-        )
-        
-        if is_verbose:
-            # Post-process verbose output to add line breaks and emojis
-            # unittest -v format: "test_name (module.Class.test_name)\nDescription ... status"
-            for line in proc.stdout:
-                line = line.rstrip()
-                
-                # Skip empty lines (we'll add our own spacing)
-                if not line:
-                    continue
-                
-                # Test result lines end with " ... ok/FAIL/ERROR/skipped"
-                if line.endswith(" ... ok"):
-                    line = line[:-7] + f" ... {emoji('✅', 'ok')}"
-                    print(f"{emoji('🔹 ', '')}{line}\n")
-                elif line.endswith(" ... FAIL"):
-                    line = line[:-9] + f" ... {emoji('❌', 'FAIL')}"
-                    print(f"{emoji('🔹 ', '')}{line}\n")
-                elif line.endswith(" ... ERROR"):
-                    line = line[:-10] + f" ... {emoji('❌', 'ERROR')}"
-                    print(f"{emoji('🔹 ', '')}{line}\n")
-                elif " ... skipped" in line:
-                    line = line.replace(" ... skipped", f" ... {emoji('⏭️', 'skipped')}")
-                    print(f"{emoji('🔹 ', '')}{line}\n")
-                # Summary line
-                elif line.startswith("Ran "):
-                    print(f"\n{'-' * 60}")
-                    print(f"{emoji('📊 ', '')}{line}")
-                elif line.startswith("OK"):
-                    print(f"{emoji('✅ ', '')}{line}")
-                elif line.startswith("FAILED"):
-                    print(f"{emoji('❌ ', '')}{line}")
-                # Other lines (test name, tracebacks, etc)
-                else:
-                    print(line)
-            
-            proc.wait()
-            if proc.returncode != 0:
-                exit_code = proc.returncode
-        else:
-            # Non-verbose: just stream output directly
-            for line in proc.stdout:
-                print(line, end='')
-            proc.wait()
-            if proc.returncode != 0:
-                exit_code = proc.returncode
-
-    # 2. Run test suite if requested
-    if args.test is not None or args.test_verbose is not None:
-        run_any_tests = True
-        # Determine test filter
-        test_filter = []
-        if args.test: test_filter.extend(args.test)
-        if args.test_verbose: test_filter.extend(args.test_verbose)
-        
-        if not test_filter:
-            test_filter = None # Run All
-        
-        # run_tests usually calls sys.exit, we need to handle that or modify run_tests
-        # Since run_tests exits, we must ensure it's the last thing if called directly,
-        # OR we modify run_tests to return status. 
-        # Modifying run_tests is cleaner.
-        success = run_tests(verbose=bool(args.test_verbose is not None), test_filter=test_filter, exit_on_finish=False)
-        if not success:
-            exit_code = 1
-            
-    if run_any_tests:
-        sys.exit(exit_code)
-    
-    # Run interactive mode if --interactive is provided OR no arguments given
-    # Check if any meaningful argument was provided
-    has_action = (args.generate_image or args.generate_video or args.generate_audio or
-                  args.generate_description or args.transform_image or
-                  args.upscale_image or args.upscale_video or
-                  args.convert_image or args.convert_video or args.convert_audio or
-                  args.prompt)
-    
-    if args.interactive or not has_action:
-        run_interactive(args.interactive)
-        return
-    
-    # Prompt Validation (Required unless upscaling/converting/captioning/transforming OR using Image Input for Generation)
-    standalone_modes = (args.upscale_image or args.upscale_video or 
-                       args.convert_image or args.convert_video or args.convert_audio or
-                       args.generate_description or args.transform_image)
-    
-    # Check if we are generating with an image input (valid for Audio and Video)
-    is_image_based_generation = (args.generate_audio or args.generate_video) and args.input_image
-    
-    if not standalone_modes and not args.prompt and not is_image_based_generation:
-        parser.error(" The -p/--prompt argument is required unless running in Upscale/Convert/Transform Mode or providing an Input Image.\n                            (e.g. python ai-media.py -i -p \"cat\")")
-    
-    # --- Logic Routing ---
-    
-    uf = parse_upscale_factor(args.upscale_factor)
-    
-
-        
-
-
-    # 0. Generate Description (Captioning)
-    if args.generate_description:
-        # Determine input file
-        target_file = None
-        if args.generate_description != "USE_INPUT_IMAGE":
-            target_file = args.generate_description
-        elif args.input_image:
-            target_file = args.input_image
-            
-        if not target_file:
-            print("❌ Error: --generate-description requires a file path.\n   Usage: -gd [file]  OR  -gd -ii [file]")
-            sys.exit(1)
-        
-        device, _ = get_optimal_device_and_dtype(quiet=False)
-        caption = generate_caption(target_file, device, model_type=args.caption_model)
-        
-        if caption:
-            print(f"\n📝 Generated Description:\n{caption}\n")
-            
-            output_path = args.output
-            if not output_path:
-                 # Auto-generate filename: input_basename.txt
-                 base_name = os.path.splitext(target_file)[0]
-                 output_path = f"{base_name}.txt"
-            
-            # Ensure folder exists
-            ensure_paths(output_path)
-            
-            # check overwrite
-            if os.path.exists(output_path) and not args.force:
-                print(f"⚠️  File '{output_path}' already exists.")
-                try:
-                    choice = input(f"   Overwrite? [y/N]: ").lower().strip()
-                    if choice not in ['y', 'yes']:
-                        print("❌ Operation cancelled.")
-                        sys.exit(0)
-                except KeyboardInterrupt:
-                    print("\n❌ Operation cancelled.")
-                    sys.exit(0)
-
-            with open(output_path, "w") as f:
-                f.write(caption)
-            print(f"✅ Saved description to: {output_path}")
-        else:
-            print("❌ Failed to generate description.")
+    # Interactive Mode Trigger
+    if args.interactive or len(sys.argv) == 1:
+        run_interactive(jump_point=args.interactive if args.interactive != "menu" else None)
         sys.exit(0)
 
-    # 1. Media Conversion (Highest Priority - No AI)
-    if args.convert_image:
-        if not args.convert_image_to:
-            parser.error("Image conversion requires -cit/--convert-image-to (e.g., -ci input.gif -cit png)")
-        if args.convert_image_engine == "ffmpeg":
-            convert_image_ffmpeg(args.convert_image, args.convert_image_to)
-        else:
-            convert_image_file(args.convert_image, args.convert_image_to)
-        return
-    
-    if args.convert_video:
-        if not args.convert_video_to:
-            parser.error("Video conversion requires -cvt/--convert-video-to (e.g., -cv input.mov -cvt mp4)")
-        convert_video_file(args.convert_video, args.convert_video_to)
-        return
-    
-    if args.convert_audio:
-        if not args.convert_audio_to:
-            parser.error("Audio conversion requires -cat/--convert-audio-to (e.g., -ca input.wav -cat mp3)")
-        convert_audio_file(args.convert_audio, args.convert_audio_to)
-        return
-        
-    # Handle -uof alias for standalone mode (treat as output)
-    if args.upscaled_output_file and not args.output:
-        args.output = args.upscaled_output_file
-    
-    # 1. Upscaling (High Priority Standalone)
-    if args.upscale_image:
-        if not args.output:
-             name, ext = os.path.splitext(args.upscale_image)
-             suffix = "simple" if args.simple_upscale else "upscaled"
-             args.output = f"{name}_{suffix}_{uf}x.png"
-        
-        if args.simple_upscale:
-            simple_upscale_image(args.upscale_image, args.output, factor=uf)
-        elif args.image_upscaler == "realesrgan":
-            success = upscale_image_fast(args.upscale_image, args.output, factor=uf)
-            if not success: sys.exit(1)
-        else:
-            upscale_image_file(args.upscale_image, args.output, args.upscale_strength, factor=uf)
-        return
-
-    if args.upscale_video:
-        if not args.output:
-             name, ext = os.path.splitext(args.upscale_video)
-             suffix = "simple" if args.simple_upscale else "upscaled"
-             args.output = f"{name}_{suffix}_{uf}x.mp4"
-        
-        if args.simple_upscale:
-            simple_upscale_video(args.upscale_video, args.output, factor=uf)
-        elif args.video_upscaler == "realesrgan":
-            success = upscale_video_fast(args.upscale_video, args.output, factor=uf, codec=args.video_codec)
-            if not success: sys.exit(1)
-        else:
-            upscale_video_file(args.upscale_video, args.output, args.upscale_strength, factor=uf)
-        return
-
-    # 2. Validation for Generation
-    if not any([args.generate_image, args.generate_video, args.generate_audio, args.generate_description, args.transform_image, args.upscale_image, args.upscale_video]):
-        parser.error("You must specify a generation mode: -i, -v, -a, -gd, -ti (or --upscale-image/--upscale-video)")
-    
-    # Auto-generate output filename from prompt if not provided
-    if not args.output:
-        # Sanitize prompt to create safe filename (first 2 words, alphanumeric only)
-        if args.prompt:
-            words = re.findall(r'[a-zA-Z0-9]+', args.prompt.lower())[:2]
-            if words:
-                args.output = "-".join(words)
-                print(f"ℹ️  No output specified. Using: {args.output}")
-            else:
-                parser.error("Cannot auto-generate filename: prompt contains no valid words. Please specify -o.")
-        elif args.input_image:
-             # Use input filename as base
-             base = os.path.splitext(os.path.basename(args.input_image))[0]
-             args.output = f"audio_{base}" if args.generate_audio else f"video_{base}"
-             print(f"ℹ️  No output specified. Using input basename: {args.output}")
-
-        elif args.transform_image:
-             # Use transform input filename as base
-             base = os.path.splitext(os.path.basename(args.transform_image))[0]
-             args.output = f"{base}_transformed"
-             print(f"ℹ️  No output specified. Using transform basename: {args.output}")
-        else:
-             parser.error("Cannot auto-generate filename (no prompt or input image). Please specify -o.")
-
-    # Smart Extension Handling
-    # If format is specified (-f png) but output doesn't have it, append it.
-    if args.format:
-        ext = f".{args.format.lower().lstrip('.')}"
-        if not args.output.lower().endswith(ext):
-            args.output += ext
-            print(f"ℹ️  Appended extension '{ext}' to output path.")
-    else:
-        # No format specified - check if output has an extension
-        _, existing_ext = os.path.splitext(args.output)
-        if not existing_ext:
-            # Auto-append default extension based on mode
-            if args.generate_image:
-                args.output += ".jpg"
-                print(f"ℹ️  No extension specified. Using default: .jpg\n")
-            elif args.generate_video:
-                args.output += ".mp4"
-                print(f"ℹ️  No extension specified. Using default: .mp4\n")
-            elif args.generate_audio:
-                args.output += ".mp3"
-                print(f"ℹ️  No extension specified. Using default: .mp3\n")
-            elif args.transform_image:
-                args.output += ".png"
-                print(f"ℹ️  No extension specified. Using default: .png\n")
-
-    ensure_paths(args.output)
-    
-    # Check for existing file
-    if os.path.exists(args.output) and not args.force:
-        print(f"⚠️  File '{args.output}' already exists.")
-        try:
-            choice = input(f"   Overwrite? [y/N]: ").lower().strip()
-            if choice not in ['y', 'yes']:
-                print("❌ Operation cancelled.")
-                sys.exit(0)
-            print("") # Spacer
-        except KeyboardInterrupt:
-            print("\n❌ Operation cancelled.")
-            sys.exit(0)
-    
-    # Argument Resolution
-    final_size = args.size
-
-    # Initialize Performance Tracker (unless disabled)
-    tracker = None
-    if not args.no_performance_tracking:
-        tracker = PerformanceTracker()
-    
-    device, _ = get_optimal_device_and_dtype()
-    
-    # Execution
-    import time
-    duration_sec = parse_duration(args.length)
-    
-    start_time = time.time()
-    
-    try:
-        success = False
-        if args.generate_image:
-            # Resolve model ID for consistent tracking (in case defaults change)
-            model_key = IMAGE_MODELS.get(args.image_model.lower(), args.image_model)
-            if args.image_model.lower() == "default": model_key = IMAGE_MODELS["default"]
-            w, h = parse_size(final_size)
-            
-            # Apply orientation swap if portrait mode
-            # Apply orientation swap if portrait mode
-            if args.orientation == "portrait":
-                w, h = h, w
-                print(f"📐 Portrait orientation: swapped to {w}x{h}")
-            elif args.orientation == "square":
-                # User request: use the smaller size and repeat it
-                side = min(w, h)
-                w, h = side, side
-                print(f"📐 Square orientation: adjusted to {w}x{h}")
-            
-            # --- Proactive Optimization for High-Res (4K+) ---
-            # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
-            total_pixels = w * h
-            if total_pixels > 6_000_000 and not args.upscale:
-                # Calculate Safe 3K Base
-                long_edge = max(w, h)
-                scale = 3072 / long_edge
-                safe_w = int(w * scale)
-                safe_h = int(h * scale)
-                
-                # Make sure safe dimensions are divisible by 8
-                safe_w = (safe_w // 8) * 8
-                safe_h = (safe_h // 8) * 8
-                
-                calc_factor = 1 / scale
-                
-                print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
-                print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
-                try:
-                    choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
-                    if choice not in ['n', 'no']:
-                        print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
-                        w = safe_w
-                        h = safe_h
-                        args.upscale = True
-                        uf = calc_factor # Setup factor for Stage 2
-                        args.force = True # Prevent double-confirmation (we just asked)
-                except KeyboardInterrupt:
-                    pass
-
-            # Resource check before starting
-            check_resources_and_warn(model_key, width=w, height=h, force=args.force)
-            
-            # Estimate
-            if tracker:
-                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_image(model_key, w, h, device)
-                if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
-                else:
-                    print(f"⏱️  Estimated Resources: (Calibrating... first run for {w}x{h})")
-                print("") # Spacer
-            
-            # Monitor and Generate
-            mon_ctx = ResourceMonitor() if tracker else None
-            
-            if mon_ctx: mon_ctx.__enter__()
-            
-            if args.upscale:
-                 print("")
-                 print("="*60)
-                 print(f"👉 Step 1 - Generate at {w}x{h}")
-                 print("="*60)
-                 print("")
-                 
-            success = generate_image(args.prompt, args.output, w, h, model_name=args.image_model, unsafe=args.unsafe)
-            if mon_ctx: mon_ctx.__exit__(None, None, None)
-            
-            if success and tracker:
-                elapsed = time.time() - start_time
-                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                # print("")  # Spacer
-                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
-                tracker.record_image(model_key, w, h, device, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-        
-        elif args.generate_video:
-            # Resolve model ID for consistent tracking
-            model_key = VIDEO_MODELS.get(args.video_model.lower(), args.video_model)
-            if args.video_model.lower() == "default": model_key = VIDEO_MODELS["default"]
-            w, h = parse_size(final_size)
-            
-            # --- Proactive Optimization for High-Res (4K+) ---
-            # User Feedback: 3K is fine, 4K is slow.
-            # Trigger if total pixels > 6MP (approx 3K territory) AND not already upscaling
-            total_pixels = w * h
-            if total_pixels > 6_000_000 and not args.upscale:
-                # Calculate Safe 3K Base
-                # Target max dimension 3072 covers "3K" nicely.
-                long_edge = max(w, h)
-                scale = 3072 / long_edge
-                safe_w = int(w * scale)
-                safe_h = int(h * scale)
-                
-                # Make sure safe dimensions are divisible by 8 (Architecture requirement)
-                safe_w = (safe_w // 8) * 8
-                safe_h = (safe_h // 8) * 8
-                
-                calc_factor = 1 / scale
-                
-                print(f"\n⚠️  High Resolution Detected ({w}x{h}). Native 4K+ generation can be very slow.\n")
-                print(f"💡 Recommendation: Generate at optimized 3K ({safe_w}x{safe_h}) + Auto-Upscale {calc_factor:.2f}x.\n")
-                try:
-                    choice = input(f"   🔄 Switch to optimized workflow? [Y/n]: ").lower().strip()
-                    if choice not in ['n', 'no']:
-                        print(f"\n   ✅ Switched to: Base {safe_w}x{safe_h} -> Upscale {calc_factor:.2f}x\n")
-                        w = safe_w
-                        h = safe_h
-                        args.upscale = True
-                        uf = calc_factor # Setup factor for Stage 2
-                        args.force = True # Prevent double-confirmation
-                except KeyboardInterrupt:
-                    pass
-
-            # Resource check before starting
-            check_resources_and_warn(model_key, width=w, height=h, duration=duration_sec, force=args.force)
-                
-            if tracker:
-                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("video", model_key, device, duration_sec, w, h)
-                if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
-                else:
-                    print(f"⏱️  Estimated Resources: (Calibrating... first run)")
-                print("") # Spacer
-            
-            mon_ctx = ResourceMonitor() if tracker else None
-            if mon_ctx: mon_ctx.__enter__()
-            
-            if args.upscale:
-                 print("")
-                 print("="*60)
-                 print(f"👉 Step 1 - Generate at {w}x{h}")
-                 print("="*60)
-                 print("")
-                 
-            success = generate_video(
-                args.prompt, 
-                args.output, 
-                duration_sec, 
-                w, 
-                h, 
-                model_name=args.video_model,
-                image_input=args.input_image,
-                audio_prompt=args.audio_prompt,
-                audio_model=args.audio_model
-            )
-            if mon_ctx: mon_ctx.__exit__(None, None, None)
-
-            if success and tracker:
-                elapsed = time.time() - start_time
-                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                # print("")  # Spacer
-                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
-                tracker.record_linear("video", model_key, device, duration_sec, elapsed, width=w, height=h, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-        
-        elif args.generate_audio:
-            # Resolve model ID for consistent tracking
-            model_key = AUDIO_MODELS.get(args.audio_model.lower(), args.audio_model)
-            if args.audio_model.lower() == "default": model_key = AUDIO_MODELS["default"]
-            hz = parse_sampling_rate(args.sampling_rate)
-            
-            # Resource check before starting
-            check_resources_and_warn(model_key, duration=duration_sec, force=args.force)
-            
-            if tracker:
-                est_time, est_cpu, est_ram, est_vram, est_gpu = tracker.estimate_linear("audio", model_key, device, duration_sec)
-                if est_time:
-                    print(f"⏱️  Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
-                    print("") # Spacer
-                else:
-                    print(f"⏱️  Estimated Resources: (Calibrating... first run)")
-                    print("") # Spacer
-            
-            mon_ctx = ResourceMonitor() if tracker else None
-            if mon_ctx: mon_ctx.__enter__()
-            success = generate_audio(
-                args.prompt, args.output, duration_sec, 
-                args.sampling_rate, model_name=args.audio_model,
-                image_input=args.input_image,
-                caption_model=args.caption_model,
-                voice_preset=args.voice_preset
-            )
-            if mon_ctx: mon_ctx.__exit__(None, None, None)
-            
-            if success and tracker:
-                elapsed = time.time() - start_time
-                avg_cpu, avg_ram, avg_vram, avg_gpu = mon_ctx.get_averages()
-                # print("")  # Spacer
-                # print(f"⏱️  Actual Resources:    Time: {format_time(elapsed)} | RAM: {avg_ram:.1f}GB | VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%")
-                tracker.record_linear("audio", model_key, device, duration_sec, elapsed, cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
-
-        # X. Transform Image (-ti) - Chained or Standalone
-        if args.transform_image:
-            # If generation just happened (success=True), we might need to rely on the Output of that generation
-            # as the input for this transformation, IF the input was specified as the output name.
-            
-            # Handle anonymous chain: -ti without filename uses generated output
-            if args.transform_image == "USE_GENERATED":
-                if success and args.output:
-                    input_file = args.output
-                    print(f"🔗 Anonymous chain: Using generated output '{input_file}' as transformation input")
-                else:
-                    print("❌ Error: -ti used without a file, but no image was generated.")
-                    print("   Either specify a file: -ti photo.jpg")
-                    print("   Or chain with generation: -i -p \"...\" -ti -tp \"...\"")
-                    sys.exit(1)
-            else:
-                input_file = args.transform_image
-            
-            # Check if input file exists
-            if not os.path.exists(input_file):
-                print(f"❌ Error: Input file for transformation not found: {input_file}")
-                sys.exit(1)
-
-            # Determine output
-            # If args.output was set for generation, it is currently holding that value.
-            # If we want to overwrite, that's fine.
-            # If args.output wasn't set, it was auto-generated.
-            
-            # NOTE: If we are chaining, we usually want to operate in-place OR allow a new output.
-            # But argparse only allows one -o. 
-            # So usually Chained = In-Place (User provided same filename).
-            
-            # If Standalone -ti, args.output might be empty.
-            if not args.output or (args.output == input_file and not args.force and not success):
-                 # Auto-generate output name if not provided OR if matches input (safe default without force)
-                 # But if success=True (Generation happened), we created the file, so checking existence/overwrite again is annoying?
-                 # Actually, if we generated 'file.png' and now want to transform 'file.png' -> 'file.png',
-                 # we shouldn't prompt for overwrite again if we just made it? 
-                 # But the transformation functions might prompt.
-                 
-                 if not args.output:
-                     name = os.path.splitext(input_file)[0]
-                     suffix = "transformed"
-                     if args.remove_background: suffix = "transformed-nobg"
-                     if args.transform_prompt or args.prompt: suffix = "transformed-edit"
-                     args.output = f"{name}_{suffix}.png"
-                 
-            # Add overwrite protection and path creation (Only if we didn't just generate it?)
-            # If success=True, we own the file, probably safe to overwrite?
-            ensure_paths(args.output)
-            
-            if os.path.exists(args.output) and not args.force and not success:
-                print(f"⚠️  File '{args.output}' already exists.")
-                try:
-                    choice = input(f"   Overwrite? [y/N]: ").lower().strip()
-                    if choice not in ['y', 'yes']:
-                        print("❌ Operation cancelled.")
-                        sys.exit(0)
-                except KeyboardInterrupt:
-                    print("\n❌ Operation cancelled.")
-                    sys.exit(0)
-
-            current_input = input_file
-            intermediate_file = None
-            
-            print("")
-            print(f"🎨 Starting Transformation on: {current_input}")
-
-            # 1. Instructional Editing (Step 1)
-            # Use 'success' to chain through this block locally
-            transform_success = True
-            
-            # Use transform_prompt if provided, otherwise fall back to prompt (for standalone -ti)
-            edit_prompt = args.transform_prompt or args.prompt
-            
-            if edit_prompt:
-                steps = 50
-                model_to_use = "default" 
-                if args.image_model and "sdxl" in args.image_model.lower():
-                    model_to_use = "instruct-pix2pix-sdxl"
-                
-                # If chaining internal steps (Edit + RemoveBG), execute to a temporary intermediate file
-                target_out = args.output
-                if args.remove_background:
-                    name_part = os.path.splitext(args.output)[0]
-                    intermediate_file = f"{name_part}_temp_edit.png"
-                    target_out = intermediate_file
-                    
-                    print("")
-                    header = "🔗 Chaining detected: 2 Steps"
-                    step1 = "   Step 1 - Creative Edit (InstructPix2Pix)"
-                    step2 = "   Step 2 - Remove Background (RMBG-1.4)"
-                    
-                    max_len = max(len(header), len(step1), len(step2))
-                    separator = "=" * (max_len + 4) # Add some padding
-
-                    print(separator)
-                    print(f"  {header}")
-                    print(f"  {step1}")
-                    print(f"  {step2}")
-                    print(separator)
-
-                    print(f"\n{separator}")
-                    print(f"Step 1/2: Creative Edit")
-                    print(separator)
-                    print(f"🔗 Intermediate input: '{os.path.basename(intermediate_file)}'")
-
-                transform_success = generate_edit(
-                    current_input, 
-                    edit_prompt, 
-                    target_out, 
-                    model_name=model_to_use, 
-                    guidance_scale=7.5, 
-                    image_guidance_scale=args.image_guidance,
-                    unsafe=args.unsafe
-                )
-                
-                if not transform_success:
-                    if intermediate_file and os.path.exists(intermediate_file):
-                        os.remove(intermediate_file)
-                    # Don't exit, just mark fail?
-                    success = False
-
-                # Update input for next step
-                if transform_success and args.remove_background:
-                    current_input = intermediate_file
-
-            # 2. Background Removal / Silhouette (Step 2 or Only Step)
-            if transform_success and args.remove_background:
-                if edit_prompt:
-                     # Use the same separator length if available, otherwise default
-                     sep = separator if 'separator' in locals() else "============================"
-                     print(f"\n\n{sep}")
-                     print(f"Step 2/2: Remove Background")
-                     print(sep)
-
-                transform_success = remove_background(current_input, args.output, silhouette=args.silhouette)
-                
-                # Cleanup intermediate
-                if intermediate_file and os.path.exists(intermediate_file):
-                    os.remove(intermediate_file)
-                
-                if not transform_success: success = False
-                
-            # 3. Warn if no action
-            if not edit_prompt and not args.remove_background:
-                 print("⚠️  Transform mode requires either a prompt (-tp or -p) or --remove-background.")
-                 success = False
-                 
-            # Update global success for next stages (Upscale)
-            if transform_success:
-                success = True # Ensure we can continue to upscale if requested
-            else:
-                success = False
-
-        # --- Stage 2: Upscaling (Chained) ---
-        if success and args.upscale:
-            # Determine base resolution for logging
-            msg_res = ""
-            if args.generate_image:
-                msg_res = f"({args.output})"
-            
-            print("")
-            print("="*60)
-            print(f"👉 Step 2 - Upscale {uf}x {msg_res}")
-            print("="*60)
-            print("   (This will happen in multiple stages if factor is high)")
-            print("")
-            
-            # Auto-detect mode. Overwrites the file with high-res version?
-            # Or maybe appends _upscaled? 
-            # User requested "taking the upscale factor as stage 2". Usually implies result replacement or refinement.
-            # Let's overwrite for seamlessness, OR assume the user wants the high-res file.
-            # Actually, let's create a NEW file to be safe: _upscaled.
-            
-            name, ext = os.path.splitext(args.output)
-            suffix = "simple_upscaled" if args.simple_upscale else "upscaled"
-            upscale_out = args.upscaled_output_file or f"{name}_{suffix}_{uf}x{ext}"
-            
-            if args.generate_image:
-                if args.simple_upscale:
-                    simple_upscale_image(args.output, upscale_out, factor=uf)
-                elif getattr(args, "image_upscaler", "default") == "realesrgan":
-                     # Fast Real-ESRGAN
-                     upscale_image_fast(args.output, upscale_out, factor=uf)
-                else:
-                    # Legacy Latent Upscaler (Stable Diffusion)
-                    upscale_image_file(args.output, upscale_out, args.upscale_strength, factor=uf)
-            elif args.generate_video:
-                if args.simple_upscale:
-                    simple_upscale_video(args.output, upscale_out, factor=uf)
-                elif getattr(args, "video_upscaler", "default") == "realesrgan":
-                     # Fast Real-ESRGAN
-                     codec_arg = getattr(args, 'video_codec', 'auto')
-                     upscale_video_fast(args.output, upscale_out, factor=uf, device=device, 
-                                        model_name="realesrgan-x4plus",
-                                        force_realesrgan=True, upscale_half=True, video_upscaler="realesrgan", codec=codec_arg)
-                else:
-                    # Legacy Latent Upscaler
-                    upscale_video_file(args.output, upscale_out, args.upscale_strength, factor=uf)
-    
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user.")
-        print("👋 Goodbye!")
+    # Test Triggers (Priority over generation)
+    if args.test is not None:
+        run_tests(verbose=False, test_filter=args.test if len(args.test) > 0 else None)
+    if args.test_verbose is not None:
+        run_tests(verbose=True, test_filter=args.test_verbose if len(args.test_verbose) > 0 else None)
+    if args.unittests is not None:
+        run_unit_tests(module_name=args.unittests, verbose=False) 
         sys.exit(0)
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+    if args.unittests_verbose is not None:
+        run_unit_tests(module_name=args.unittests_verbose, verbose=True)
+        sys.exit(0)
+
+    # Prompt Check (Required for non-chat modes)
+    if not args.chat and not args.prompt and not any([args.generate_description, args.transform_image, args.convert_image, args.convert_video, args.convert_audio, args.convert_document, args.upscale_image, args.upscale_video, args.generate_code]):
+        print("❌ Error: Prompt is required (use -p 'Your prompt')")
         sys.exit(1)
+        
+    # --- Dispatch ---
+    
+    # NEW: Article Generation Dispatch
+    if args.chat:
+        gen = ArticleGenerator(model_name=args.chat_model)
+        gen.chat_session()
+        sys.exit(0)
+        
+        sys.exit(0)
 
+    elif args.generate_code:
+        gen = ArticleGenerator(model_name=args.code_model)
+        
+        # Determine prompt: use -gc value if string, else use main prompt
+        prompt = args.generate_code if isinstance(args.generate_code, str) else args.prompt
+        
+        if not prompt:
+            print("❌ Error: Code generation code requires a prompt (e.g. -gc 'Write a script...' or -gc -p '...')")
+            sys.exit(1)
+            
+        gen.generate_code(prompt, output_file=args.output)
+        sys.exit(0)
+
+    elif args.generate_article or args.generate_research:
+        online = args.generate_research
+        gen = ArticleGenerator(model_name=args.article_model)
+        
+        # Determine output format - prefer extension from -o, then --output-format
+        output_format = args.output_format  # Default from --output-format flag
+        
+        if args.output:
+            outfile = args.output
+            # Infer format from filename extension if present
+            _, ext = os.path.splitext(args.output)
+            if ext:
+                ext_lower = ext.lower().lstrip('.')
+                valid_formats = ["md", "pdf", "docx", "rtf", "html", "xhtml", "json", "txt"]
+                if ext_lower in valid_formats:
+                    output_format = ext_lower
+        else:
+            # Slugify the prompt: lowercase, replace spaces with underscores, remove special chars
+            import re
+            slug = re.sub(r'[^\w\s-]', '', args.prompt.lower())
+            slug = re.sub(r'[-\s]+', '_', slug).strip('_')[:50]  # Limit to 50 chars
+            outfile = f"{slug}.{output_format}" if slug else f"article_{int(time.time())}.{output_format}"
+        
+        # Ensure extension matches format
+        base, _ = os.path.splitext(outfile)
+        if not outfile.lower().endswith(f".{output_format}"):
+            outfile = f"{base}.{output_format}"
+        
+        # Pre-generation overwrite check (unless --force)
+        if not args.force:
+            should_write, outfile, _, _ = check_overwrite(outfile)
+            if not should_write:
+                print("⏭️  Skipped.")
+                sys.exit(0)
+        
+        gen.generate_article(
+            topic=args.prompt, 
+            output_file=outfile, 
+            format=output_format,
+            online=online,
+            research_iter=args.research_iter,
+            length=args.article_length
+        )
+        sys.exit(0)
+
+    # -------------------------------------------------------------------
+    # Auto-generate output filename from prompt if not provided
+    # This centralized logic handles all generation modes
+    # -------------------------------------------------------------------
+    if any([args.generate_image, args.generate_video, args.generate_audio, args.transform_image]):
+        import re
+        if not args.output:
+            # Sanitize prompt to create safe filename (first 2 words, alphanumeric only)
+            if args.prompt:
+                words = re.findall(r'[a-zA-Z0-9]+', args.prompt.lower())[:2]
+                if words:
+                    args.output = "-".join(words)
+                    print(f"ℹ️  No output specified. Using: {args.output}")
+                else:
+                    print("⚠️  Cannot auto-generate filename: prompt contains no valid words.")
+                    args.output = f"output_{int(time.time())}"
+            elif args.input_image:
+                # Use input filename as base
+                base = os.path.splitext(os.path.basename(args.input_image))[0]
+                args.output = f"audio_{base}" if args.generate_audio else f"video_{base}"
+                print(f"ℹ️  No output specified. Using input basename: {args.output}")
+            elif args.transform_image:
+                # Use transform input filename as base
+                base = os.path.splitext(os.path.basename(args.transform_image))[0]
+                args.output = f"{base}_transformed"
+                print(f"ℹ️  No output specified. Using transform basename: {args.output}")
+            else:
+                args.output = f"output_{int(time.time())}"
+
+        # Smart Extension Handling
+        if args.format:
+            ext = f".{args.format.lower().lstrip('.')}"
+            if not args.output.lower().endswith(ext):
+                args.output += ext
+                print(f"ℹ️  Appended extension '{ext}' to output path.")
+        else:
+            # No format specified - check if output has an extension
+            _, existing_ext = os.path.splitext(args.output)
+            if not existing_ext:
+                # Auto-append default extension based on mode
+                if args.generate_image:
+                    args.output += ".jpg"
+                elif args.generate_video:
+                    args.output += ".mp4"
+                elif args.generate_audio:
+                    args.output += ".mp3"
+                elif args.transform_image:
+                    args.output += ".png"
+
+        ensure_paths(args.output)
+        
+        # Check for existing file
+        if os.path.exists(args.output) and not args.force:
+            print(f"⚠️  File '{args.output}' already exists.")
+            try:
+                choice = input(f"   Overwrite? [y/N]: ").lower().strip()
+                if choice not in ['y', 'yes']:
+                    print("❌ Operation cancelled.")
+                    sys.exit(0)
+                print("") # Spacer
+            except KeyboardInterrupt:
+                print("\n❌ Operation cancelled.")
+                sys.exit(0)
+
+    if args.generate_image:
+        w, h = parse_size(args.size)
+        if args.orientation == "portrait": w, h = h, w
+        
+        outfile = args.output  # Already set by centralized auto-filename logic
+        
+        # Check resources
+        if not check_resources_and_warn(args.image_model, w, h, force=args.force):
+           sys.exit(0)
+           
+        generate_image(args.prompt, outfile, w, h, args.image_model, unsafe=args.unsafe)
+        
+        if args.upscale or args.simple_upscale:
+            base, ext = os.path.splitext(outfile)
+            suffix = "simple_upscaled" if args.simple_upscale else "upscaled"
+            upscale_out = args.upscaled_output_file or f"{base}_{suffix}_{args.upscale_factor}{ext}"
+            
+            if args.simple_upscale:
+                simple_upscale_image(outfile, upscale_out, factor=args.upscale_factor)
+            else:
+                model = args.image_upscaler if hasattr(args, 'image_upscaler') else "realesrgan"
+                upscale_image_fast(outfile, upscale_out, factor=args.upscale_factor) 
+
+    elif args.generate_audio:
+        dur = parse_duration(args.length)
+        outfile = args.output  # Already set by centralized auto-filename logic
+             
+        if args.input_image:
+             if not os.path.exists(args.input_image):
+                 print(f"❌ Error: Input file not found: {args.input_image}")
+                 sys.exit(1)
+             
+             print(f"👁️  Analyzing image: {args.input_image}...")
+             caption = generate_description(args.input_image, model_name=args.caption_model)
+             if not caption:
+                 print("   Failed to generate description.")
+                 sys.exit(1)
+             print(f"   📝 Caption: '{caption}'")
+             
+             full_prompt = caption
+             if args.prompt:
+                 full_prompt = f"{args.prompt}. {caption}"
+             
+             print(f"   🎶 Generating audio for: '{full_prompt}'")
+             generate_audio(full_prompt, outfile, dur, args.audio_model)
+             
+        else:
+             generate_audio(args.prompt, outfile, dur, args.audio_model)
+
+    elif args.generate_video:
+        w, h = parse_size(args.size) if args.size else (576, 320)
+        dur = parse_duration(args.length)
+        outfile = args.output  # Already set by centralized auto-filename logic
+        
+        generate_video(
+            prompt=args.prompt,
+            output_file=outfile,
+            duration=dur,
+            width=w, 
+            height=h,
+            model_name=args.video_model,
+            upscale=args.upscale,
+            simple_upscale=args.simple_upscale,
+            upscale_factor=args.upscale_factor
+        )
+
+    # --- Standalone Modes ---
+    elif args.generate_description:
+        if args.generate_description != "USE_INPUT_IMAGE":
+            input_file = args.generate_description
+        else:
+            input_file = args.input_image
+             
+        if not input_file:
+             print("❌ Error: Input image/video required (-gd FILE or -gd -ii FILE)")
+             sys.exit(1)
+             
+        desc = generate_description(input_file, model_name=args.caption_model)
+        if desc:
+            print(f"📝 Description: {desc}")
+            
+    elif args.upscale_image:
+        outfile = args.output
+        if not outfile:
+             base, ext = os.path.splitext(args.upscale_image)
+             outfile = f"{base}_upscaled{ext}"
+             
+        if args.simple_upscale:
+             simple_upscale_image(args.upscale_image, outfile, factor=args.upscale_factor)
+        elif args.image_upscaler == "sd":
+             upscale_image_file(args.upscale_image, outfile, args.upscale_strength, factor=args.upscale_factor)
+        else:
+             upscale_image_fast(args.upscale_image, outfile, factor=args.upscale_factor)
+
+    elif args.upscale_video:
+         outfile = args.output
+         if not outfile:
+             base, ext = os.path.splitext(args.upscale_video)
+             outfile = f"{base}_upscaled{ext}"
+             
+         if args.simple_upscale:
+             simple_upscale_video(args.upscale_video, outfile, factor=args.upscale_factor)
+         else:
+             upscale_video_fast(args.upscale_video, outfile, factor=args.upscale_factor)
+
+    elif args.transform_image:
+         if args.transform_image != "USE_GENERATED":
+             current_input = args.transform_image
+         else:
+             print("❌ Error: Transformation requires an input file.")
+             sys.exit(1)
+             
+         if args.transform_prompt:
+             # Edit
+             generate_edit(current_input, args.transform_prompt, args.output or "edit.png", model_name="instruct-pix2pix", image_guidance_scale=args.image_guidance)
+         elif args.remove_background:
+             remove_background(current_input, args.output or "nobg.png", silhouette=args.silhouette)
+
+    elif args.convert_image:
+         outfile = args.convert_image_to or args.output or "out.png"
+         convert_media(args.convert_image, outfile)
+    elif args.convert_video:
+         outfile = args.convert_video_to or args.output or "out.mp4"
+         convert_media(args.convert_video, outfile)
+    elif args.convert_audio:
+         outfile = args.convert_audio_to or args.output or "out.mp3"
+         convert_media(args.convert_audio, outfile)
+    elif args.convert_document:
+         outfile = args.convert_document_to or args.output or "out.pdf"
+         convert_document_file(args.convert_document, outfile)
 if __name__ == "__main__":
     main()
