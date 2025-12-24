@@ -8144,11 +8144,11 @@ Supported Models (Code : Download Size | Description):
     - bark                     : ~4GB  | Realistic speech, music, and sound effects.
     
   Text (Articles, Research, Chat, Code):
-    - deepseek-r1-qwen-7b      : ~7GB  | R1 distilled to Qwen-7B. Step-by-step reasoning. (Ungated)
-    - deepseek-r1-qwen-14b     : ~14GB | R1 distilled to Qwen-14B. Better reasoning. (Ungated)
-    - deepseek-r1-qwen-32b     : ~24GB | ⚠️ HIGH RAM! R1 distilled to Qwen-32B. (Ungated)
-    - deepseek-r1-llama-8b     : ~8GB  | R1 distilled to Llama-8B. Reasoning-focused. (Ungated)
-    - deepseek-r1-llama-70b    : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B. (Ungated)
+    - deepseek-r1-qwen-7b      : ~7GB  | R1 distilled to Qwen-7B. Step-by-step reasoning.
+    - deepseek-r1-qwen-14b     : ~14GB | R1 distilled to Qwen-14B. Better reasoning.
+    - deepseek-r1-qwen-32b     : ~24GB | ⚠️ HIGH RAM! R1 distilled to Qwen-32B.
+    - deepseek-r1-llama-8b     : ~8GB  | R1 distilled to Llama-8B. Reasoning-focused.
+    - deepseek-r1-llama-70b    : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B.
     - llama-3.1-8b (default)   : ~16GB | Writing, chat, and reasoning (🔒 Gated - Free Login Required)
     - mistral-nemo-12b         : ~24GB | Powerful 12B model. Large context and reasoning.
     - qwen3-8b                 : ~16GB | Latest Qwen model. Strong instruction-following.
