@@ -8118,7 +8118,7 @@ Examples:
   python ai-media.py -uv input.mp4 -uf 2x -vu sd (High Detail AI)
 
 
-Supported Models:
+Supported Models (Code : Download Size | Description):
   Images:
     - sdxl (default)           : ~8GB  | Fast, high quality.
     - sd-1.5                   : ~4GB  | Lightweight, lower VRAM.
