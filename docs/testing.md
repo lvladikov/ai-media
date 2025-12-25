@@ -16,21 +16,21 @@ python ai-media.py --unittests
 python ai-media.py --unittests-verbose
 
 # Run a specific test class
-python ai-media.py --unittests tests.ai-media_test.TestParseSize
+python ai-media.py --unittests ai_media.testing.unit_tests.TestParseSize
 
 # Run a specific test class (Verbose)
-python ai-media.py --unittests-verbose tests.ai-media_test.TestParseSize
+python ai-media.py --unittests-verbose ai_media.testing.unit_tests.TestParseSize
 
 # Run a specific test method
-python ai-media.py --unittests tests.ai-media_test.TestParseSize.test_resolution_presets_standard
+python ai-media.py --unittests ai_media.testing.unit_tests.TestParseSize.test_resolution_presets_standard
 
 # Run a specific test method (Verbose)
-python ai-media.py --unittests-verbose tests.ai-media_test.TestParseSize.test_resolution_presets_standard
+python ai-media.py --unittests-verbose ai_media.testing.unit_tests.TestParseSize.test_resolution_presets_standard
 ```
 
 ## Integration Tests
 
-Run integration tests defined in `tests/integration-tests.json`.
+Run integration tests defined in `ai_media/testing/integration-tests.json`.
 
 ```bash
 # Run all integration tests (Summary)
@@ -69,7 +69,7 @@ python ai-media.py --test-verbose "Validation - Image Generation" "Validation - 
 
 ### Skipping Tests
 
-You can permanently skip a specific test by adding `"skip": true` to its definition in `tests/integration-tests.json`.
+You can permanently skip a specific test by adding `"skip": true` to its definition in `ai_media/testing/integration-tests.json`.
 The test runner will report these as skipped in the final summary.
 
 ```json
@@ -80,8 +80,59 @@ The test runner will report these as skipped in the final summary.
 }
 ```
 
+### Platform Filtering (runOn)
+
+You can restrict tests to specific compute platforms or operating systems using the `runOn` property. If not specified, tests run on all platforms (default: `"all"`).
+
+#### Compute Platform Filters
+
+| Value | Description | Use Case |
+|-------|-------------|----------|
+| `cuda` | NVIDIA CUDA GPUs only | Tests requiring CUDA-specific libraries (e.g., bitsandbytes 4-bit quantization) |
+| `mps` | Apple Silicon MPS only | Tests specifically for Metal Performance Shaders |
+| `cpu` | CPU only | Lightweight tests or CPU-specific behavior |
+| `gpu` | Any GPU (CUDA or MPS) | Tests that need GPU acceleration but work on either platform |
+| `all` | All platforms (default) | Most tests - runs everywhere |
+
+#### Operating System Filters
+
+| Value | Description |
+|-------|-------------|
+| `mac` / `macos` / `darwin` | macOS only (regardless of MPS/CPU device) |
+| `windows` / `win` / `win32` | Windows only |
+| `linux` | Linux only |
+
+#### Combinations
+
+Use comma-separated values for multiple platforms:
+
+```json
+{
+  "name": "Image - FLUX.2 (4-bit Quantized)",
+  "runOn": "cuda",
+  "command": "-i -p \"test\" --image-model flux2 ...",
+  "description": "CUDA-only: bitsandbytes requires NVIDIA GPU"
+}
+```
+
+```json
+{
+  "name": "Some Mac/Linux Test",
+  "runOn": "mac,linux",
+  "command": "..."
+}
+```
+
+The test runner displays the current platform at suite start and shows skip reasons:
+
+```
+   Platform: MPS
+
+⏭️ Skipping test: Image - FLUX.2 (runOn=cuda, current: mps)
+```
+
 > [!NOTE]
-> The test name must match exactly what is defined in `tests/integration-tests.json`. If the name is not found, the script will list all available tests.
+> The test name must match exactly what is defined in `ai_media/testing/integration-tests.json`. If the name is not found, the script will list all available tests.
 
 ## Combined Test Execution
 
@@ -95,7 +146,7 @@ python ai-media.py --unittests --test
 python ai-media.py --unittests-verbose --test-verbose
 
 # Run Specific Unit Test Class + All Integration Tests (Verbose)
-python ai-media.py --unittests tests.ai-media_test.TestParseSize --test-verbose
+python ai-media.py --unittests ai_media.testing.unit_tests.TestParseSize --test-verbose
 
 # Run All Unit Tests (Verbose) + Specific Integration Test
 python ai-media.py --unittests-verbose --test "Image - SDXL (Default)"
@@ -104,17 +155,18 @@ python ai-media.py --unittests-verbose --test "Image - SDXL (Default)"
 python ai-media.py --unittests --test "Image - Auto Filename" "Audio - Bark TTS"
 
 # Run Specific Unit Method (Verbose) + Specific Video Integration Test
-python ai-media.py --unittests-verbose tests.ai-media_test.TestParseDuration.test_colon_format_hms --test "Video - Zeroscope (Default)"
+python ai-media.py --unittests-verbose ai_media.testing.unit_tests.TestParseDuration.test_colon_format_hms --test "Video - Zeroscope (Default)"
 ```
 
 ## Test Files
 
 | File/Folder | Description |
 | :--- | :--- |
-| `tests/ai-media_test.py` | Unit tests for parsing, helpers, and classes |
-| `tests/integration-tests.json` | Test configurations (commands, expected outputs) |
-| `tests/testData/inputs/` | Sample input files for tests |
-| `tests/testData/outputs/` | Generated outputs (git-ignored) |
+| `ai_media/testing/unit_tests.py` | Unit tests for parsing, helpers, and classes |
+| `ai_media/testing/integration_tests.py` | Integration test runner and logic |
+| `ai_media/testing/integration-tests.json` | Test configurations (commands, expected outputs) |
+| `ai_media/testing/data/inputs/` | Sample input files for tests |
+| `ai_media/testing/data/outputs/` | Generated outputs (git-ignored) |
 
 > [!WARNING]
 > - This may take a **long time** (30+ minutes)
@@ -131,10 +183,10 @@ python ai-media.py --unittests-verbose tests.ai-media_test.TestParseDuration.tes
 
 ## Codec Analysis Tool
 
-Included in the `tests/` directory is a script to verify your system's hardware and software encoding limits.
+Included in the `ai_media/testing/` directory is a script to verify your system's hardware and software encoding limits.
 
 ```bash
-python tests/test_codec_limits.py
+python ai_media/testing/codec_limits_tests.py
 ```
 
 This tool will:

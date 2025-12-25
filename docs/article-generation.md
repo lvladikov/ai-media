@@ -68,6 +68,10 @@ mkdir ./my-web-app
 python ai-media.py -gc "Create a Flask backend with a React frontend" -o ./my-web-app
 ```
 
+### Time and Location in Chat
+
+Some advanced chat models such as DeepSeek R1 Qwen 32B and DeepSeek R1 Llama 70B can work with provided in advance time and location context. The script provides automatically the time from your system and uses IP based geolocation [using IP API](http://ip-api.com) to inform the model about the current time and location. It uses a very short timeout to get the location as fast as possible and falls back to "Unknown" if it fails.
+
 See [Code Generation Examples](#examples) and [Models](#text-models).
 
 ## Text Models

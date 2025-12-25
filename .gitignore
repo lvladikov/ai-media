@@ -34,10 +34,9 @@ performance.json
 !screenshots/
 !screenshots/**
 
-# Allow tests folder to be committed (but we'll ignore outputs below)
-!tests/
-!tests/**
+# Force include test inputs (overriding global extension ignores)
+!ai_media/testing/data/inputs/**
 
-# Re-ignore test outputs and pycache (after unignoring tests/**)
-tests/testData/outputs/
-tests/__pycache__/
+# Ignore test outputs and pycache in testing dir
+ai_media/testing/data/outputs/
+ai_media/testing/__pycache__/

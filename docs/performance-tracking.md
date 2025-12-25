@@ -31,3 +31,7 @@ You can safely delete `performance.json` at any time to reset estimates.
 If you prefer not to use this feature, you can completely disable the reading and writing of this file by using the `-npt` or `--no-performance-tracking` flag.
 
 > **Temporary Files:** During test execution, temporary JSON files (e.g., `*-temp-performance.json`) are created to robustly track resource usage for each test. These files are automatically deleted as each test completes. This JSON IPC approach is used because tests run in isolated subprocesses where shared memory/global variables are not accessible by the parent runner.
+
+---
+
+**See also:** [Understanding Memory & Model Loading](safety-and-resources.md#understanding-memory--model-loading) - Learn why models require RAM/VRAM, storage recommendations, and platform differences between CUDA and MPS.

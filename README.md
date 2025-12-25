@@ -18,7 +18,7 @@ Consider using these models more for personal use and experimenting, as most of 
 - 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](docs/media-conversion.md#document-conversion-options).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](docs/upscaling.md#options), [Examples](docs/upscaling.md#examples) and [Models](docs/upscaling.md#models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
-- 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](#testing).
+- 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](docs/testing.md).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
@@ -68,6 +68,7 @@ Consider using these models more for personal use and experimenting, as most of 
         | :--- | :--- |
         | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
         | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
+        | FLUX.2 (`flux2`, `flux2-full`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.2-dev) |
         | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
         | Llama 3.1 8B Instruct (`llama-3.1-8b`) | [Accept License](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) |
     
@@ -172,7 +173,7 @@ hf auth login
 
 ## Usage
 
-The script `ai-media.py` is the main entry point.
+The script `ai-media.py` serves as the main entry point, relying on feature modules located in the `ai_media` directory. To run the tool from a different location, ensure you move both the `ai-media.py` file and the `ai_media` directory together.
 
 **Example Command:**
 
@@ -285,6 +286,7 @@ This project uses the following open-source libraries:
 **AI Models used:**
 
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
+- **FLUX.2** by Black Forest Labs - [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)
 - **Stable Diffusion XL** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion](https://github.com/runwayml/stable-diffusion)
 - **MusicGen** by Meta AI - [facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
