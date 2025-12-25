@@ -10,6 +10,41 @@ import sys
 import re
 import select
 
+# =============================================================================
+# Windows VT Mode (enables ANSI escape codes for colors/styling)
+# Note: Mouse support is not available on Windows because msvcrt.getch()
+# only captures keyboard input. Mouse events require Unix raw terminal mode.
+# =============================================================================
+
+def _enable_windows_vt_mode():
+    """Enable Virtual Terminal (VT) mode on Windows for ANSI escape sequences.
+    
+    This enables colors, cursor positioning, and other ANSI output features.
+    Mouse support NOT available - Windows msvcrt only reads keyboard events.
+    """
+    if os.name != 'nt':
+        return
+    
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        kernel32 = ctypes.windll.kernel32
+        
+        # Enable VT processing for output only
+        STD_OUTPUT_HANDLE = -11
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        
+        h_out = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        mode = wintypes.DWORD()
+        kernel32.GetConsoleMode(h_out, ctypes.byref(mode))
+        kernel32.SetConsoleMode(h_out, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:
+        pass  # Silently fail on older Windows or if not in a console
+
+# Enable VT mode on import
+_enable_windows_vt_mode()
+
 # ANSI escape codes
 CLEAR_LINE = "\033[K"
 CYAN = "\033[96m"
@@ -121,10 +156,11 @@ def get_key():
         Tuple ('MOUSE', x, y) for mouse clicks
         'SCROLL_UP' or 'SCROLL_DOWN' for scroll wheel
     """
-    if os.name == 'nt':  # Windows
+    if os.name == 'nt':  # Windows (keyboard only, mouse not supported)
         import msvcrt
         ch = msvcrt.getch()
         
+        # Handle extended keys (arrow keys, function keys etc.)
         if ch in (b'\x00', b'\xe0'):
             ch2 = msvcrt.getch()
             if ch2 == b'H': return 'UP'
@@ -135,6 +171,7 @@ def get_key():
             if ch2 == b'Q': return 'PAGE_DOWN'
             return ch2.decode('utf-8', errors='ignore')
         
+        if ch == b'\x1b': return 'ESC'
         if ch == b'\r': return 'ENTER'
         if ch == b'\x03': raise KeyboardInterrupt
         return ch.decode('utf-8', errors='ignore')
@@ -240,18 +277,17 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
     # Hide cursor
     print(HIDE_CURSOR, end="")
     
-    # --- MOUSE SUPPORT START ---
+    # --- MOUSE SUPPORT (Unix/Mac only) ---
     mouse_enabled = False
     menu_start_row = None
     
-    # Enter persistent raw mode for mouse
+    # Enter persistent raw mode for mouse (Unix only)
     fd_raw = None
     old_raw = None
     if os.name != 'nt' and sys.stdout.isatty():
         fd_raw = sys.stdin.fileno()
         old_raw = set_raw_mode(fd_raw)
     
-    if os.name != 'nt' and sys.stdout.isatty():
         # Enable Mouse Reporting (1000: basic, 1006: SGR extended)
         print("\033[?1000h\033[?1006h", end="", flush=True)
         # Query start row
@@ -405,24 +441,27 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
             elif key == 'ESC' and allow_back:
                 # Return None for back
                 print(RESET + "\n" * max_view_lines + "\r")
-                if os.name != 'nt' and sys.stdout.isatty():
+                if sys.stdout.isatty():
                     print("\033[?1000l\033[?1006l", end="", flush=True)
+                if os.name != 'nt':
                     restore_mode(fd_raw, old_raw)
                 print(SHOW_CURSOR, end="")
                 return None
                 
     except KeyboardInterrupt:
         print(RESET + "\n" * max_view_lines + "\r")
-        if os.name != 'nt' and sys.stdout.isatty():
+        if sys.stdout.isatty():
             print("\033[?1000l\033[?1006l", end="", flush=True)
+        if os.name != 'nt':
             restore_mode(fd_raw, old_raw)
         print(SHOW_CURSOR, end="")
         return None
     finally:
         # Restore cursor & mouse
         print(RESET + "\n" * max_view_lines + "\r")
-        if os.name != 'nt' and sys.stdout.isatty():
+        if sys.stdout.isatty():
             print("\033[?1000l\033[?1006l", end="", flush=True)
+        if os.name != 'nt':
             restore_mode(fd_raw, old_raw)
         print(SHOW_CURSOR, end="")
 

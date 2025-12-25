@@ -800,7 +800,7 @@ Supported Models (Code : Download Size | Description):
                  sys.exit(1)
              
              print(f"👁️  Analyzing image: {args.input_image}...")
-             device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True)
+             device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
              caption = pkg_generate_caption(args.input_image, device, model_type=args.caption_model)
              if not caption:
                  print("   Failed to generate description.")
@@ -874,7 +874,7 @@ Supported Models (Code : Download Size | Description):
              sys.exit(1)
              
         print(f"👁️  Analyzing image: {input_file}...")
-        device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True)
+        device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         desc = pkg_generate_caption(input_file, device, model_type=args.caption_model)
         if desc:
             print(f"📝 Description: {desc}")

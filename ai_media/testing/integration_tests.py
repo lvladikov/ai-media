@@ -24,6 +24,9 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
+# Import emoji helper for safe output on Windows terminals
+from ..utils.interaction import emoji
+
 
 def get_test_dir():
     """Get the testing directory path."""
@@ -66,6 +69,29 @@ def get_current_platform():
     except ImportError:
         pass
     return 'cpu'
+
+
+def get_current_dtype():
+    """Detect the current optimal dtype based on platform.
+    
+    Uses centralized detection from ai_media.utils.system.
+    
+    Returns:
+        str: 'bfloat16', 'float16', or 'float32'
+    """
+    try:
+        from ai_media.utils.system import is_bfloat16_supported
+        import torch
+        if torch.cuda.is_available():
+            # Use centralized detection
+            if is_bfloat16_supported():
+                return 'bfloat16'
+            return 'float16'
+        if torch.backends.mps.is_available():
+            return 'float32'  # MPS uses float32 for stability
+    except (ImportError, AttributeError):
+        pass
+    return 'float32'
 
 
 def should_run_test(test_config, current_platform=None):
@@ -159,12 +185,12 @@ def run_unit_test(test_name, verbose=True):
         test_path = get_test_dir() / f"{test_name}.py"
     
     if not test_path.exists():
-        print(f"❌ Test not found: {test_name}")
+        print(f"{emoji('❌ ', 'X ')}Test not found: {test_name}")
         return False
     
-    print(f"🧪 Running: {test_name}")
+    print(f"{emoji('🧪 ', '')}Running: {test_name}")
     
-    args = [sys.executable, "-m", "pytest", str(test_path)]
+    args = [sys.executable, "-m", "unittest", str(test_path)]
     if verbose:
         args.append("-v")
     
@@ -177,9 +203,9 @@ def run_all_unit_tests():
     """Run all unit tests."""
     # Just run the main unit_tests module
     if run_unit_test("unit_tests"):
-        print("\n✅ All unit tests passed.")
+        print(f"\n{emoji('✅ ', '')}All unit tests passed.")
     else:
-        print("\n❌ Unit tests failed.")
+        print(f"\n{emoji('❌ ', 'X ')}Unit tests failed.")
 
 
 def format_time(seconds):
@@ -332,10 +358,10 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
             is_ctrl_c = current_process.returncode in [130, -2, 3221225786, -1073741510]
             
             if is_ctrl_c:
-                print(f"\n\n⚠️  Interrupted! Cleaning up...")
+                print(f"\n\n{emoji('⚠️  ', '')}Interrupted! Cleaning up...")
                 raise KeyboardInterrupt()
             else:
-                print(f"   ❌ Command failed with exit code {current_process.returncode}")
+                print(f"   {emoji('❌ ', 'X ')}Command failed with exit code {current_process.returncode}")
                 result["passed"] = False
                 result["reason"] = f"Exit code {current_process.returncode}"
                 return result
@@ -343,23 +369,23 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
         # Check expected stdout items
         for expected in expected_stdout:
             if expected not in stdout:
-                print(f"   ❌ Missing stdout: '{expected}'")
+                print(f"   {emoji('❌ ', 'X ')}Missing stdout: '{expected}'")
                 result["passed"] = False
                 result["reason"] = f"Missing stdout: '{expected}'"
                 return result
             elif verbose:
-                print(f"   ✓ Found stdout: '{expected}'")
+                print(f"   {emoji('✓ ', '')}Found stdout: '{expected}'")
         
         # Check expected output files exist
         for output_item in expected_outputs:
             output_path = script_dir / output_item
             if not output_path.exists():
-                print(f"   ❌ Missing output file: {output_item}")
+                print(f"   {emoji('❌ ', 'X ')}Missing output file: {output_item}")
                 result["passed"] = False
                 result["reason"] = f"Missing output: {output_item}"
                 return result
             else:
-                print(f"   ✓ Output exists: {output_item}")
+                print(f"   {emoji('✓ ', '')}Output exists: {output_item}")
         
         return result
             
@@ -368,7 +394,7 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
         result["elapsed"] = elapsed
         result["passed"] = False
         result["reason"] = f"Timeout ({timeout_limit}s)"
-        print(f"   ⏱️ {result['reason']}")
+        print(f"   {emoji('⏱️ ', '')}{{result['reason']}}")
         return result
         
     except KeyboardInterrupt:
@@ -473,7 +499,7 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
                         sys.exit(0)
                     return
             except KeyboardInterrupt:
-                print("\n❌ Test cancelled.")
+                print(f"\n{emoji('❌ ', 'X ')}Test cancelled.")
                 if exit_on_finish:
                     sys.exit(0)
                 return
@@ -481,7 +507,7 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             print(f"\n   (Skipping confirmation due to --force)\n")
         
         print(f"\n{'='*60}")
-        print(f"🧪 Running {len(tests)} test(s)")
+        print(f"{emoji('🧪 ', '')}Running {len(tests)} test(s)")
         print(f"{'='*60}\n")
         
         passed = 0
@@ -516,20 +542,20 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             
             # Check for skip flag early
             if test.get("skip") is True:
-                print(f"\n⏭️ Skipping test: {test_name} (skip: true)")
+                print(f"\n{emoji('⏭️ ', '')}Skipping test: {test_name} (skip: true)")
                 skipped += 1
                 continue
             
             # Check runOn platform filter
             should_run, skip_reason = should_run_test(test, current_platform)
             if not should_run:
-                print(f"\n⏭️ Skipping test: {test_name} ({skip_reason})")
+                print(f"\n{emoji('⏭️ ', '')}Skipping test: {test_name} ({skip_reason})")
                 skipped += 1
                 continue
             
             # Test header box
             start_t_str = datetime.now().strftime("%H:%M:%S")
-            header = f"📋 Test {i+1}/{len(tests)}: {test_name}"
+            header = f"{emoji('📋 ', '')}Test {i+1}/{len(tests)}: {test_name}"
             desc = f"   {description}" if description else ""
             time_line = f"   Start at: {start_t_str}"
             
@@ -547,7 +573,7 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             
             # Display command
             cmd_display = f"python ai-media.py {test.get('command', '')}"
-            print(f"🚀 Running: {cmd_display}")
+            print(f"{emoji('🚀 ', '')}Running: {cmd_display}")
             
             # Prepare JSON report path
             json_report_path = str(script_dir / f"{suite_timestamp}-{i+1:03d}-temp-performance.json")
@@ -593,7 +619,7 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
                     result["resources"] = {"ram": r_ram, "vram": r_vram, "cpu": r_cpu, "gpu": r_gpu}
                 except Exception as e:
                     if verbose:
-                        print(f"   ⚠️ Failed to read stats JSON: {e}")
+                        print(f"   {emoji('⚠️ ', 'WARN: ')}Failed to read stats JSON: {e}")
             
             # Cleanup report file
             if os.path.exists(json_report_path):
@@ -603,12 +629,12 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
                     pass
             
             if result.get("passed"):
-                print(f"✅ PASSED ({elapsed:.1f}s)")
+                print(f"{emoji('✅ ', '')}PASSED ({elapsed:.1f}s)")
                 passed += 1
                 _test_state['passed'] = passed
                 results.append((test_name, True, f"{elapsed:.1f}s"))
             else:
-                print(f"❌ FAILED ({elapsed:.1f}s)")
+                print(f"{emoji('❌ ', 'X ')}FAILED ({elapsed:.1f}s)")
                 failed += 1
                 _test_state['failed'] = failed
                 results.append((test_name, False, result.get("reason", "Unknown")))
@@ -623,15 +649,15 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
         print(f"📊 TEST SUMMARY")
         print(f"{'='*60}")
         print(f"   Total:   {len(tests)}")
-        print(f"   Passed:  {passed} ✅")
+        print(f"   Passed:  {passed} {emoji('✅', '')}")
         
         if failed > 0:
-            print(f"   Failed:  {failed} ❌")
+            print(f"   Failed:  {failed} {emoji('❌', 'X')}")
         else:
             print(f"   Failed:  {failed}")
         
         if skipped > 0:
-            print(f"   Skipped: {skipped} ⏭️")
+            print(f"   Skipped: {skipped} {emoji('⏭️', '')}")
         
         print(f"   Duration: {format_time(total_duration)}")
         
@@ -642,22 +668,27 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             avg_gpu = total_gpu / resource_count
             
             if len(tests) >= 2:
-                print(f"\n   ⚖️ Averages:\n")
+                print(f"\n   {emoji('⚖️ ', '')}Averages:\n")
             
             print(f"   RAM:  {avg_ram:.1f} GB")
             print(f"   VRAM: {avg_vram:.1f} GB")
             print(f"   CPU:  {avg_cpu:.1f} %")
             print(f"   GPU:  {avg_gpu:.1f} %")
         
+        # Always show platform and dtype (system-level settings)
+        current_dtype = get_current_dtype()
+        print(f"   Platform: {current_platform.upper()}")
+        print(f"   Dtype: {current_dtype}")
+        
         print(f"{'='*60}")
         
         if failed > 0:
-            print(f"\n❌ Failed Tests:")
+            print(f"\n{emoji('❌ ', 'X ')}Failed Tests:")
             for name, success, reason in results:
                 if not success:
                     print(f"   - {name}: {reason}")
         
-        print(f"\n✅ Test Run Complete")
+        print(f"\n{emoji('✅ ', '')}Test Run Complete")
         
         if exit_on_finish:
             sys.exit(0 if failed == 0 else 1)

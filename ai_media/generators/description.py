@@ -36,13 +36,24 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
             from PIL import Image
             import cv2
             import numpy as np
+            from ..utils.system import is_bfloat16_supported
 
             caption_model_id = "Salesforce/blip-image-captioning-large"
             if not quiet:
                 print(f"   Loading Caption Model: {caption_model_id}...")
             
+            # Determine dtype (prefer bf16 on CUDA)
+            if device.type == "cuda":
+                dtype = torch.bfloat16 if is_bfloat16_supported() else torch.float16
+            else:
+                dtype = torch.float32
+            
             processor = BlipProcessor.from_pretrained(caption_model_id)
-            model = BlipForConditionalGeneration.from_pretrained(caption_model_id).to(device)
+            model = BlipForConditionalGeneration.from_pretrained(caption_model_id, torch_dtype=dtype).to(device)
+            
+            if not quiet:
+                dtype_name = str(dtype).replace("torch.", "")
+                print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
             
             # Check if video
             ext = input_path.lower().split('.')[-1]
@@ -92,6 +103,7 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
             import numpy as np
             import torch
             from PIL import Image
+            from ..utils.system import is_bfloat16_supported
             
             # Load Florence-2 (SOTA Captioning, ~1.5GB)
             caption_model_id = "microsoft/Florence-2-large"
@@ -99,14 +111,25 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
             if not quiet:
                 print(f"   Loading Caption Model: {caption_model_id}...")
             
+            # Determine dtype (prefer bf16 on CUDA)
+            if device.type == "cuda":
+                dtype = torch.bfloat16 if is_bfloat16_supported() else torch.float16
+            else:
+                dtype = torch.float32
+            
             processor = AutoProcessor.from_pretrained(caption_model_id, trust_remote_code=True)
             
             # Use eager attention to avoid SDPA crashes on MPS/Mac with recent transformers
             model = AutoModelForCausalLM.from_pretrained(
                 caption_model_id, 
                 trust_remote_code=True,
-                attn_implementation="eager"
-            ).to(device) 
+                attn_implementation="eager",
+                torch_dtype=dtype
+            ).to(device)
+            
+            if not quiet:
+                dtype_name = str(dtype).replace("torch.", "")
+                print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}") 
             
             # Task prompt for Florence-2
             task_prompt = "<MORE_DETAILED_CAPTION>"

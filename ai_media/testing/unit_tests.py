@@ -33,17 +33,80 @@ mock_torch.backends.mps.is_available.return_value = False
 mock_torch.device.return_value = MagicMock(type="cpu")
 mock_torch.float32 = "float32"
 mock_torch.float16 = "float16"
+mock_torch.bfloat16 = "bfloat16"
 
+# Mock all torch submodules that torchvision may try to import
 sys.modules['torch'] = mock_torch
 sys.modules['torch.cuda'] = MagicMock()
+sys.modules['torch.hub'] = MagicMock()
+sys.modules['torch.version'] = MagicMock(cuda=None)
 sys.modules['torch.backends'] = MagicMock()
 sys.modules['torch.backends.mps'] = MagicMock()
+sys.modules['torch.backends.cudnn'] = MagicMock()
+sys.modules['torch.nn'] = MagicMock()
+class MockModule(MagicMock):
+    __name__ = 'MockModule'
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+sys.modules['torch.nn'].Module = MockModule
+sys.modules['torch.nn'].Sequential = MockModule
+sys.modules['torch.nn'].ModuleList = MockModule
+sys.modules['torch.nn'].ModuleDict = MockModule
+sys.modules['torch.nn'].Parameter = MagicMock()
+# Mock common layers that might be subclassed
+for layer in ['Conv2d', 'ConvTranspose2d', 'Linear', 'BatchNorm2d', 'ReLU', 'LeakyReLU', 'PReLU', 'Sigmoid', 'Tanh', 'Dropout', 'Softmax']:
+    setattr(sys.modules['torch.nn'], layer, MockModule)
+sys.modules['torch.autograd'] = MagicMock()
+class MockFunction(MagicMock):
+    @staticmethod
+    def apply(*args, **kwargs):
+        return MagicMock()
+sys.modules['torch.autograd'].Function = MockFunction
+sys.modules['torch.autograd.function'] = MagicMock()
+sys.modules['torch.nn.functional'] = MagicMock()
+sys.modules['torch.nn.modules'] = MagicMock()
+sys.modules['torch.nn.modules.batchnorm'] = MagicMock()
+sys.modules['torch.nn.modules.utils'] = MagicMock()
+sys.modules['torch.nn.utils'] = MagicMock()
+sys.modules['torch.nn.utils.spectral_norm'] = MagicMock()
+sys.modules['torch.utils'] = MagicMock()
+sys.modules['torch.utils.data'] = MagicMock()
+sys.modules['torch.utils.checkpoint'] = MagicMock()
+sys.modules['torch.jit'] = MagicMock()
+sys.modules['torch._C'] = MagicMock()
+sys.modules['torch.distributed'] = MagicMock()
+sys.modules['torch.multiprocessing'] = MagicMock()
+
+# Mock torchvision entirely to avoid its complex torch dependency chain
+sys.modules['torchvision'] = MagicMock()
+sys.modules['torchvision.transforms'] = MagicMock()
+sys.modules['torchvision.transforms.functional'] = MagicMock()
+sys.modules['torchvision.utils'] = MagicMock()
+sys.modules['torchvision.models'] = MagicMock()
+
+# Mock basicsr entirely to avoid complex dependencies
+sys.modules['basicsr'] = MagicMock()
+sys.modules['basicsr.archs'] = MagicMock()
+sys.modules['basicsr.archs.rrdbnet_arch'] = MagicMock()
+sys.modules['basicsr.utils'] = MagicMock()
+sys.modules['basicsr.utils.download_util'] = MagicMock()
+
+# Link mocks to mock_torch to ensure consistency regardless of import method
+mock_torch.nn = sys.modules['torch.nn']
+mock_torch.autograd = sys.modules['torch.autograd']
+mock_torch.utils = sys.modules['torch.utils']
+mock_torch.backends = sys.modules['torch.backends']
+mock_torch.cuda = sys.modules['torch.cuda']
+mock_torch.hub = sys.modules['torch.hub']
+mock_torch.jit = sys.modules['torch.jit']
 
 # Configure mock_torch for resource checks
 mock_torch.cuda.get_device_properties.return_value.total_memory = 8 * (1024**3)
 mock_torch.cuda.memory_allocated.return_value = 0
 mock_torch.cuda.is_available.return_value = False
+mock_torch.cuda.is_bf16_supported.return_value = False
 mock_torch.backends.mps.is_available.return_value = False
+
 sys.modules['diffusers'] = MagicMock()
 sys.modules['transformers'] = MagicMock()
 sys.modules['accelerate'] = MagicMock()
@@ -76,6 +139,7 @@ ai_media.ensure_paths = system.ensure_paths
 ai_media.write_report_json = performance.write_report_json
 ai_media.clear_gpu_memory = system.clear_gpu_memory
 ai_media.get_optimal_device_and_dtype = system.get_optimal_device_and_dtype
+ai_media.is_bfloat16_supported = system.is_bfloat16_supported
 ai_media.check_resources_and_warn = system.check_resources_and_warn
 ai_media.get_system_resources = system.get_system_resources
 ai_media.signal_handler = system.signal_handler
@@ -602,14 +666,16 @@ class TestEnsurePaths(unittest.TestCase):
         """Remove the temporary directory after testing."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
     
-    def test_creates_single_parent_directory(self):
+    @patch('builtins.print')
+    def test_creates_single_parent_directory(self, mock_print):
         """Test single parent directory is created."""
         nested_path = os.path.join(self.test_dir, "subdir", "output.txt")
         ai_media.ensure_paths(nested_path)
         parent_dir = os.path.dirname(nested_path)
         self.assertTrue(os.path.exists(parent_dir))
     
-    def test_creates_deeply_nested_directories(self):
+    @patch('builtins.print')
+    def test_creates_deeply_nested_directories(self, mock_print):
         """Test deeply nested directories are created."""
         nested_path = os.path.join(self.test_dir, "a", "b", "c", "d", "output.txt")
         ai_media.ensure_paths(nested_path)
@@ -690,6 +756,44 @@ class TestGetOptimalDeviceAndDtype(unittest.TestCase):
         result = ai_media.get_optimal_device_and_dtype(quiet=True)
         self.assertIsInstance(result, tuple)
         self.assertEqual(len(result), 2)
+
+
+class TestIsBfloat16Supported(unittest.TestCase):
+    """Tests for is_bfloat16_supported() function."""
+    
+    def test_returns_boolean(self):
+        """Test function returns a boolean value."""
+        result = ai_media.is_bfloat16_supported()
+        self.assertIsInstance(result, bool)
+    
+    def test_returns_false_without_cuda(self):
+        """Test returns False when CUDA is not available."""
+        # mock_torch.cuda.is_available is already set to False
+        result = ai_media.is_bfloat16_supported()
+        self.assertFalse(result)
+    
+    def test_returns_true_with_cuda_bf16(self):
+        """Test returns True when CUDA supports bf16."""
+        # Temporarily enable CUDA and bf16 support
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.is_bf16_supported.return_value = True
+        try:
+            result = ai_media.is_bfloat16_supported()
+            self.assertTrue(result)
+        finally:
+            # Restore defaults
+            mock_torch.cuda.is_available.return_value = False
+            mock_torch.cuda.is_bf16_supported.return_value = False
+    
+    def test_returns_false_without_bf16_support(self):
+        """Test returns False when CUDA doesn't support bf16."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.is_bf16_supported.return_value = False
+        try:
+            result = ai_media.is_bfloat16_supported()
+            self.assertFalse(result)
+        finally:
+            mock_torch.cuda.is_available.return_value = False
 
 
 class TestClearScreen(unittest.TestCase):
@@ -1516,11 +1620,12 @@ class TestFastUpscaler(unittest.TestCase):
                 found_fallback = False
                 found_hevc = False
                 for call in mock_print.call_args_list:
-                    arg = str(call.args[0])
-                    if "Hardware AV1 not supported" in arg:
-                        found_fallback = True
-                    if "Using Hardware HEVC" in arg:
-                        found_hevc = True
+                    if call.args:  # Check if args is not empty
+                        arg = str(call.args[0])
+                        if "Hardware AV1 not supported" in arg:
+                            found_fallback = True
+                        if "Using Hardware HEVC" in arg:
+                            found_hevc = True
                         
                 self.assertTrue(found_fallback, "Should log AV1 fallback message")
                 self.assertTrue(found_hevc, "Should log switch to Hardware HEVC")

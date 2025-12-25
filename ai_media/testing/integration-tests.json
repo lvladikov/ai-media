@@ -171,6 +171,7 @@
     },
     {
       "name": "Video - Image-to-Video with Audio",
+      "runOn": "cuda",
       "command": "-v -ii ai_media/testing/data/inputs/sample.jpg -o ai_media/testing/data/outputs/vid_i2v_audio.mp4 -l 2s -s 576x320 -ap \"Ambient drone\" --video-model svd --force --unsafe",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
@@ -182,6 +183,7 @@
     },
     {
       "name": "Video - ModelScope",
+      "runOn": "cuda",
       "command": "-v -p \"A dog running\" -o ai_media/testing/data/outputs/vid_ms17b.mp4 -l 1s -s 576x320 --video-model ms-1.7b --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -202,6 +204,7 @@
     },
     {
       "name": "Video - Muxing with Audio",
+      "runOn": "cuda",
       "command": "-v -p \"A dancing robot\" -o ai_media/testing/data/outputs/vid_mux.mp4 -l 3s -s 576x320 -ap \"Techno music\" --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -211,6 +214,7 @@
     },
     {
       "name": "Video - Muxing with Audio (Custom Model)",
+      "runOn": "cuda",
       "command": "-v -p \"A dancing robot\" -o ai_media/testing/data/outputs/vid_mux_small.mp4 -l 3s -s 576x320 -ap \"Techno music\" -am musicgen-small --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -220,6 +224,7 @@
     },
     {
       "name": "Video - Stable Video Diffusion (I2V)",
+      "runOn": "cuda",
       "timeout": 3600,
       "command": "-v -ii ai_media/testing/data/inputs/sample.jpg -o ai_media/testing/data/outputs/vid_svd.mp4 -l 1s -s 576x320 --video-model svd --force --unsafe",
       "expectedInputItems": [
@@ -245,6 +250,7 @@
     },
     {
       "name": "Video - AVI Format",
+      "runOn": "cuda",
       "timeout": 3600,
       "command": "-v -p \"Format test\" -o ai_media/testing/data/outputs/vid_format.avi -l 1s --force --unsafe -s 576x320",
       "expectedInputItems": [],
@@ -255,6 +261,7 @@
     },
     {
       "name": "Video - MKV Format",
+      "runOn": "cuda",
       "command": "-v -p \"Format test\" -o ai_media/testing/data/outputs/vid_format.mkv -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -264,6 +271,7 @@
     },
     {
       "name": "Video - MOV Format",
+      "runOn": "cuda",
       "command": "-v -p \"Format test\" -o ai_media/testing/data/outputs/vid_format.mov -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -273,6 +281,7 @@
     },
     {
       "name": "Video - WMV Format",
+      "runOn": "cuda",
       "command": "-v -p \"Format test\" -o ai_media/testing/data/outputs/vid_format.wmv -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -282,6 +291,7 @@
     },
     {
       "name": "Video - WebM Format",
+      "runOn": "cuda",
       "command": "-v -p \"Format test\" -o ai_media/testing/data/outputs/vid_format.webm -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -291,6 +301,7 @@
     },
     {
       "name": "Video - Zeroscope (Default)",
+      "runOn": "cuda",
       "command": "-v -p \"A cat walking\" -o ai_media/testing/data/outputs/vid_zeroscope.mp4 -l 1s -s 576x320 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -300,6 +311,7 @@
     },
     {
       "name": "Video - Zeroscope Explicit",
+      "runOn": "cuda",
       "command": "-v -p \"Bird flying\" -o ai_media/testing/data/outputs/vid_zeroscope_exp.mp4 -l 1s -s 576x320 --video-model zeroscope --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
@@ -309,6 +321,7 @@
     },
     {
       "name": "Video - Zeroscope XL Upscale (1024x576)",
+      "runOn": "cuda",
       "timeout": 3600,
       "command": "-v -p \"Ocean waves\" -o ai_media/testing/data/outputs/vid_zeroscope_xl.mp4 -l 1s -s 1024x576 --video-model zeroscope --force --unsafe",
       "expectedInputItems": [],
@@ -319,6 +332,7 @@
     },
     {
       "name": "Video - Zeroscope Dynamic Upscale (720p)",
+      "runOn": "cuda",
       "timeout": 7200,
       "command": "-v -p \"Mountain sunset\" -o ai_media/testing/data/outputs/vid_zeroscope_720p.mp4 -l 1s -s 720p --video-model zeroscope --force --unsafe",
       "expectedInputItems": [],
@@ -329,6 +343,7 @@
     },
     {
       "name": "Video - Wan 2.2 (14B)",
+      "runOn": "cuda",
       "timeout": 7200,
       "command": "-v -p \"A cinematic shot of a futuristic city\" -o ai_media/testing/data/outputs/vid_wan22.mp4 -l 2s -s 576x320 --video-model wan2.2 --force --unsafe",
       "expectedInputItems": [],
@@ -339,6 +354,7 @@
     },
     {
       "name": "Video - LTX-Video",
+      "runOn": "cuda",
       "timeout": 7200,
       "command": "-v -p \"A futuristic car driving\" -o ai_media/testing/data/outputs/vid_ltx.mp4 -l 2s -s 576x320 --video-model ltx-video --force --unsafe",
       "expectedInputItems": [],
@@ -349,6 +365,7 @@
     },
     {
       "name": "Video - Mochi 1",
+      "runOn": "cuda",
       "timeout": 7200,
       "command": "-v -p \"A fluidity simulation\" -o ai_media/testing/data/outputs/vid_mochi.mp4 -l 2s -s 576x320 --video-model mochi-1 --force --unsafe",
       "expectedInputItems": [],

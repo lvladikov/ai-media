@@ -243,7 +243,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         )
         from diffusers.utils import export_to_video, load_image
         
-        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         
         # MPS FIX: These models need Float32/CPU on MPS
         mps_incompatible_models = ["ms-1.7b", "text-to-video-ms-1.7b", "zeroscope", 
@@ -259,6 +259,9 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 print("⚠️  MPS Compatibility: Using Float32 for correct video output.")
             dtype = torch.float32
         
+        # Display platform and dtype info
+        dtype_name = str(dtype).replace("torch.", "")
+        print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
         print("⚠️  Video generation is resource intensive.")
         
         # cuDNN workaround

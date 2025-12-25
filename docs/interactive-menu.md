@@ -11,13 +11,16 @@ The interactive mode offers a guided menu system for all features. It runs autom
 
 ← [Back to Main README](../README.md)
 
-## Mouse Support 🖱️
+## Mouse Support 🖱️ (macOS/Linux only)
 
-The interactive menu supports full mouse interaction in modern terminals (iTerm2, VSCode, Terminal.app, etc.):
+The interactive menu supports full mouse interaction on **macOS and Linux** terminals (iTerm2, Terminal.app, GNOME Terminal, etc.):
 - **Click to Select**: Click any menu item to select it instantly.
 - **Scroll Wheel**: Scroll up/down through long lists.
 - **Navigation**: Click "⬆️ ... more above" or "⬇️ ... more below" to jump pages.
 - **Click Back**: Click the "⬅️ Back" button to return.
+
+> [!NOTE]
+> **Windows**: Mouse support is not available on Windows due to terminal limitations (`msvcrt` only captures keyboard input). Use keyboard navigation instead.
 
 ## Keyboard Navigation ⌨️
 

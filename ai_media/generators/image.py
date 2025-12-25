@@ -53,8 +53,10 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         import torch
         from diffusers import FluxPipeline, AutoPipelineForText2Image
         
-        # Determine device
-        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        # Determine device and dtype (prefer bfloat16 for better numerical stability on supported CUDA)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        dtype_name = str(dtype).replace("torch.", "")
+        print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
         
         # Determine Pipeline Class based on model
         if "flux.2" in model_id.lower() or "flux2" in model_id.lower():

@@ -44,13 +44,17 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
     print("") 
 
     try:
-        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         
         # CRITICAL FIX: InstructPix2Pix (SD1.5 based) often produces black images on MPS with float16.
         # We force float32 for this specific pipeline on MPS to ensure valid output.
         if device.type == "mps":
             print(f"   ℹ️  MPS Detected: Forcing float32 for InstructPix2Pix to prevent black images.")
             dtype = torch.float32
+        
+        # Display platform and dtype info
+        dtype_name = str(dtype).replace("torch.", "")
+        print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
 
         # Load Input Image
         image = load_image(input_path)
@@ -141,7 +145,7 @@ def remove_background(input_path, output_path, model_name="remove-bg", silhouett
     print("")
 
     try:
-        device, dtype = get_optimal_device_and_dtype(quiet=True)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         
         # Load Model
         model_id = EDIT_MODELS.get(model_name, "briaai/RMBG-1.4")

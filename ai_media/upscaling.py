@@ -96,10 +96,20 @@ def check_resources_and_confirm(w, h, f, dev):
     is_tight = estimated_ram_gb > (available_gb * 0.9)
     
     if is_huge or is_tight:
+        # Determine dtype for display
+        from .utils.system import is_bfloat16_supported
+        if dev == "cuda":
+            dtype_info = "bfloat16" if is_bfloat16_supported() else "float16"
+        elif dev == "mps":
+            dtype_info = "float32"
+        else:
+            dtype_info = "float32"
+        
         print("\n⚠️  RESOURCE WARNING: High-Resolution Upscale Detected")
         print(f"   Input:  {w}x{h}")
         print(f"   Target: {target_w}x{target_h} ({megapixels:.1f} MP)")
         print(f"   Device: {dev.upper()}")
+        print(f"   Dtype:  {dtype_info}")
         print(f"   Est. RAM Required: ~{estimated_ram_gb:.1f} GB")
         print(f"   Available RAM:      {available_gb:.1f} GB")
         
@@ -244,7 +254,7 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        device, _ = get_optimal_device_and_dtype(quiet=True)
+        device, _ = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         print(f"   Device: {device}")
 
         model_name = 'RealESRGAN_x4plus'
@@ -321,7 +331,7 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        device, _ = get_optimal_device_and_dtype(quiet=True)
+        device, _ = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         print(f"   Device: {device}")
 
         model_name = 'RealESRGAN_x4plus'
@@ -520,7 +530,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
     
     try:
         start_time = time.time()
-        device, dtype = get_optimal_device_and_dtype()
+        device, dtype = get_optimal_device_and_dtype(prefer_bfloat16=True)
         
         # Force CPU for MPS (upscaling has tensor size limits)
         if device.type == "mps":
@@ -651,7 +661,7 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
             v_h = int(cap_chk.get(cv2.CAP_PROP_FRAME_HEIGHT))
             cap_chk.release()
              
-            device, _ = get_optimal_device_and_dtype()
+            device, _ = get_optimal_device_and_dtype(prefer_bfloat16=True)
             if not check_resources_and_confirm(v_w, v_h, factor, device.type):
                 return False
         
@@ -674,7 +684,7 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
             frame_count += 1
         cam.release()
         
-        device, dtype = get_optimal_device_and_dtype()
+        device, dtype = get_optimal_device_and_dtype(prefer_bfloat16=True)
         if device.type == "mps":
             device = torch.device("cpu")
             dtype = torch.float32

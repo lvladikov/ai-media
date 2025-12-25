@@ -15,6 +15,15 @@ try:
 except ImportError:
     psutil = None
 
+# Import emoji helper for safe output on Windows terminals
+def _safe_emoji(emoji_char, fallback=""):
+    """Return emoji if terminal supports it, otherwise return fallback text."""
+    try:
+        emoji_char.encode(sys.stdout.encoding or 'utf-8')
+        return emoji_char
+    except (UnicodeEncodeError, LookupError, AttributeError):
+        return fallback
+
 
 def clear_gpu_memory():
     """Clear GPU memory cache to reduce fragmentation and prevent OOM errors.
@@ -35,16 +44,45 @@ def clear_gpu_memory():
         pass
 
 
-def get_optimal_device_and_dtype(quiet=False):
+def is_bfloat16_supported():
+    """Check if bfloat16 is supported on the current CUDA device.
+    
+    Returns True if:
+    - CUDA is available
+    - PyTorch's torch.cuda.is_bf16_supported() returns True
+    
+    BFloat16 offers same memory usage as float16 but better numerical
+    stability due to larger exponent range. Supported on NVIDIA Ampere
+    (RTX 30xx) and newer GPUs.
+    
+    Returns False for MPS, CPU, or older CUDA GPUs (pre-Ampere).
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return torch.cuda.is_bf16_supported()
+    except (ImportError, AttributeError):
+        pass
+    return False
+
+
+def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False):
     """
     Detect the best available hardware (CUDA, MPS, or CPU) 
     and return the device string and optimal torch dtype.
+    
+    Args:
+        quiet: Suppress device detection messages
+        prefer_bfloat16: If True, use bfloat16 on supported CUDA hardware
     """
     try:
         import torch
         if torch.cuda.is_available():
             if not quiet:
                 print(f"🚀 Detected NVIDIA GPU: Using CUDA\n")
+            # Use bfloat16 if requested and supported (Ampere+)
+            if prefer_bfloat16 and torch.cuda.is_bf16_supported():
+                return torch.device("cuda"), torch.bfloat16
             return torch.device("cuda"), torch.float16
             
         if torch.backends.mps.is_available():
@@ -178,6 +216,16 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         print(f"   • {w}")
     print(f"\n   Model: {model_id}")
     
+    # Add dtype info
+    import torch
+    if torch.cuda.is_available():
+        dtype_info = "bfloat16" if is_bfloat16_supported() else "float16"
+    elif torch.backends.mps.is_available():
+        dtype_info = "float32"
+    else:
+        dtype_info = "float32"
+    print(f"   Dtype: {dtype_info}")
+    
     # Check for VAE Tiling condition (Resolution > 1536x1536)
     if width and height:
         total_pixels = width * height
@@ -297,4 +345,4 @@ def ensure_paths(output_path):
     parent = Path(output_path).parent
     if parent and not parent.exists():
         parent.mkdir(parents=True, exist_ok=True)
-        print(f"   📁 Created directory: {parent}")
+        print(f"   {_safe_emoji('📁 ', '')}Created directory: {parent}")

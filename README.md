@@ -24,9 +24,12 @@ Consider using these models more for personal use and experimenting, as most of 
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
     - 🍏 **Apple Silicon** (MPS / Metal)
-    - 🟢 **NVIDIA GPUs** (CUDA + Float16)
+    - 🟢 **NVIDIA GPUs** (CUDA + BFloat16 on RTX 30xx+ / Float16 on older)
     - 🟡 **Codec Analysis Tool** - Verify your system's hardware and software encoding limits. See [Codec Analysis Tool](docs/testing.md#codec-analysis-tool).
     - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only**. See [Performance Tracking](docs/performance-tracking.md).
+
+> [!TIP]
+> **BFloat16 Precision (NVIDIA RTX 30xx+):** On supported CUDA devices (Ampere architecture and newer), this script automatically uses `bfloat16` precision for all AI operations. BFloat16 offers the same memory efficiency as float16 but with better numerical stability (larger exponent range prevents overflow/underflow). The script auto-detects bf16 support via PyTorch and falls back to float16 on older GPUs.
 
 
 > [!NOTE]

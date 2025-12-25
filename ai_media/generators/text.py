@@ -57,7 +57,14 @@ class ArticleGenerator:
         
         print(f"📚 Loading Text Model: {self.model_name}...")
         try:
-            dtype = self.torch.float16 if self.device.type in ["cuda", "mps"] else self.torch.float32
+            # Use bfloat16 on CUDA if supported (Ampere+), otherwise float16
+            from ..utils.system import is_bfloat16_supported
+            if self.device.type == "cuda":
+                dtype = self.torch.bfloat16 if is_bfloat16_supported() else self.torch.float16
+            elif self.device.type == "mps":
+                dtype = self.torch.float32  # MPS uses float32 for stability
+            else:
+                dtype = self.torch.float32
             
             # Workaround: Qwen3/Llama have numerical instability on MPS float16
             if self.device.type == "mps" and any(m in self.model_name.lower() for m in ["qwen3", "llama"]):
@@ -80,6 +87,9 @@ class ArticleGenerator:
             if quantization_config:
                 model_kwargs["quantization_config"] = quantization_config
                 model_kwargs["device_map"] = "auto"
+            elif self.device.type == 'cuda':
+                # Use 'auto' to enable offloading to CPU/RAM if the model is too large for VRAM
+                model_kwargs["device_map"] = "auto"
             else:
                 model_kwargs["device_map"] = self.device
                 
@@ -89,15 +99,19 @@ class ArticleGenerator:
                 tokenizer=tokenizer,
                 **model_kwargs
             )
+            dtype_name = str(dtype).replace("torch.", "")
+            print(f"   Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
             print("✅ Model loaded.")
             
         except RuntimeError as e:
             error_msg = str(e)
             if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
                 size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
-                size_info = f" (model requires ~{size_match.group(0)})" if size_match else ""
                 
-                print(f"\n❌ Model too large for this system{size_info}")
+                print(f"\n❌ Model too large for this system.")
+                if size_match:
+                     print(f"   Allocation failed when trying to reserve {size_match.group(0)}.")
+                     
                 print(f"   The model '{self.model_name}' cannot fit in available memory.")
                 print(f"   💡 Try a smaller model like:")
                 print(f"      - deepseek-r1-qwen-7b (~7GB)")
@@ -126,9 +140,11 @@ class ArticleGenerator:
             error_msg = str(e)
             if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
                 size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
-                size_info = f" (model requires ~{size_match.group(0)})" if size_match else ""
                 
-                print(f"\n❌ Model too large for this system{size_info}")
+                print(f"\n❌ Model too large for this system.")
+                if size_match:
+                     print(f"   Allocation failed when trying to reserve {size_match.group(0)}.")
+                     
                 print(f"   The model '{self.model_name}' cannot fit in available memory.")
                 print(f"   💡 Try a smaller model like:")
                 print(f"      - deepseek-r1-qwen-7b (~7GB)")

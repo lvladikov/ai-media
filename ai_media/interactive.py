@@ -284,6 +284,18 @@ def run_interactive(jump_point=None):
         else:
             gpu_info = "CPU Only (No Acceleration Detected)"
             
+        # Dtype Info (uses centralized detection)
+        try:
+            from .utils.system import is_bfloat16_supported
+            if torch.cuda.is_available():
+                dtype_info = "bfloat16" if is_bfloat16_supported() else "float16"
+            elif torch.backends.mps.is_available():
+                dtype_info = "float32"
+            else:
+                dtype_info = "float32"
+        except:
+            dtype_info = "float32"
+            
         # Clear Loading Indicator (Overwrite line)
         print("\r" + " " * 50 + "\r", end="", flush=True)
             
@@ -291,6 +303,7 @@ def run_interactive(jump_point=None):
         print(f"🧠 CPU:      {cpu_model} | {cpu_count} Cores (Usage: {cpu_percent}%)")
         print(f"💾 RAM:      {ram_avail} Available / {ram_total} Total ({ram_percent} Used)")
         print(f"🎮 GPU:      {gpu_info}")
+        print(f"⚡ DTYPE:    {dtype_info}")
         print()
         
         prompt_menu(None, [], allow_back=True)
