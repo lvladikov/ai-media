@@ -18,6 +18,25 @@ import sys
 import os
 import time
 
+# --- Loading Message Timer (must start BEFORE heavy imports) ---
+# This shows "Loading..." message after 1 second if still loading modules.
+# We use a module-level variable to allow cancellation from main().
+import threading
+_loading_timer = None
+_loading_shown = False
+
+def _show_loading_message():
+    global _loading_shown
+    _loading_shown = True
+    print("⏳ Loading... (May take a moment while modules initialize and cache)", flush=True)
+
+# Only start timer if likely interactive mode (no args or just --interactive)
+# We do this early so it can run while heavy modules load
+if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-I')):
+    _loading_timer = threading.Timer(1.0, _show_loading_message)
+    _loading_timer.daemon = True
+    _loading_timer.start()
+
 # Suppress common library warnings
 # (Some libraries use different warning categories or print directly)
 warnings.filterwarnings("ignore", message="User provided device_type of 'cuda'", category=UserWarning)
@@ -250,14 +269,6 @@ except ImportError:
 from pathlib import Path
 from datetime import datetime
 
-# Only start timer if likely interactive mode (no args or just --interactive)
-# We do this early so it can run while heavy modules load
-if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-I')):
-    import threading
-    pkg_interaction._loading_timer = threading.Timer(1.0, pkg_interaction._show_loading_message)
-    pkg_interaction._loading_timer.daemon = True
-    pkg_interaction._loading_timer.start()
-
 
 
 def _check_ffmpeg_encoder(encoder_name, w=256, h=256):
@@ -342,10 +353,11 @@ class CleanHelpFormatter(argparse.RawTextHelpFormatter):
 
 
 def main():
+    global _loading_timer
 
     # Cancel loading message timer (imports complete)
-    if pkg_interaction._loading_timer:
-        pkg_interaction._loading_timer.cancel()
+    if _loading_timer:
+        _loading_timer.cancel()
     
     parser = argparse.ArgumentParser(
         description="Generate, describe, upscale, and convert media using AI and FFmpeg.",

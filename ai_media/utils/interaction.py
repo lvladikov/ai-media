@@ -28,7 +28,7 @@ _loading_shown = False
 def _show_loading_message():
     global _loading_shown
     _loading_shown = True
-    print("⏳ Loading... (May take a moment on first boot while modules initialize and cache)", flush=True)
+    print("⏳ Loading... (May take a moment while modules initialize and cache)", flush=True)
 
 
 def emoji(emoji_char, fallback=""):
