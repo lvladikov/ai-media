@@ -186,7 +186,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 
 **Example Output:**
 
-![Image Generation Example Result](screenshots/image-gen-result.png)
+![Image Generation Example Result](screenshots/image-gen-result.jpg)
 
 
 

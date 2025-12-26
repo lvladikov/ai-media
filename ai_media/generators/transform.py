@@ -66,7 +66,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             # SDXL InstructPix2Pix
             pipe = StableDiffusionXLInstructPix2PixPipeline.from_pretrained(
                 model_id,
-                dtype=dtype
+                torch_dtype=dtype
             ).to(device)
             # Default scales for SDXL are different
             if guidance_scale == 7.5:
@@ -82,7 +82,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 
             pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                 model_id, 
-                dtype=dtype,
+                torch_dtype=dtype,
                 **kwargs
             ).to(device)
             
