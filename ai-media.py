@@ -500,13 +500,13 @@ Supported Models (Code : Download Size | Description):
     # Specific options
     image_group = parser.add_argument_group("Image Options")
     image_models_help = [k + " (Gated)" if k in ["flux", "flux-dev", "flux2", "flux2-full"] else k for k in IMAGE_MODELS.keys()]
-    image_group.add_argument("--image-model", default="default", help=f"Model: {', '.join(image_models_help)}")
+    image_group.add_argument("-im", "--image-model", default="default", help=f"Model: {', '.join(image_models_help)}")
     image_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
                               help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
     image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
     
     video_group = parser.add_argument_group("Video Options")
-    video_group.add_argument("--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())} (default: zeroscope)")
+    video_group.add_argument("-vm", "--video-model", default="default", help=f"Model: {', '.join(VIDEO_MODELS.keys())} (default: zeroscope)")
     video_group.add_argument("-l", "--length", default="2s", help="Duration (e.g. '2s', '5s', '1m', '{m:1, s:30}'). Default: 2s")
     video_group.add_argument("-ii", "--input-image", help="Input image for Image-to-Video generation.")
     video_group.add_argument("-ap", "--audio-prompt", help="Audio prompt for 'Video with Audio' generation (merged via FFmpeg).")
