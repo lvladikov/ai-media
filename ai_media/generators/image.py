@@ -188,7 +188,7 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             # Start Resource Monitoring
             with ResourceMonitor() as monitor:
                 output = pipe(
-                    prompt, 
+                    prompt=prompt, 
                     height=height, 
                     width=width,
                     **extra_kwargs
@@ -200,7 +200,7 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             
             # Record Performance
             tracker.record_image(model_id, width, height, device, duration, 
-                                cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+                                cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             

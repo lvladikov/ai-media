@@ -76,15 +76,20 @@ def emoji(emoji_char, fallback=""):
 
 
 def clear_screen():
-    """Clear terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    """Clear terminal screen.
+    
+    Only clears if stdout is a TTY (interactive terminal).
+    Skips clear when output is piped (e.g., during testing) to allow capture.
+    """
+    if sys.stdout.isatty():
+        os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def show_header(title="AI-Media"):
     """Show interactive mode header."""
-    print(f"\n{'═'*60}")
-    print(f"{emoji('🎨 ', '')}{title}")
-    print(f"{'═'*60}\n")
+    print(f"\n{'═'*60}", flush=True)
+    print(f"{emoji('🎨 ', '')}{title}", flush=True)
+    print(f"{'═'*60}\n", flush=True)
 
 
 # =============================================================================

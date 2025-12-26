@@ -50,6 +50,7 @@ Consider using these models more for personal use and experimenting, as most of 
     - **transformers**: Audio generation & text processing models
     - **torch**: Core deep learning framework & hardware acceleration (CUDA/MPS)
     - **accelerate**: Optimization for efficient large model loading
+    - **bitsandbytes**: 4-bit quantization for reducing VRAM usage (FLUX.2, LTX)
     - **opencv-python**: Video frame processing & manipulation
     - **scipy**: Audio signal processing & file handling
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
@@ -266,6 +267,7 @@ This project uses the following open-source libraries:
 | [transformers](https://github.com/huggingface/transformers) | Audio/Text generation pipelines | [huggingface/transformers](https://github.com/huggingface/transformers) |
 | [PyTorch](https://github.com/pytorch/pytorch) | Deep learning framework & Hardware detection | [pytorch/pytorch](https://github.com/pytorch/pytorch) |
 | [accelerate](https://github.com/huggingface/accelerate) | Optimization & large model handling | [huggingface/accelerate](https://github.com/huggingface/accelerate) |
+| [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) | 4-bit quantization for large models | [TimDettmers/bitsandbytes](https://github.com/TimDettmers/bitsandbytes) |
 | [FFmpeg](https://github.com/FFmpeg/FFmpeg) | Media processing & format conversion | [FFmpeg/FFmpeg](https://github.com/FFmpeg/FFmpeg) |
 | [sentencepiece](https://github.com/google/sentencepiece) | Tokenization for text processing | [google/sentencepiece](https://github.com/google/sentencepiece) |
 | [safetensors](https://github.com/huggingface/safetensors) | Safe model loading format | [huggingface/safetensors](https://github.com/huggingface/safetensors) |

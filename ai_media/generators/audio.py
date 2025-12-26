@@ -161,7 +161,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration, 
-                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             
@@ -198,7 +198,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration,
-                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             
@@ -232,7 +232,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration,
-                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             
@@ -283,7 +283,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
             tracker.record_linear("audio", model_id, device, duration, gen_duration,
-                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu)
+                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype="float32")
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
             

@@ -175,7 +175,8 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
                         inputs["pixel_values"] = inputs["pixel_values"].to(device, torch.float32)
                         inputs["input_ids"] = inputs["input_ids"].to(device)
                     else:
-                        inputs = inputs.to(device)
+                        inputs["pixel_values"] = inputs["pixel_values"].to(dtype=dtype, device=device)
+                        inputs["input_ids"] = inputs["input_ids"].to(device=device)
 
                     # Disable cache to avoid MPS past_key_values crash
                     generated_ids = model.generate(
@@ -216,7 +217,8 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
                     inputs["pixel_values"] = inputs["pixel_values"].to(device, torch.float32)
                     inputs["input_ids"] = inputs["input_ids"].to(device)
                 else:
-                    inputs = inputs.to(device)
+                    inputs["pixel_values"] = inputs["pixel_values"].to(dtype=dtype, device=device)
+                    inputs["input_ids"] = inputs["input_ids"].to(device=device)
 
                 # Disable cache to avoid MPS past_key_values crash
                 generated_ids = model.generate(

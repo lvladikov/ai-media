@@ -1298,8 +1298,9 @@ def run_interactive(jump_point=None):
                 display = name
             options.append((display, name))
         
-        # Prepend 'Run All' options
+        # Prepend 'Run All' options and custom pattern option
         count = len(tests)
+        options.insert(0, (f"🔍  Run Tests by Pattern (e.g. Interactive*)", "PATTERN"))
         options.insert(0, (f"📜  Run All {count} Tests (Verbose)", "ALL_VERBOSE"))
         options.insert(0, (f"🚀  Run All {count} Tests (Summary)", "ALL_QUIET"))
 
@@ -1316,6 +1317,26 @@ def run_interactive(jump_point=None):
             elif choice == "ALL_VERBOSE":
                 # Run all tests (verbose mode)
                 run_self_command("--test-verbose")
+            elif choice == "PATTERN":
+                # Custom glob pattern
+                clear_screen()
+                show_header("App Run Tests - Custom Pattern")
+                print("Enter a glob pattern to match test names.\n")
+                print("Supported patterns:")
+                print("  • *     matches everything")
+                print("  • ?     matches single character")
+                print("  • [seq] matches characters in seq")
+                print("\nExamples:")
+                print("  • Interactive*    - all interactive tests")
+                print("  • Image*          - all image tests")
+                print("  • *SDXL*          - tests containing SDXL")
+                print("  • Video - Jump ?  - Jump 1 through Jump 9\n")
+                
+                pattern = prompt_text("Pattern", required=True)
+                if pattern:
+                    run_self_command(f"--test-verbose \"{pattern}\"")
+                    prompt_menu("Press Enter to continue...", [], allow_back=True)
+                continue
             else:
                 # Run specific test
                 # Always use verbose for single test as requested

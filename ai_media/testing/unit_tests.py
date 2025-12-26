@@ -2329,6 +2329,105 @@ class TestRunOnFilter(unittest.TestCase):
         should_run, _ = self.should_run_test(test, "cpu")
         self.assertTrue(should_run)
 
+# =============================================================================
+# Test Glob Pattern Filtering for --test flag
+# =============================================================================
+
+class TestGlobPatternFiltering(unittest.TestCase):
+    """Tests for glob pattern matching in test filtering (--test flag)."""
+    
+    def setUp(self):
+        """Import the fnmatch module and define the matches_filter function."""
+        import fnmatch
+        self.fnmatch = fnmatch
+        
+        # This is the same logic used in run_tests() - case-insensitive
+        def matches_filter(test_name, patterns):
+            """Check if test name matches any filter pattern (exact or glob, case-insensitive)."""
+            test_lower = test_name.lower()
+            for pattern in patterns:
+                pattern_lower = pattern.lower()
+                # First try exact match (case-insensitive)
+                if test_lower == pattern_lower:
+                    return True
+                # Then try glob pattern match (supports *, ?, [seq], [!seq])
+                if fnmatch.fnmatch(test_lower, pattern_lower):
+                    return True
+            return False
+        
+        self.matches_filter = matches_filter
+    
+    def test_exact_match(self):
+        """Test exact match takes priority."""
+        result = self.matches_filter("Image - SDXL", ["Image - SDXL"])
+        self.assertTrue(result)
+        
+    def test_exact_match_no_match(self):
+        """Test exact match returns False when no match."""
+        result = self.matches_filter("Image - SDXL", ["Video - Zeroscope"])
+        self.assertFalse(result)
+    
+    def test_wildcard_star_suffix(self):
+        """Test wildcard * at end matches prefix."""
+        result = self.matches_filter("Interactive - Jump 1 (Image)", ["Interactive*"])
+        self.assertTrue(result)
+        
+    def test_wildcard_star_prefix(self):
+        """Test wildcard * at start matches suffix."""
+        result = self.matches_filter("Image - SDXL (Default)", ["*Default*"])
+        self.assertTrue(result)
+        
+    def test_wildcard_star_middle(self):
+        """Test wildcard * in middle matches."""
+        result = self.matches_filter("Video - Zeroscope", ["Video*Zeroscope"])
+        self.assertTrue(result)
+    
+    def test_wildcard_question_mark(self):
+        """Test ? matches single character."""
+        result = self.matches_filter("Jump 1", ["Jump ?"])
+        self.assertTrue(result)
+        result2 = self.matches_filter("Jump 10", ["Jump ?"])
+        self.assertFalse(result2)  # ? only matches one char
+        
+    def test_multiple_patterns(self):
+        """Test multiple patterns in list."""
+        result = self.matches_filter("Audio - Bark", ["Video*", "Audio*"])
+        self.assertTrue(result)
+        
+    def test_no_match_with_patterns(self):
+        """Test no match when patterns don't match."""
+        result = self.matches_filter("Caption Test", ["Video*", "Audio*"])
+        self.assertFalse(result)
+        
+    def test_bracket_character_class(self):
+        """Test [seq] character class matching."""
+        result = self.matches_filter("Test-A", ["Test-[ABC]"])
+        self.assertTrue(result)
+        result2 = self.matches_filter("Test-D", ["Test-[ABC]"])
+        self.assertFalse(result2)
+        
+    def test_empty_test_name(self):
+        """Test empty test name doesn't match non-empty patterns."""
+        result = self.matches_filter("", ["Interactive*"])
+        self.assertFalse(result)
+        
+    def test_empty_patterns_list(self):
+        """Test empty patterns list returns False."""
+        result = self.matches_filter("Some Test", [])
+        self.assertFalse(result)
+    
+    def test_case_insensitive_match(self):
+        """Test case-insensitive matching works."""
+        # Lowercase pattern matches title-case name
+        result = self.matches_filter("Interactive - Jump 1", ["interactive*"])
+        self.assertTrue(result)
+        # Uppercase pattern matches lowercase name  
+        result2 = self.matches_filter("image - sdxl", ["IMAGE*"])
+        self.assertTrue(result2)
+        # Mixed case
+        result3 = self.matches_filter("Video - Zeroscope", ["video*zeroscope"])
+        self.assertTrue(result3)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

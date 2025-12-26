@@ -46,19 +46,8 @@ warnings.filterwarnings("ignore", message=".*torch_dtype.*deprecated.*", categor
 warnings.filterwarnings("ignore", message=".*torch_dtype.*deprecated.*")  # Catch all
 warnings.filterwarnings("ignore", message=".*upcast_vae.*deprecated.*", category=FutureWarning)
 
-# Suppress noisy deprecation warnings from transformers/diffusers logging
-# Note: torch_dtype deprecation is a diffusers bug (uses print() not warnings).
-# We use WARNING level to keep progress bars and useful info visible.
-try:
-    import transformers.utils.logging as tf_logging
-    tf_logging.set_verbosity_warning()
-except ImportError:
-    pass
-try:
-    import diffusers.utils.logging as df_logging 
-    df_logging.set_verbosity_warning()
-except ImportError:
-    pass
+# Note: transformers/diffusers logging suppression is deferred to load_ai_modules()
+# to avoid loading heavy ML libraries for lightweight operations (e.g., interactive menu).
 
 
 
@@ -155,6 +144,18 @@ def load_ai_modules():
         return
 
     try:
+        # Suppress noisy logging from transformers/diffusers (deferred from startup)
+        try:
+            import transformers.utils.logging as tf_logging
+            tf_logging.set_verbosity_warning()
+        except ImportError:
+            pass
+        try:
+            import diffusers.utils.logging as df_logging 
+            df_logging.set_verbosity_warning()
+        except ImportError:
+            pass
+        
         import ai_media.utils.parsers as pkg_parsers
         import ai_media.utils.system as pkg_system
         import ai_media.utils.performance as pkg_performance
@@ -594,7 +595,14 @@ Supported Models (Code : Download Size | Description):
     # --- Parse Arguments ---
     args = parser.parse_args()
     
-    # LAZY LOADING: Load heavy AI modules ONLY after arguments have been parsed.
+    # Interactive Mode Trigger - handled BEFORE heavy module loading for instant startup
+    if args.interactive or len(sys.argv) == 1:
+        # Only import lightweight interactive module, skip heavy AI generators
+        from ai_media.interactive import run_interactive
+        run_interactive(jump_point=args.interactive if args.interactive != "menu" else None)
+        sys.exit(0)
+    
+    # LAZY LOADING: Load heavy AI modules ONLY for non-interactive modes
     load_ai_modules()
     
     # Parse upscale factor (convert "2x" string to 2.0 float)
@@ -606,12 +614,6 @@ Supported Models (Code : Download Size | Description):
     # Set AI_MEDIA_FORCE env var so all internal functions respect --force flag
     if args.force:
         os.environ["AI_MEDIA_FORCE"] = "1"
-    
-    # Note: Constants (IMAGE_MODELS etc) were loaded eagerly at startup
-    # Interactive Mode Trigger
-    if args.interactive or len(sys.argv) == 1:
-        pkg_run_interactive(jump_point=args.interactive if args.interactive != "menu" else None)
-        sys.exit(0)
 
     # Test Triggers (Priority over generation)
     if args.test is not None:
@@ -631,7 +633,8 @@ Supported Models (Code : Download Size | Description):
 
     # Prompt Check (Required for non-chat modes, but not for I2V with input_image)
     if not args.chat and not args.prompt and not args.input_image and not any([args.generate_description, args.transform_image, args.convert_image, args.convert_video, args.convert_audio, args.convert_document, args.upscale_image, args.upscale_video, args.generate_code]):
-        print("❌ Error: Prompt is required (use -p 'Your prompt')")
+        from ai_media.utils.interaction import emoji
+        print(f"{emoji('❌', '[X]')} Error: Prompt is required (use -p 'Your prompt')")
         sys.exit(1)
         
     # --- Dispatch ---

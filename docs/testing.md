@@ -67,6 +67,57 @@ python ai-media.py --test "Validation - Image Generation" "Validation - Video Ge
 python ai-media.py --test-verbose "Validation - Image Generation" "Validation - Video Generation" "Validation - Audio Generation"
 ```
 
+### Glob Pattern Filtering
+
+Use glob patterns to match multiple integration tests by name pattern, avoiding the need to list each test individually:
+
+> **Note:** Pattern matching is **case-insensitive** on all platforms.
+
+#### Supported Patterns
+
+| Pattern | Matches |
+|---------|---------|
+| `*` | Everything (zero or more characters) |
+| `?` | Single character |
+| `[seq]` | Any character in seq (e.g., `[ABC]`) |
+| `[!seq]` | Any character NOT in seq |
+
+```bash
+# Run all Interactive tests (64 tests)
+python ai-media.py --test "Interactive*"
+
+# Same as above (case-insensitive on Windows)
+python ai-media.py --test "interactive*"
+
+# Run all Image tests
+python ai-media.py --test "Image*"
+
+# Run tests containing "SDXL"
+python ai-media.py --test "*SDXL*"
+
+# Run Jump 1 through Jump 9 (single digit)
+python ai-media.py --test "Interactive - Jump ?"
+
+# Match tests ending in numbers 1, 2, or 3
+python ai-media.py --test "Interactive - Jump [123]"
+
+# Match Jump 1 through Jump 9 but NOT Jump 10+
+python ai-media.py --test "Interactive - Jump [1-9]"
+
+# Match all Audio models EXCEPT Bark
+python ai-media.py --test "Audio*[!k]"  # Excludes names ending in 'k'
+
+# Match SD 1.5 or SD 2.x
+python ai-media.py --test "*SD [12]*"
+```
+
+#### Interactive Mode
+
+In the Integration Tests menu, select **"🔍 Run Tests by Pattern"** to enter a custom glob pattern interactively. This provides:
+- Pattern syntax help
+- Example patterns
+- Immediate execution of matching tests
+
 ### Skipping Tests
 
 You can permanently skip a specific test by adding `"skip": true` to its definition in `ai_media/testing/integration-tests.json`.

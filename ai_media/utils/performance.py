@@ -41,7 +41,7 @@ class PerformanceTracker:
         with open(self.filepath, 'w') as f:
             json.dump(self.data, f, indent=2)
 
-    def record_image(self, model, width, height, device, time_taken, cpu=0, ram=0, vram=0, gpu=0):
+    def record_image(self, model, width, height, device, time_taken, cpu=0, ram=0, vram=0, gpu=0, dtype=None):
         dev_str = device.type if hasattr(device, 'type') else str(device)
         key = f"{model}|{dev_str}|{width}x{height}"
         if "image" not in self.data:
@@ -67,11 +67,14 @@ class PerformanceTracker:
                 "average_cpu": cpu,
                 "average_gpu": gpu
             }
+        
+        if dtype:
+            entry["dtype"] = dtype
             
         self.data["image"][key] = entry
         self._save()
 
-    def record_linear(self, category, model, device, duration, time_taken, width=None, height=None, cpu=0, ram=0, vram=0, gpu=0):
+    def record_linear(self, category, model, device, duration, time_taken, width=None, height=None, cpu=0, ram=0, vram=0, gpu=0, dtype=None):
         """Record Audio/Video generation using rolling average rate (seconds to gen / seconds of content)."""
         dev_str = device.type if hasattr(device, 'type') else str(device)
         # For video, resolution also matters, so we include it in key
@@ -103,6 +106,9 @@ class PerformanceTracker:
                 "average_cpu": cpu, 
                 "average_gpu": gpu
             }
+            
+        if dtype:
+            entry["dtype"] = dtype
             
         self.data[category][key] = entry
         self._save()

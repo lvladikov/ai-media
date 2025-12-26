@@ -21,6 +21,7 @@ import json
 import time
 import shlex
 import tempfile
+import fnmatch
 from pathlib import Path
 from datetime import datetime
 
@@ -240,7 +241,7 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
     expected_outputs = test_config.get("expectedOutputItems", [])
     expected_inputs = test_config.get("expectedInputItems", [])
     is_interactive = test_config.get("interactive", False)
-    interactive_wait = test_config.get("interactiveWait", 2.0)
+    interactive_wait = test_config.get("interactiveWait", 3.0)
     timeout_limit = test_config.get("timeout", 600)
     description = test_config.get("description", "")
     
@@ -294,7 +295,7 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
             cwd=str(script_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout
-            stdin=subprocess.DEVNULL if is_interactive else None,
+            stdin=subprocess.PIPE if is_interactive else None,  # PIPE allows menu to render before stdin close
             text=True,
             encoding='utf-8',
             errors='replace',
@@ -309,10 +310,47 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
             test_state['current_process'] = current_process
         
         if is_interactive:
-            # Wait for interactive prompt then terminate
+            # Close stdin immediately so msvcrt.getch() gets EOF rather than hanging
+            if current_process.stdin:
+                current_process.stdin.close()
+            
+            # Poll stdout for expected content, terminate early when found
             if verbose:
-                print(f"   ⏳ Waiting {interactive_wait}s for interactive output...")
-            time.sleep(interactive_wait)
+                print(f"   {emoji('⏳ ', '')}Waiting {interactive_wait}s for interactive output...")
+            
+            collected_output = []
+            start_wait = time.time()
+            expected_stdout = test_config.get("expectedStdoutItems", [])
+            
+            # Use threaded reader for cross-platform compatibility
+            import threading
+            
+            def read_output():
+                try:
+                    while True:
+                        line = current_process.stdout.readline()
+                        if not line:
+                            break
+                        collected_output.append(line)
+                except Exception:
+                    pass
+            
+            reader_thread = threading.Thread(target=read_output, daemon=True)
+            reader_thread.start()
+            
+            # Wait and check for expected content periodically
+            while (time.time() - start_wait) < interactive_wait:
+                time.sleep(0.3)
+                # Check if we found all expected items
+                combined = ''.join(collected_output)
+                if expected_stdout and all(item in combined for item in expected_stdout):
+                    if verbose:
+                        elapsed = time.time() - start_wait
+                        print(f"   {emoji('✓ ', 'OK ')}Found stdout: '{expected_stdout[0]}' (after {elapsed:.1f}s)")
+                    break
+                # Check if process has exited
+                if current_process.poll() is not None:
+                    break
             
             # Terminate gracefully
             if os.name == 'nt':
@@ -320,7 +358,15 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
             else:
                 current_process.send_signal(signal.SIGINT)
             
-            stdout, _ = current_process.communicate(timeout=5)
+            try:
+                remaining_stdout, _ = current_process.communicate(timeout=5)
+                if remaining_stdout:
+                    collected_output.append(remaining_stdout)
+            except subprocess.TimeoutExpired:
+                current_process.kill()
+                current_process.communicate()
+            
+            stdout = ''.join(collected_output)
             stdout_lines = [stdout] if stdout else []
         else:
             # Non-interactive: Stream output real-time if verbose
@@ -401,7 +447,7 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
         # Kill subprocess and re-raise
         if current_process:
             pid = current_process.pid
-            print(f"\n   ⚠️  Killing subprocess tree (PID {pid})...")
+            print(f"\n   {emoji('⚠️ ', 'Warning ')} Killing subprocess tree (PID {pid})...")
             
             if os.name == 'nt':
                 try:
@@ -432,7 +478,7 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
         result["elapsed"] = elapsed
         result["passed"] = False
         result["reason"] = str(e)
-        print(f"   ❌ Error: {e}")
+        print(f"   {emoji('❌ ', 'Error: ')}Error: {e}")
         return result
 
 
@@ -472,17 +518,33 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             
         if test_filter:
             original_count = len(tests)
-            tests = [t for t in tests if t.get("name") in test_filter]
-            print(f"🔎 Filtered: {len(tests)} of {original_count} tests")
+            
+            # Filter tests using exact match first, then glob patterns (case-insensitive)
+            def matches_filter(test_name, patterns):
+                """Check if test name matches any filter pattern (exact or glob, case-insensitive)."""
+                test_lower = test_name.lower()
+                for pattern in patterns:
+                    pattern_lower = pattern.lower()
+                    # First try exact match (case-insensitive)
+                    if test_lower == pattern_lower:
+                        return True
+                    # Then try glob pattern match (supports *, ?, [seq], [!seq])
+                    if fnmatch.fnmatch(test_lower, pattern_lower):
+                        return True
+                return False
+            
+            tests = [t for t in tests if matches_filter(t.get("name", ""), test_filter)]
+            print(f" {emoji('🔎 ', '[Filtered] ')}{len(tests)} of {original_count} tests")
             if not tests:
-                print(f"❌ No tests match filter: {test_filter}")
+                print(f"{emoji('❌ ', '[X] ')}No tests match filter: {test_filter}")
+                print(f"   {emoji('💡 ', 'Tip: ')}Use glob patterns like 'Interactive*' to match multiple tests")
                 return
         
         print(f"Found {len(tests)} integration tests.\n")
         
         # Warning prompt
         print(f"\n{'='*60}")
-        print(f"⚠️  WARNING: Test Suite")
+        print(f" {emoji('⚠️ ', '')} WARNING: Test Suite")
         print(f"{'='*60}")
         print(f"   • Integration tests can take a long time")
         print(f"   • Models will be downloaded if not present (2-30GB each)")
@@ -494,7 +556,7 @@ def run_tests(test_type="all", verbose=True, test_filter=None, exit_on_finish=Tr
             try:
                 choice = input(f"\n   Continue? [Y/n]: ").lower().strip()
                 if choice in ['n', 'no']:
-                    print("❌ Test cancelled.")
+                    print(f"{emoji('❌ ', 'X ')}Test cancelled.")
                     if exit_on_finish:
                         sys.exit(0)
                     return

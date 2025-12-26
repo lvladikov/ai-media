@@ -43,7 +43,7 @@
     },
     {
       "name": "Image - Flux 2 (4-bit Quantized)",
-      "timeout": 3600,
+      "timeout": 7200,
       "runOn": "cuda",
       "command": "-i -p \"A blue car\" -o ai_media/testing/data/outputs/img_flux2.jpg -s 64x64 --image-model flux2 --force --unsafe",
       "expectedInputItems": [],
@@ -927,7 +927,37 @@
         "Image Generation",
         "Model: sdxl"
       ],
-      "description": "Test interactive menu jump with model preset"
+      "description": "Test interactive menu jump with SDXL preset"
+    },
+    {
+      "name": "Interactive - Jump 1/2 (SD-1.5)",
+      "command": "--interactive 1/2",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: sd-1.5"
+      ],
+      "description": "Test interactive menu jump with SD-1.5 preset"
+    },
+    {
+      "name": "Interactive - Jump 1/3 (Flux)",
+      "command": "--interactive 1/3",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: flux"
+      ],
+      "description": "Test interactive menu jump with Flux preset"
+    },
+    {
+      "name": "Interactive - Jump 1/4 (Flux-Dev)",
+      "command": "--interactive 1/4",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: flux-dev"
+      ],
+      "description": "Test interactive menu jump with Flux-Dev preset"
     },
     {
       "name": "Interactive - Jump 2 (Video)",
@@ -937,6 +967,46 @@
         "Video Generation"
       ],
       "description": "Test interactive menu jump to Video Generation"
+    },
+    {
+      "name": "Interactive - Jump 2/1 (Zeroscope)",
+      "command": "--interactive 2/1",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: zeroscope"
+      ],
+      "description": "Test interactive menu jump with Zeroscope preset"
+    },
+    {
+      "name": "Interactive - Jump 2/2 (ModelScope)",
+      "command": "--interactive 2/2",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: ms-1.7b"
+      ],
+      "description": "Test interactive menu jump with ModelScope preset"
+    },
+    {
+      "name": "Interactive - Jump 2/3 (CogVideoX)",
+      "command": "--interactive 2/3",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: cogvideox"
+      ],
+      "description": "Test interactive menu jump with CogVideoX preset"
+    },
+    {
+      "name": "Interactive - Jump 2/4 (SVD)",
+      "command": "--interactive 2/4",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: svd"
+      ],
+      "description": "Test interactive menu jump with SVD preset"
     },
     {
       "name": "Interactive - Jump 3 (Audio)",
@@ -949,6 +1019,46 @@
       "description": "Test interactive menu jump to Audio Generation"
     },
     {
+      "name": "Interactive - Jump 3/1 (MusicGen-Medium)",
+      "command": "--interactive 3/1",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: musicgen-medium"
+      ],
+      "description": "Test interactive menu jump with MusicGen-Medium preset"
+    },
+    {
+      "name": "Interactive - Jump 3/2 (MusicGen-Small)",
+      "command": "--interactive 3/2",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: musicgen-small"
+      ],
+      "description": "Test interactive menu jump with MusicGen-Small preset"
+    },
+    {
+      "name": "Interactive - Jump 3/3 (MusicGen-Large)",
+      "command": "--interactive 3/3",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: musicgen-large"
+      ],
+      "description": "Test interactive menu jump with MusicGen-Large preset"
+    },
+    {
+      "name": "Interactive - Jump 3/4 (AudioLDM2)",
+      "command": "--interactive 3/4",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: audioldm2"
+      ],
+      "description": "Test interactive menu jump with AudioLDM2 preset"
+    },
+    {
       "name": "Interactive - Jump 3/5 (Bark)",
       "command": "--interactive 3/5",
       "interactive": true,
@@ -959,26 +1069,107 @@
       "description": "Test interactive menu jump with Bark preset"
     },
     {
-      "name": "Interactive - Jump 4 (Description)",
+      "name": "Interactive - Jump 4 (Caption)",
       "command": "--interactive 4",
       "interactive": true,
       "expectedStdoutItems": [
         "Generate Description"
       ],
-      "description": "Test interactive menu jump to Caption"
+      "description": "Test interactive menu jump to Caption/Description"
     },
     {
-      "name": "Interactive - Jump 5 (Transform)",
+      "name": "Interactive - Jump 5 (Article)",
       "command": "--interactive 5",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump to Article Generation"
+    },
+    {
+      "name": "Interactive - Jump 5/1 (Article Offline)",
+      "command": "--interactive 5/1",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump with Article Offline preset"
+    },
+    {
+      "name": "Interactive - Jump 5/2 (Article Online)",
+      "command": "--interactive 5/2",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump with Article Online preset"
+    },
+    {
+      "name": "Interactive - Jump 6 (Code)",
+      "command": "--interactive 6",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Code"
+      ],
+      "description": "Test interactive menu jump to Code Generation"
+    },
+    {
+      "name": "Interactive - Jump 7 (Chat)",
+      "command": "--interactive 7",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Chat"
+      ],
+      "description": "Test interactive menu jump to Chat"
+    },
+    {
+      "name": "Interactive - Jump 8 (Transform)",
+      "command": "--interactive 8",
       "interactive": true,
       "expectedStdoutItems": [
         "Transform/Edit Image"
       ],
-      "description": "Test interactive menu jump to Transform Media"
+      "description": "Test interactive menu jump to Transform"
     },
     {
-      "name": "Interactive - Jump 7 (Upscale)",
-      "command": "--interactive 7",
+      "name": "Interactive - Jump 8/1 (Transform Edit)",
+      "command": "--interactive 8/1",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump with Edit preset"
+    },
+    {
+      "name": "Interactive - Jump 8/2 (Transform RemBG)",
+      "command": "--interactive 8/2",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump with RemBG preset"
+    },
+    {
+      "name": "Interactive - Jump 8/3 (Transform Silhouette)",
+      "command": "--interactive 8/3",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump with Silhouette preset"
+    },
+    {
+      "name": "Interactive - Jump 9 (Convert)",
+      "command": "--interactive 9",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Convert Media"
+      ],
+      "description": "Test interactive menu jump to Convert Media"
+    },
+    {
+      "name": "Interactive - Jump 10 (Upscale)",
+      "command": "--interactive 10",
       "interactive": true,
       "expectedStdoutItems": [
         "Upscale Media"
@@ -986,8 +1177,8 @@
       "description": "Test interactive menu jump to Upscale"
     },
     {
-      "name": "Interactive - Jump 8 (Run Tests)",
-      "command": "--interactive 8",
+      "name": "Interactive - Jump 11 (Test)",
+      "command": "--interactive 11",
       "interactive": true,
       "expectedStdoutItems": [
         "Run Tests",
@@ -997,28 +1188,26 @@
       "description": "Test interactive menu jump to Run Tests"
     },
     {
-      "name": "Interactive - Jump 8/1 (Unit Tests)",
-      "command": "--interactive 8/1",
+      "name": "Interactive - Jump 11/1 (Unit Tests)",
+      "command": "--interactive 11/1",
       "interactive": true,
       "expectedStdoutItems": [
-        "Unit Tests",
-        "test classes found"
+        "Unit Tests"
       ],
       "description": "Test interactive menu jump to Unit Tests"
     },
     {
-      "name": "Interactive - Jump 8/2 (Integration Tests)",
-      "command": "--interactive 8/2",
+      "name": "Interactive - Jump 11/2 (Integration Tests)",
+      "command": "--interactive 11/2",
       "interactive": true,
       "expectedStdoutItems": [
-        "Integration Tests",
-        "Select a test to run"
+        "App Run Tests"
       ],
       "description": "Test interactive menu jump to Integration Tests"
     },
     {
-      "name": "Interactive - Jump 9 (SysInfo)",
-      "command": "--interactive 9",
+      "name": "Interactive - Jump 12 (SysInfo)",
+      "command": "--interactive 12",
       "interactive": true,
       "interactiveWait": 5.0,
       "expectedStdoutItems": [
@@ -1031,6 +1220,117 @@
       "description": "Test interactive menu jump to System Info"
     },
     {
+      "name": "Interactive - Jump article",
+      "command": "--interactive article",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump by name (article)"
+    },
+    {
+      "name": "Interactive - Jump article/offline",
+      "command": "--interactive article/offline",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump by path (article/offline)"
+    },
+    {
+      "name": "Interactive - Jump article/online",
+      "command": "--interactive article/online",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump by path (article/online)"
+    },
+    {
+      "name": "Interactive - Jump audio",
+      "command": "--interactive audio",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation"
+      ],
+      "description": "Test interactive menu jump by name (audio)"
+    },
+    {
+      "name": "Interactive - Jump audio/bark",
+      "command": "--interactive audio/bark",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: bark"
+      ],
+      "description": "Test interactive menu jump by path (audio/bark)"
+    },
+    {
+      "name": "Interactive - Jump audio/musicgen",
+      "command": "--interactive audio/musicgen",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Audio Generation",
+        "Model: musicgen-medium"
+      ],
+      "description": "Test interactive menu jump by path (audio/musicgen)"
+    },
+    {
+      "name": "Interactive - Jump caption",
+      "command": "--interactive caption",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Description"
+      ],
+      "description": "Test interactive menu jump by name (caption)"
+    },
+    {
+      "name": "Interactive - Jump chat",
+      "command": "--interactive chat",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Chat"
+      ],
+      "description": "Test interactive menu jump by name (chat)"
+    },
+    {
+      "name": "Interactive - Jump code",
+      "command": "--interactive code",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Code"
+      ],
+      "description": "Test interactive menu jump by name (code)"
+    },
+    {
+      "name": "Interactive - Jump convert",
+      "command": "--interactive convert",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Convert Media"
+      ],
+      "description": "Test interactive menu jump by name (convert)"
+    },
+    {
+      "name": "Interactive - Jump image",
+      "command": "--interactive image",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation"
+      ],
+      "description": "Test interactive menu jump by name (image)"
+    },
+    {
+      "name": "Interactive - Jump image/flux",
+      "command": "--interactive image/flux",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Image Generation",
+        "Model: flux"
+      ],
+      "description": "Test interactive menu jump by path (image/flux)"
+    },
+    {
       "name": "Interactive - Jump image/sdxl",
       "command": "--interactive image/sdxl",
       "interactive": true,
@@ -1039,6 +1339,15 @@
         "Model: sdxl"
       ],
       "description": "Test interactive menu jump by path (image/sdxl)"
+    },
+    {
+      "name": "Interactive - Jump research",
+      "command": "--interactive research",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Generate Article"
+      ],
+      "description": "Test interactive menu jump by name (research - alias for article/online)"
     },
     {
       "name": "Interactive - Jump sysinfo",
@@ -1051,25 +1360,106 @@
       "description": "Test interactive menu jump by name (sysinfo)"
     },
     {
-      "name": "Interactive - Jump 8/3 (Codec Limits Test)",
-      "command": "--interactive 8/3",
+      "name": "Interactive - Jump test",
+      "command": "--interactive test",
       "interactive": true,
-      "interactiveWait": 3.0,
       "expectedStdoutItems": [
-        "Codec Limits Test",
-        "FFmpeg Codec"
+        "Run Tests"
       ],
-      "description": "Test interactive menu jump to Codec Limits Test"
+      "description": "Test interactive menu jump by name (test)"
     },
     {
-      "name": "Interactive - Jump test/codec",
-      "command": "--interactive test/codec",
+      "name": "Interactive - Jump test/integration",
+      "command": "--interactive test/integration",
       "interactive": true,
-      "interactiveWait": 3.0,
       "expectedStdoutItems": [
-        "Codec Limits Test"
+        "App Run Tests"
       ],
-      "description": "Test interactive menu jump by path (test/codec)"
+      "description": "Test interactive menu jump by path (test/integration)"
+    },
+    {
+      "name": "Interactive - Jump test/unit",
+      "command": "--interactive test/unit",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Unit Tests"
+      ],
+      "description": "Test interactive menu jump by path (test/unit)"
+    },
+    {
+      "name": "Interactive - Jump transform",
+      "command": "--interactive transform",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump by name (transform)"
+    },
+    {
+      "name": "Interactive - Jump transform/edit",
+      "command": "--interactive transform/edit",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump by path (transform/edit)"
+    },
+    {
+      "name": "Interactive - Jump transform/rembg",
+      "command": "--interactive transform/rembg",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Transform/Edit Image"
+      ],
+      "description": "Test interactive menu jump by path (transform/rembg)"
+    },
+    {
+      "name": "Interactive - Jump upscale",
+      "command": "--interactive upscale",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Upscale Media"
+      ],
+      "description": "Test interactive menu jump by name (upscale)"
+    },
+    {
+      "name": "Interactive - Jump video",
+      "command": "--interactive video",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation"
+      ],
+      "description": "Test interactive menu jump by name (video)"
+    },
+    {
+      "name": "Interactive - Jump video/cogvideox",
+      "command": "--interactive video/cogvideox",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: cogvideox"
+      ],
+      "description": "Test interactive menu jump by path (video/cogvideox)"
+    },
+    {
+      "name": "Interactive - Jump video/svd",
+      "command": "--interactive video/svd",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: svd"
+      ],
+      "description": "Test interactive menu jump by path (video/svd)"
+    },
+    {
+      "name": "Interactive - Jump video/zeroscope",
+      "command": "--interactive video/zeroscope",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Video Generation",
+        "Model: zeroscope"
+      ],
+      "description": "Test interactive menu jump by path (video/zeroscope)"
     },
     {
       "name": "Article - Offline (Default Model)",

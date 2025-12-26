@@ -394,7 +394,9 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 init_image = init_image.resize((gen_width, gen_height))
                 
                 if "stable-video-diffusion" in model_id.lower():
-                    video_frames = pipe(init_image).frames[0]
+                    # Fix: Use autocast to handle BFloat16/Float32 mismatch
+                    with torch.autocast(device_type=device.type, dtype=dtype):
+                        video_frames = pipe(init_image).frames[0]
                 elif "wan2.2" in model_id.lower():
                     video_frames = pipe(prompt=prompt, image=init_image, 
                                        num_frames=81, num_inference_steps=50).frames[0]
@@ -413,7 +415,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
         tracker.record_linear("video", model_id, device, duration, gen_duration, 
                              gen_width, gen_height, cpu=avg_cpu, ram=avg_ram, 
-                             vram=avg_vram, gpu=avg_gpu)
+                             vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
         print(f"   ✓ Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
               f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
         
