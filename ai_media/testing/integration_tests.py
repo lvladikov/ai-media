@@ -364,7 +364,15 @@ def run_integration_test(test_config, script_path, verbose=False, test_state=Non
                     collected_output.append(remaining_stdout)
             except subprocess.TimeoutExpired:
                 current_process.kill()
-                current_process.communicate()
+                try:
+                    current_process.communicate()
+                except (OSError, IOError, ValueError):
+                    pass  # Mac/Linux: Pipes may already be closed after kill
+            except (OSError, IOError, ValueError):
+                # Mac/Linux: After SIGINT, pipes may already be closed
+                # ValueError can occur when communicate() tries to flush closed stdin
+                # This is expected behavior on Unix after termination
+                pass
             
             stdout = ''.join(collected_output)
             stdout_lines = [stdout] if stdout else []

@@ -102,8 +102,14 @@ def get_cursor_position():
         return None
     
     import termios, tty
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    
+    # Handle closed stdin (e.g., during automated testing on Mac/Linux)
+    try:
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+    except (OSError, IOError, ValueError, termios.error):
+        return None
+    
     try:
         tty.setraw(fd)
         sys.stdout.write("\033[6n")
@@ -121,23 +127,34 @@ def get_cursor_position():
             match = re.search(r'\x1b\[(\d+);(\d+)R', resp)
             if match:
                 return int(match.group(1)), int(match.group(2))
-    except (termios.error, IOError):
+    except (termios.error, IOError, OSError, ValueError):
         pass
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except (OSError, IOError, ValueError, termios.error):
+            pass
     return None
 
 
 def set_raw_mode(fd):
     """Enter raw mode, return old settings."""
-    if os.name == 'nt' or not sys.stdin.isatty():
+    if os.name == 'nt':
         return None
+    
+    # Handle closed stdin (e.g., during automated testing on Mac/Linux)
+    try:
+        if not sys.stdin.isatty():
+            return None
+    except (OSError, IOError, ValueError):
+        return None
+    
     import termios, tty
     try:
         old = termios.tcgetattr(fd)
         tty.setraw(fd)
         return old
-    except termios.error:
+    except (termios.error, OSError, IOError, ValueError):
         return None
 
 
@@ -146,7 +163,10 @@ def restore_mode(fd, old_settings):
     if os.name == 'nt' or not old_settings or fd is None:
         return
     import termios
-    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    try:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except (termios.error, OSError, IOError, ValueError):
+        pass  # Ignore errors when restoring (stdin might be closed)
 
 
 # =============================================================================
@@ -182,7 +202,13 @@ def get_key():
         return ch.decode('utf-8', errors='ignore')
     else:  # Unix/Mac
         import tty, termios
-        fd = sys.stdin.fileno()
+        
+        # Handle closed stdin (e.g., during automated testing on Mac/Linux)
+        try:
+            fd = sys.stdin.fileno()
+        except (OSError, IOError, ValueError):
+            # stdin is closed or not available - exit gracefully
+            raise KeyboardInterrupt("stdin closed")
         
         is_interactive = sys.stdout.isatty()
         old_settings = None
