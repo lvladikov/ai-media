@@ -817,6 +817,7 @@
     },
     {
       "name": "Upscale Video - 4x (Real-ESRGAN)",
+      "runOn": "cuda",
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 4.0 -o ai_media/testing/data/outputs/up_video_realesrgan.mp4 --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample_video.mov"
@@ -828,6 +829,7 @@
     },
     {
       "name": "Upscale Video - 10K Stress Test",
+      "runOn": "cuda",
       "timeout": 2400,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 8.0 -o ai_media/testing/data/outputs/up_video_10k.mp4 --force",
       "expectedInputItems": [
@@ -840,6 +842,7 @@
     },
     {
       "name": "Upscale Video - 5K Test",
+      "runOn": "cuda",
       "timeout": 1200,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 4.0 -o ai_media/testing/data/outputs/up_video_5k.mp4 --force",
       "expectedInputItems": [
@@ -852,6 +855,7 @@
     },
     {
       "name": "Upscale Video - 8K HEVC Test",
+      "runOn": "cuda",
       "timeout": 1200,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 6.0 -vc hevc -o ai_media/testing/data/outputs/up_video_8k_hevc.mp4 --force",
       "expectedInputItems": [
@@ -864,6 +868,7 @@
     },
     {
       "name": "Upscale Video - 8K H264 Test",
+      "runOn": "cuda",
       "timeout": 1200,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 6.0 -vc h264 -o ai_media/testing/data/outputs/up_video_8k_h264.mp4 --force",
       "expectedInputItems": [
@@ -876,6 +881,7 @@
     },
     {
       "name": "Upscale Video - 4K AV1 Test",
+      "runOn": "cuda",
       "timeout": 1200,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 4.0 -vc av1 -o ai_media/testing/data/outputs/up_video_4k_av1.mp4 --force",
       "expectedInputItems": [
@@ -888,6 +894,7 @@
     },
     {
       "name": "Upscale Video - Stable Diffusion 2x",
+      "runOn": "cuda",
       "timeout": 3600,
       "command": "-uv ai_media/testing/data/inputs/sample_video.mov -uf 2x -vu sd -o ai_media/testing/data/outputs/up_video_sd.mp4 --force",
       "expectedInputItems": [

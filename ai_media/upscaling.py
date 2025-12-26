@@ -427,19 +427,49 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
                 codec = 'hevc'
         
         if codec == 'hevc':
-            vcodec = 'hevc_nvenc' if device.type == 'cuda' else 'libx265'
-            if not _check_ffmpeg_encoder(vcodec, target_w, target_h):
-                print(f"   ⚠️  Hardware HEVC not supported. Falling back to H.264.")
-                vcodec = "libx264"
-                print(f"   🎞️  Using H.264 (CPU)")
+            # Try hardware HEVC first
+            if device.type == 'cuda':
+                vcodec = 'hevc_nvenc'
+            elif device.type == 'mps':
+                vcodec = 'hevc_videotoolbox'
             else:
-                print(f"   🎞️  Using Hardware HEVC")
+                vcodec = 'libx265'
+            
+            if not _check_ffmpeg_encoder(vcodec, target_w, target_h):
+                print(f"   ⚠️  {vcodec} cannot handle {target_w}x{target_h}. Falling back to libx265 (CPU).")
+                vcodec = "libx265"
+            else:
+                print(f"   🎞️  Using {vcodec}")
+        elif codec == 'h264':
+            # Explicit H.264 request - try hardware first
+            if device.type == 'cuda':
+                vcodec = 'h264_nvenc'
+            elif device.type == 'mps':
+                vcodec = 'h264_videotoolbox'
+            else:
+                vcodec = 'libx264'
+            
+            if not _check_ffmpeg_encoder(vcodec, target_w, target_h):
+                print(f"   ⚠️  {vcodec} cannot handle {target_w}x{target_h}. Falling back to libx264 (CPU).")
+                vcodec = 'libx264'
+            else:
+                print(f"   🎞️  Using {vcodec}")
         elif not codec:
-            # Standard auto-detection
+            # Standard auto-detection with resolution verification
             params = get_video_encoding_params(output_path)
             for i, p in enumerate(params):
                 if p == "-c:v":
                     vcodec = params[i+1]
+            
+            # Verify hardware encoder can handle the resolution, fallback to software if not
+            if vcodec in ('h264_videotoolbox', 'h264_nvenc'):
+                if not _check_ffmpeg_encoder(vcodec, target_w, target_h):
+                    print(f"   ⚠️  {vcodec} cannot handle {target_w}x{target_h}. Falling back to libx264 (CPU).")
+                    vcodec = 'libx264'
+            elif vcodec in ('hevc_videotoolbox', 'hevc_nvenc'):
+                if not _check_ffmpeg_encoder(vcodec, target_w, target_h):
+                    print(f"   ⚠️  {vcodec} cannot handle {target_w}x{target_h}. Falling back to libx265 (CPU).")
+                    vcodec = 'libx265'
         
         # 2. Setup Video Writer or FFmpeg Pipe
         temp_video_out = output_path + ".temp.mp4"
@@ -577,6 +607,14 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         print(f"🚀 Upscaling Image: {image_path}")
         print(f"   Model: {model_id}")
         print(f"   Target Factor: {factor}x")
+        
+        # Calculate noise level from strength (0.0 to 1.0 -> 0 to 100)
+        # Higher noise_level = more creative/detail enhancement
+        noise_level = int(strength * 100)
+        if noise_level > 0:
+            print(f"   Noise Level: {noise_level} (strength={strength} - more creative/details)")
+        else:
+            print(f"   Noise Level: {noise_level} (faithful to original)")
         
         if not check_resources_and_confirm(orig_w, orig_h, factor, device.type):
             print("❌ Aborted by user.")

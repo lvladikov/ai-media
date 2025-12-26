@@ -1624,7 +1624,7 @@ class TestFastUpscaler(unittest.TestCase):
                         arg = str(call.args[0])
                         if "Hardware AV1 not supported" in arg:
                             found_fallback = True
-                        if "Using Hardware HEVC" in arg:
+                        if "Using hevc_nvenc" in arg or "Using hevc_videotoolbox" in arg:
                             found_hevc = True
                         
                 self.assertTrue(found_fallback, "Should log AV1 fallback message")

@@ -25,7 +25,7 @@ Applying upscale models to 24+ frames per second.
 | `-uv`, `--upscale-video` | Path to the video file to upscale. | `None` |
 | `-uof`, `--upscaled-output-file` | Custom filename for the upscaled output. | Auto: `name_upscaled_{factor}x.ext` |
 | `-uf`, `--upscale-factor` | Multiplier for resolution (e.g., `1.5`, `2.0`, `4.0`). | `2.0` |
-| `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Higher = closer to original structure. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
+| `-us`, `--upscale-strength` | Noise strength (`0.0`-`1.0`). Lower = faithful to original, Higher = more creative detail. **x4 upscaler only** (ignored for x2 latent). | `0.0` |
 | `-iu`, `--image-upscaler` | Model for image upscaling: `realesrgan` (Fast, Faithful) or `sd` (Slow, Creative). | `realesrgan` |
 | `-vu`, `--video-upscaler` | Model for video upscaling: `realesrgan` (Fast, Faithful) or `sd` (Slow, Creative). | `realesrgan` |
 | `-vc`, `--video-codec` | Preferred Codec: `auto` (Default), `h264`, `hevc`, `av1`. See **Codec Logic** below. |
