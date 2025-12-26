@@ -10,6 +10,8 @@ import json
 import subprocess
 import threading
 import time
+from .interaction import emoji
+from .parsers import format_time
 
 
 def write_report_json(path, stats):
@@ -157,6 +159,18 @@ class PerformanceTracker:
                 stats.get("average_gpu", 0)
             )
         return 0, 0, 0, 0, 0
+
+    def print_estimate(self, est_time, est_cpu, est_ram, est_vram, est_gpu):
+        """Print formatted estimation stats to console."""
+        if est_time > 0:
+            print(f"{emoji('⏱️ ', '')} Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
+        else:
+            print(f"{emoji('⏱️ ', '')} Estimated Resources: (New combination - no history)")
+
+    def print_actual(self, time_taken, cpu, ram, vram, gpu):
+        """Print formatted actual stats to console."""
+        print(f"{emoji('⏱️ ', '')} Actual Resources:    Time: {format_time(time_taken)} | RAM: {ram:.1f}GB | VRAM: {vram:.1f}GB | CPU: {cpu:.1f}% | GPU: {gpu:.1f}%")
+
 
 
 class ResourceMonitor:

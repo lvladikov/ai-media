@@ -79,7 +79,11 @@ class ArticleGenerator:
             if self.device.type == "cuda":
                 try:
                     from transformers import BitsAndBytesConfig
-                    quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=dtype,
+                        llm_int8_enable_fp32_cpu_offload=True
+                    )
                 except ImportError:
                     pass
             
@@ -93,12 +97,23 @@ class ArticleGenerator:
             else:
                 model_kwargs["device_map"] = self.device
                 
-            self.pipeline = pipeline(
-                "text-generation",
-                model=self.model_name,
-                tokenizer=tokenizer,
+            # Load model manually to prevent 'quantization_config' leakage into generate()
+            from transformers import AutoModelForCausalLM
+            
+            # Ensure model_kwargs are clean for from_pretrained
+            print(f"   Using Device Map: {model_kwargs.get('device_map', 'Default')}")
+            
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
                 **model_kwargs
             )
+            
+            self.pipeline = pipeline(
+                "text-generation",
+                model=model,
+                tokenizer=tokenizer,
+            )
+            
             dtype_name = str(dtype).replace("torch.", "")
             print(f"   Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
             print("✅ Model loaded.")

@@ -23,8 +23,7 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
         Caption string or None on failure
     """
     try:
-        if not quiet:
-            print(f"👁️  Analyzing input: {input_path}")
+
         
         # ----------------------------------------------------------------
         # MODEL: BLIP
@@ -48,7 +47,7 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
             else:
                 dtype = torch.float32
             
-            processor = BlipProcessor.from_pretrained(caption_model_id)
+            processor = BlipProcessor.from_pretrained(caption_model_id, use_fast=True)
             model = BlipForConditionalGeneration.from_pretrained(caption_model_id, torch_dtype=dtype).to(device)
             
             if not quiet:

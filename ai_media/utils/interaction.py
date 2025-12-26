@@ -584,7 +584,7 @@ def prompt_file(prompt, must_exist=True):
             return None
 
 
-def check_overwrite(filepath, always_overwrite=False, never_overwrite=False):
+def check_overwrite(filepath, always_overwrite=False, never_overwrite=False, is_batch=False):
     """Check if file exists and prompt user.
     
     Returns: (should_write, final_path, always_overwrite, never_overwrite)
@@ -596,13 +596,21 @@ def check_overwrite(filepath, always_overwrite=False, never_overwrite=False):
         return True, filepath, always_overwrite, False
         
     print(f"\n⚠️  File already exists: {filepath}")
-    choice = prompt_choice("Overwrite?", [
+    
+    options = [
         ("Yes", "y"),
-        ("No (skip file)", "n"), 
-        ("Always (overwrite all remaining)", "a"),
-        ("Never (skip all remaining)", "v"),
-        ("Rename (auto-increment)", "r")
-    ])
+    ]
+    
+    if is_batch:
+        options.append(("No (skip file)", "n"))
+        options.append(("Always (overwrite all remaining)", "a"))
+        options.append(("Never (skip all remaining)", "v"))
+    else:
+        options.append(("No", "n"))
+        
+    options.append(("Rename (auto-increment)", "r"))
+    
+    choice = prompt_choice("Overwrite?", options)
     
     if choice == "y":
         return True, filepath, False, False
@@ -626,3 +634,12 @@ def check_overwrite(filepath, always_overwrite=False, never_overwrite=False):
     else:
         print(f"⏭️  Skipping {os.path.basename(filepath)}")
         return False, filepath, False, False
+
+
+def wait_for_back(prompt="\nExecution Complete"):
+    """Show a simple 'Back' menu instead of just waiting for Enter.
+    
+    This provides a mouse-clickable Back button and consistent navigation.
+    """
+    print() # Spacer
+    prompt_menu(prompt, [], allow_back=True)

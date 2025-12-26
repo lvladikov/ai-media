@@ -14,7 +14,7 @@ from pathlib import Path
 from .models import IMAGE_MODELS
 from .utils.system import get_optimal_device_and_dtype, clear_gpu_memory
 from .utils.parsers import format_time
-from .utils.performance import ResourceMonitor
+from .utils.performance import ResourceMonitor, PerformanceTracker
 from .utils.ffmpeg import get_video_encoding_params, _check_ffmpeg_encoder
 from .utils.interaction import check_overwrite
 
@@ -238,9 +238,6 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
     from basicsr.archs.rrdbnet_arch import RRDBNet
     from realesrgan import RealESRGANer
     
-    print(f"🚀 Upscaling Image (Fast Mode): {input_path}")
-    print(f"   Factor: {factor}x")
-    
     try:
         start_time = time.time()
         
@@ -254,7 +251,33 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
+        # Pre-calculate Device and Estimate
         device, _ = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        dtype_name = "float32" # Fast mode uses RealESRGAN usually float32/16
+        
+        # Estimate Performance
+        tracker = PerformanceTracker()
+        # Need target dimensions for estimate
+        # We need to read image first to get dimensions...
+        # Wait, if we read image, we delay printing. 
+        # But we need dims for estimate.
+        img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            print(f"❌ Failed to load image: {input_path}")
+            return False
+        orig_h, orig_w = img.shape[:2]
+        target_w = int(orig_w * factor)
+        target_h = int(orig_h * factor)
+        
+        est_values = tracker.estimate_image("upscale_fast", target_w, target_h, device, dtype=dtype_name)
+        
+        # Display Info Header
+        print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+        tracker.print_estimate(*est_values)
+        
+        print(f"🚀 Upscaling Image (Fast Mode): {input_path}")
+        print(f"   Factor: {factor}x")
+        print(f"   Input: {orig_w}x{orig_h}")
         print(f"   Device: {device}")
 
         model_name = 'RealESRGAN_x4plus'
@@ -274,13 +297,9 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
             device=device,
         )
 
-        img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            print(f"❌ Failed to load image: {input_path}")
-            return False
-
-        orig_h, orig_w = img.shape[:2]
-        print(f"   Input: {orig_w}x{orig_h}")
+        # img loaded at top
+        
+        # tracker estimated at top
 
         with ResourceMonitor() as monitor:
             print(f"   🎨 Enhancing details with Real-ESRGAN...")
@@ -295,6 +314,7 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
         duration = time.time() - start_time
         cpu_p, ram_gb, vram_gb, gpu_p = monitor.get_averages()
         print(f"   ✓ Processed in {duration:.1f}s (RAM: {ram_gb:.1f}GB | VRAM: {vram_gb:.1f}GB)")
+        tracker.print_actual(duration, cpu_p, ram_gb, vram_gb, gpu_p)
 
         return True
 
@@ -317,9 +337,6 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
     from basicsr.archs.rrdbnet_arch import RRDBNet
     from realesrgan import RealESRGANer
     
-    print(f"🚀 Upscaling Video (Fast Mode): {video_path}")
-    print(f"   Factor: {factor}x")
-    
     try:
         if not os.path.exists(video_path):
             print(f"❌ Input file not found: {video_path}")
@@ -331,8 +348,35 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
+        # Pre-calculate Device and Estimate
         device, _ = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
-        print(f"   Device: {device}")
+        dtype_name = "float32"
+
+        # Get Video Info for Estimate
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"❌ Failed to open input video.")
+            return False
+        
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps if fps > 0 else 0
+        
+        target_w = int(width * factor)
+        target_h = int(height * factor)
+        
+        # Estimate
+        tracker = PerformanceTracker()
+        est_values = tracker.estimate_linear("upscale_fast_video", "RealESRGAN_x4plus", device, duration, width=width, height=height, dtype=dtype_name)
+        
+         # Display Info Header
+        print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+        tracker.print_estimate(*est_values)
+
+        print(f"🚀 Upscaling Video (Fast Mode): {video_path}")
+        print(f"   Factor: {factor}x")
 
         model_name = 'RealESRGAN_x4plus'
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
@@ -351,20 +395,14 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
             device=device,
         )
 
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print(f"❌ Failed to open input video.")
-            return False
+        # cap opened above
+        # if not cap.isOpened(): ... handled above
 
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
+        # width/height/fps/frames read above
+        
         print(f"   Input: {width}x{height} @ {fps}fps ({total_frames} frames)")
         
-        target_w = int(width * factor)
-        target_h = int(height * factor)
+        # target dims calculated above
         
         # Stability Check
         STABLE_LIMIT = 15360
@@ -517,29 +555,28 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
     if not model_id:
         model_id = "stabilityai/stable-diffusion-x4-upscaler"
     
-    print(f"🚀 Upscaling Image: {image_path}")
-    print(f"   Model: {model_id}")
-    print(f"   Target Factor: {factor}x")
-    
-    # Default to 0 (faithful to original) - user can increase for more detail generation
-    noise_level = int(strength * 100)
-    
-    should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=os.environ.get("AI_MEDIA_FORCE") == "1")
-    if not should_write:
-        return False
-    
     try:
         start_time = time.time()
         device, dtype = get_optimal_device_and_dtype(prefer_bfloat16=True)
         
-        # Force CPU for MPS (upscaling has tensor size limits)
+        # Force CPU for MPS
         if device.type == "mps":
-            print("   ⚠️  MPS Compatibility: Switching to CPU for Upscaling.")
             device = torch.device("cpu")
             dtype = torch.float32
-        
+            
         image = Image.open(image_path).convert("RGB")
         orig_w, orig_h = image.size
+        
+        # Estimate
+        tracker = PerformanceTracker()
+        est_values = tracker.estimate_image("upscale_ai", int(orig_w*factor), int(orig_h*factor), device, dtype=str(dtype))
+        
+        print(f"   Platform: {device.type.upper()} | Dtype: {str(dtype).replace('torch.', '')}")
+        tracker.print_estimate(*est_values)
+
+        print(f"🚀 Upscaling Image: {image_path}")
+        print(f"   Model: {model_id}")
+        print(f"   Target Factor: {factor}x")
         
         if not check_resources_and_confirm(orig_w, orig_h, factor, device.type):
             print("❌ Aborted by user.")
@@ -577,7 +614,11 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
                         IMAGE_MODELS.get('upscaler_x2', 'stabilityai/sd-x2-latent-upscaler'),
                         dtype=dtype,
                     )
-                    pipe_x2.to(device)
+
+                    if device.type == "cuda":
+                        pipe_x2.enable_model_cpu_offload()
+                    else:
+                        pipe_x2.to(device)
                 return pipe_x2
             else:
                 if pipe_x4 is None:
@@ -586,13 +627,17 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
                         IMAGE_MODELS.get('upscaler', 'stabilityai/stable-diffusion-x4-upscaler'),
                         dtype=dtype,
                     )
-                    pipe_x4.to(device)
+
+                    if device.type == "cuda":
+                        pipe_x4.enable_model_cpu_offload()
+                    else:
+                        pipe_x4.to(device)
                 return pipe_x4
         
         upscale_prompt = "sharp, high resolution"
         negative_prompt = "blur, noise, artifacts, distortion"
         
-        current_image = image
+        current_image = image        
         
         with ResourceMonitor() as monitor:
             for pass_idx, (model_type, step_scale) in enumerate(passes, 1):
@@ -630,6 +675,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         duration = time.time() - start_time
         cpu_p, ram_gb, vram_gb, gpu_p = monitor.get_averages()
         print(f"   ✓ Processed in {duration:.1f}s (RAM: {ram_gb:.1f}GB | VRAM: {vram_gb:.1f}GB)")
+        tracker.print_actual(duration, cpu_p, ram_gb, vram_gb, gpu_p)
         
         return True
         
@@ -698,7 +744,10 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
         else:
             pipe = StableDiffusionUpscalePipeline.from_pretrained(model_id, torch_dtype=dtype)
             
-        pipe.to(device)
+        if device.type == "cuda":
+            pipe.enable_model_cpu_offload()
+        else:
+            pipe.to(device)
         if hasattr(pipe, 'vae') and hasattr(pipe.vae, 'enable_tiling'):
             pipe.vae.enable_tiling()
         

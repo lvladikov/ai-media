@@ -152,13 +152,31 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     ram_available, vram_available = get_system_resources()
     warnings = []
     
+    # Check for half-precision support (bf16/fp16)
+    import torch
+    is_half_precision = False
+    dtype_label = "float32"
+    
+    if torch.cuda.is_available():
+        is_half_precision = True # CUDA usually runs fp16/bf16
+        dtype_label = "bfloat16" if is_bfloat16_supported() else "float16"
+    elif torch.backends.mps.is_available():
+        is_half_precision = True # MPS uses fp16
+        dtype_label = "float16"
+        
+    # Apply scaling factor for half-precision (approx 0.6x of fp32 requirements)
+    scale_factor = 0.6 if is_half_precision else 1.0
+    
+    req_ram = reqs.get("ram", 0) * scale_factor
+    req_vram = reqs.get("vram", 0) * scale_factor
+    
     # Check RAM
-    if ram_available > 0 and ram_available < reqs.get("ram", 0):
-        warnings.append(f"RAM: {ram_available:.1f}GB available, {reqs['ram']}GB recommended")
+    if ram_available > 0 and ram_available < req_ram:
+        warnings.append(f"RAM: {ram_available:.1f}GB available, {req_ram:.1f}GB recommended ({dtype_label})")
     
     # Check VRAM (if available)
-    if vram_available > 0 and vram_available < reqs.get("vram", 0):
-        warnings.append(f"VRAM: {vram_available:.1f}GB available, {reqs['vram']}GB recommended")
+    if vram_available > 0 and vram_available < req_vram:
+        warnings.append(f"VRAM: {vram_available:.1f}GB available, {req_vram:.1f}GB recommended ({dtype_label})")
     
     # Check resolution limits
     max_res = reqs.get("max_resolution")

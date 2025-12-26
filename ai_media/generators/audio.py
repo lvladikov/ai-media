@@ -122,6 +122,16 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         else:
             print(f"⚠️  Image analysis failed. Proceeding with text prompt only.")
 
+    
+    # Pre-calculate Estimate
+    dtype_name = str(dtype).replace("torch.", "")
+    tracker = PerformanceTracker()
+    est_values = tracker.estimate_linear("audio", model_id, device, duration, dtype=dtype_name)
+    
+    # Display Info Header
+    print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+    tracker.print_estimate(*est_values)
+
     print(f"🎵 Generating Audio")
     print(f"   Model:    {model_id}")
     print(f"   Prompt:   '{prompt}'")
@@ -135,8 +145,6 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         
     print(f"   Sampling: {sampling_rate}Hz")
     print(f"   Output:   {output_path}")
-    dtype_name = str(dtype).replace("torch.", "")
-    print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
     print("")
     
     try:
@@ -148,12 +156,15 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         # Logic for Different Model Types
         if "musicgen" in model_id.lower():
             print(f"   Loading MusicGen pipeline...")
-            synthesizer = pipeline("text-to-audio", model_id, device=device)
+            # Use device_map="auto" for offloading if CUDA
+            if device.type == "cuda":
+                synthesizer = pipeline("text-to-audio", model_id, device_map="auto")
+            else:
+                synthesizer = pipeline("text-to-audio", model_id, device=device)
             
             max_tokens = int(duration * 50)
             print(f"🎵 Synthesizing audio... (MusicGen)")
             
-            tracker = PerformanceTracker()
             start_time = time.time()
             with ResourceMonitor() as monitor:
                 music = synthesizer(prompt, forward_params={"max_new_tokens": max_tokens})
@@ -164,6 +175,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                                  cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
             
             if report_json:
                 stats = {"time": gen_duration, "ram": avg_ram, "vram": avg_vram, 
@@ -186,11 +198,15 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                 language_model=language_model,
                 torch_dtype=dtype
             )
-            pipe.to(device)
+
+            
+            if device.type == "cuda":
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe.to(device)
             
             print(f"🎵 Synthesizing audio... (AudioLDM2)")
             
-            tracker = PerformanceTracker()
             start_time = time.time()
             with ResourceMonitor() as monitor:
                 audio = pipe(prompt, audio_length_in_s=duration).audios[0]
@@ -201,6 +217,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                                  cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
             
             if report_json:
                 stats = {"time": gen_duration, "ram": avg_ram, "vram": avg_vram,
@@ -216,14 +233,17 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
             print(f"   Loading StableAudioPipeline...")
             pipe = StableAudioPipeline.from_pretrained(model_id, torch_dtype=dtype)
-            pipe.to(device)
+            
+            if device.type == "cuda":
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe.to(device)
             
             print(f"   ℹ️  Swapping scheduler to EulerDiscrete (MPS optimization)")
             pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
             
             print(f"🎵 Synthesizing audio... (Stable Audio)")
-            
-            tracker = PerformanceTracker()
+
             start_time = time.time()
             with ResourceMonitor() as monitor:
                 audio = pipe(prompt, audio_start_in_s=0.0, audio_end_in_s=duration, 
@@ -235,6 +255,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                                  cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
             
             rate = 44100
             
@@ -268,8 +289,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
             # Decide if Long-Form is needed
             is_long = len(prompt) > 150 or duration > 15.0
-            
-            tracker = PerformanceTracker()
+
             start_time = time.time()
             with ResourceMonitor() as monitor:
                 if is_long:
@@ -286,6 +306,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                                  cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype="float32")
             print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
                   f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
             
             if report_json:
                 stats = {"time": gen_duration, "ram": avg_ram, "vram": avg_vram,

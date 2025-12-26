@@ -84,9 +84,9 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 | :--- | :--- | :--- | :--- | :--- |
 | **DeepSeek R1 Qwen 7B** | `deepseek-r1-qwen-7b` | ~4GB | ~7GB | Lightweight, fast. Good starting point. |
 | **DeepSeek R1 Qwen 14B** | `deepseek-r1-qwen-14b` | ~8GB | ~14GB | Better reasoning quality. |
-| **DeepSeek R1 Qwen 32B** | `deepseek-r1-qwen-32b` | ~18GB | ~24GB | High quality. Requires RTX 4090 or Mac 64GB+. |
+| **DeepSeek R1 Qwen 32B** | `deepseek-r1-qwen-32b` | ~18GB | ~24GB | High quality. |
 | **DeepSeek R1 Llama 8B** | `deepseek-r1-llama-8b` | ~5GB | ~8GB | Llama architecture variant. |
-| **DeepSeek R1 Llama 70B** | `deepseek-r1-llama-70b` | ~35GB | ~40GB | Best quality. **Requires A100/H100 or Mac 128GB+.** |
+| **DeepSeek R1 Llama 70B** | `deepseek-r1-llama-70b` | ~35GB | ~40GB | Best quality. |
 
 > [!NOTE]
 > All DeepSeek R1 distilled models are **fully open and ungated** (MIT license). No HuggingFace login required.

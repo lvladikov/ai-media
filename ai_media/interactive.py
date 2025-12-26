@@ -12,7 +12,7 @@ import json
 
 from .utils.interaction import (
     emoji, clear_screen, show_header, get_key, prompt_menu, prompt_choice, 
-    prompt_text, browse_files, prompt_file, check_overwrite,
+    prompt_text, browse_files, prompt_file, check_overwrite, wait_for_back,
     CLEAR_LINE, CYAN, RESET, DIM, HIDE_CURSOR, SHOW_CURSOR, UP
 )
 
@@ -344,6 +344,7 @@ def run_interactive(jump_point=None):
             print(f"📦 Model: {model}\n")
         else:
             print("📦 Select Model:\n")
+            print(f"{emoji('⏳', '')} Loading Models...", end="", flush=True)
             # Build model options with platform-specific notes
             try:
                 import torch
@@ -380,6 +381,8 @@ def run_interactive(jump_point=None):
                 model_options.append(("FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!) ~65GB", "flux2-full"))
             # Linux without CUDA - don't show flux2 as it won't work
             
+            # Clear loading indicator
+            print("\r" + " " * 50 + "\r", end="", flush=True)
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -430,7 +433,7 @@ def run_interactive(jump_point=None):
             cmd += f" -o \"{output}\""
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def video_menu(preset_model=None):
         """Video generation submenu."""
@@ -570,7 +573,7 @@ def run_interactive(jump_point=None):
              cmd += f" -o \"{output}\""
              
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
 
     
     def audio_menu(preset_model=None):
@@ -633,7 +636,7 @@ def run_interactive(jump_point=None):
             cmd += f" -o \"{output}\""
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def transform_menu(preset_operation=None):
         """Image transformation submenu."""
@@ -680,7 +683,7 @@ def run_interactive(jump_point=None):
             cmd += f" -o \"{output}\""
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def upscale_menu():
         """Upscale media submenu."""
@@ -773,7 +776,7 @@ def run_interactive(jump_point=None):
                 cmd += " -su"
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def convert_menu():
         """Convert media submenu."""
@@ -830,7 +833,7 @@ def run_interactive(jump_point=None):
             cmd = f"-ca \"{input_file}\" -cat {target_format}"
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def document_convert_menu():
         """Convert document format submenu."""
@@ -862,7 +865,7 @@ def run_interactive(jump_point=None):
         cmd = f"-cd \"{input_file}\" -cdt {target_format}"
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def caption_menu(preset_model=None):
         """Generate caption submenu."""
@@ -893,7 +896,7 @@ def run_interactive(jump_point=None):
         cmd = f"-gd \"{input_file}\" -cm {model}"
         
         run_self_command(cmd)
-        input("\nPress Enter to continue...")
+        wait_for_back()
     
     def article_menu(preset_mode=None):
         """Generate article/research submenu."""
@@ -1049,7 +1052,7 @@ def run_interactive(jump_point=None):
                 cmd += f' -o "{output_path}"'
             
             run_self_command(cmd)
-            input("\nPress Enter to continue...")
+            wait_for_back()
     
     def chat_menu(preset_model=None):
         """Interactive chat submenu."""
@@ -1110,13 +1113,12 @@ def run_interactive(jump_point=None):
                 except:
                     pass
                 
-                print("\n" + "="*60)
-                input("Press Enter to return to menu...")
+                wait_for_back("Press Enter to return to menu...")
             else:
                 clear_screen()
                 show_header("Codec Limits Test")
                 print("❌ ai_media/testing/codec_limits_tests.py not found.")
-                input("\nPress Enter to continue...")
+                wait_for_back()
             # Fall through to test menu loop (don't return to main menu)
         
         while True:
@@ -1155,14 +1157,13 @@ def run_interactive(jump_point=None):
                     except:
                         pass
                     
-                    print("\n" + "="*60)
-                    input("Press Enter to return to menu...")
+                    wait_for_back("Press Enter to return to menu...")
                 else:
                     clear_screen()
                     show_header("Codec Limits Test")
                     print("❌ ai_media/testing/codec_limits_tests.py not found.")
                     print(f"   Expected location: {codec_test}")
-                    input("\nPress Enter to continue...")
+                    wait_for_back()
     
 
     def unit_test_menu():
@@ -1176,7 +1177,7 @@ def run_interactive(jump_point=None):
             show_header("Unit Tests")
             print("❌ ai_media/testing/unit_tests.py not found.")
             print(f"   Expected location: {test_module}")
-            input("\nPress Enter to continue...")
+            wait_for_back()
             return
         
         # Extract test classes and count tests per class from tests/ai-media_test.py
@@ -1205,14 +1206,14 @@ def run_interactive(jump_point=None):
             clear_screen()
             show_header("Unit Tests")
             print(f"❌ Error parsing test file: {e}")
-            input("\nPress Enter to continue...")
+            wait_for_back()
             return
         
         if not test_classes:
             clear_screen()
             show_header("Unit Tests")
             print("❌ No test classes found in ai_media/testing/unit_tests.py")
-            input("\nPress Enter to continue...")
+            wait_for_back()
             return
         
         # Build options
@@ -1281,7 +1282,7 @@ def run_interactive(jump_point=None):
             clear_screen()
             show_header("App Run Tests")
             print("❌ No tests found.")
-            input("Press Enter...")
+            wait_for_back("Press Enter...")
             return
 
         # Build options
@@ -1342,7 +1343,7 @@ def run_interactive(jump_point=None):
                 # Always use verbose for single test as requested
                 run_self_command(f"--test-verbose \"{choice}\"")
                 
-            input("\nPress Enter to continue...")
+            wait_for_back()
 
 
     
@@ -1735,7 +1736,6 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
         # 4. Check expected output items exist
         if test_passed:
             # Parse Resource Usage from stdout -> DEPRECATED/REMOVED in favor of JSON IPC
-            # (Old regex parsing block removed)
             pass
 
             for output_item in expected_outputs:

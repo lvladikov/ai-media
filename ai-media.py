@@ -770,10 +770,6 @@ Supported Models (Code : Download Size | Description):
         
         # Resolve Model ID
         model_id = get_model_id(args.image_model, IMAGE_MODELS)
-        
-        # Check resources
-        if not pkg_system.check_resources_and_warn(model_id, w, h, None, args.force, MODEL_REQUIREMENTS):
-            sys.exit(0)
             
         pkg_generate_image(args.prompt, outfile, w, h, model_id, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
         

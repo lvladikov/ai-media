@@ -19,10 +19,11 @@ You'll be prompted if:
 ```
 ⚠️  Resource Warning:
 
-   • RAM: 6.2GB available, 12GB recommended
+   • RAM: 28.0GB available, 42.0GB recommended (bfloat16)
    • Resolution: 1920x1080 exceeds recommended max 1280x720
 
-   Model: damo-vilab/text-to-video-ms-1.7b
+   Model: black-forest-labs/FLUX.1-schnell
+   Dtype: bfloat16
    This job may cause slowdowns, swapping, or crashes.
 
    Continue anyway? [y/N]:
@@ -37,6 +38,11 @@ You'll be prompted if:
 ## Understanding Memory & Model Loading
 
 AI models are large files that must be loaded into memory before generation can begin. Understanding the memory hierarchy helps explain why certain models require more resources and why some operations are slow.
+
+### Memory Optimization (BFloat16 / Float16)
+The system automatically detects if your hardware supports half-precision operations (`bfloat16` on CUDA, `float16` on MPS).
+- **If supported**: Memory REQUIREMENTS are automatically scaled down by ~40% (0.6x factor) before checking.
+- **If unsupported**: The full 32-bit (Float32) memory requirements are used for validation.
 
 ### Memory Types & Speed
 
@@ -62,21 +68,25 @@ This indicates the model is being read from disk into memory piece by piece.
 ### Platform Differences
 
 #### NVIDIA GPUs (CUDA)
-- **VRAM**: Dedicated high-bandwidth memory for model weights
-- **RAM**: Used for CPU offloading when VRAM is insufficient
-- **Offloading**: With `device_map="auto"`, unused layers move to RAM while GPU processes current layer
+- **VRAM**: Dedicated high-bandwidth memory.
+- **Dtype**: Automatically prefers `bfloat16` (Ampere+) or `float16` to reduce memory usage by ~50% vs Float32.
+- **CPU Offloading**: The system now automatically uses `enable_model_cpu_offload()` for large models (**Flux 1 & 2**, **Wan 2.2**, **SVD**, **MusicGen**, **AudioLDM2**, **SD Upscaler**). This keeps only the active module (e.g., Transformer block) in VRAM and the rest in RAM, allowing massive 30GB+ models to run on 8GB-16GB GPUs.
+- **Quantization**: **Flux 2** and large Text Models (**deepseek-r1-llama-70b**, **qwen-32b**) automatically use 4-bit quantization (`bitsandbytes`) to drastically reduce VRAM usage (e.g., 70B model fits in ~35GB).
 
 #### Apple Silicon (MPS)
-- **Unified Memory**: CPU and GPU share the same RAM pool
-- **Memory Pressure**: When models exceed available RAM, macOS uses SSD as virtual memory (swap)
-- **Swap Warning**: If you see RAM usage exceeding physical memory, the system is swapping to disk—expect significant slowdowns
+- **Unified Memory**: CPU and GPU share the same RAM. explicit "CPU Offloading" is **disabled** because it conflicts with macOS's native memory management.
+- **Dtype**: Uses `float16` by default for performance and memory savings.
+- **Optimization Strategy**: Instead of offloading, the system enables **Attention Slicing** on Mac. This splits large compute operations into smaller chunks to keep peak memory usage below the "Wired Memory" limit, preventing crashes with large models like Flux.
+- **Stability Fixes**: The system automatically enforces Float32 for VAEs (Flux/SDXL/Video) on MPS to prevent NaN errors (which cause black images).
 
 ### Techniques to Reduce Memory Usage
 
 | Technique | Memory Savings | Trade-off |
 |-----------|----------------|-----------|
-| **Quantization** (4-bit/8-bit) | 50-75% | Slight quality loss |
-| **Model Offloading** | Variable | Slower generation |
+| **Half-Precision (BF16/FP16)** | ~50% | Negligible quality difference (Default) |
+| **Quantization** (4-bit/8-bit) | 50-75% | Slight quality loss (Text/Flux 2) |
+| **CPU Offloading** | Variable | Slower generation (CUDA Only) |
+| **Attention Slicing** | 10-20% Peak | Slightly slower (MPS/Mac) |
 | **Smaller Resolution** | Significant | Lower output quality |
 | **Smaller Model Variant** | Variable | Different capabilities |
 

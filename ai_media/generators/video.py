@@ -137,6 +137,39 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     """
     # Resolve Model ID
     base_model = get_model_id(model_name, VIDEO_MODELS)
+    model_id = base_model # Default, updated later for I2V
+    
+    # Pre-calculate Device and Estimate
+    try:
+        from diffusers import (
+            DiffusionPipeline, 
+            DPMSolverMultistepScheduler, 
+            CogVideoXImageToVideoPipeline,
+            StableVideoDiffusionPipeline,
+            WanPipeline,
+            WanImageToVideoPipeline,
+            HunyuanVideoPipeline,
+            HunyuanVideoImageToVideoPipeline,
+        )
+        from diffusers.utils import export_to_video, load_image
+        import torch
+        
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        dtype_name = str(dtype).replace("torch.", "")
+        
+        # Estimate Performance
+        tracker = PerformanceTracker()
+        est_values = tracker.estimate_linear("video", base_model, device, duration, width=width, height=height, dtype=dtype_name)
+        
+        # Display Info Header
+        print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+        tracker.print_estimate(*est_values)
+        
+        # Determine actual video output path (temp if mixing audio) early for tracking? No needed.
+        
+    except ImportError:
+        print("❌ Failed to import torch/diffusers. Please check installation.")
+        return False
     
     # --- Zeroscope Dynamic Upscaling Detection ---
     is_zeroscope = "zeroscope" in base_model.lower() and "xl" not in base_model.lower()
@@ -231,19 +264,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     cuda_was_enabled = None
     
     try:
-        from diffusers import (
-            DiffusionPipeline, 
-            DPMSolverMultistepScheduler, 
-            CogVideoXImageToVideoPipeline,
-            StableVideoDiffusionPipeline,
-            WanPipeline,
-            WanImageToVideoPipeline,
-            HunyuanVideoPipeline,
-            HunyuanVideoImageToVideoPipeline,
-        )
-        from diffusers.utils import export_to_video, load_image
-        
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        # device, dtype already determined at top
+        pass
         
         # MPS FIX: These models need Float32/CPU on MPS
         mps_incompatible_models = ["ms-1.7b", "text-to-video-ms-1.7b", "zeroscope", 
@@ -367,14 +389,14 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         if not any(x in model_id.lower() for x in special_handling):
             if device.type == "cpu":
                 pipe.to(device)
-            else:
+            elif device.type == "cuda":
                 pipe.enable_model_cpu_offload()
-                if device.type == "mps":
-                    pipe.enable_attention_slicing()
+            elif device.type == "mps":
+                pipe.to(device)
+                pipe.enable_attention_slicing()
         
         # Generate Frames
         tracker = PerformanceTracker()
-        
         render_width, render_height = gen_width, gen_height
         
         # Fix dimensions for specific models
@@ -418,6 +440,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                              vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
         print(f"   ✓ Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
               f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+        tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
         
         # --- Zeroscope Dynamic Upscaling Pipeline ---
         if needs_xl_upscale:

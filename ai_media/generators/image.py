@@ -37,6 +37,27 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
     # Resolve Model ID
     model_id = get_model_id(model_name, IMAGE_MODELS)
     
+    # Pre-calculate Device and Estimate Resources
+    try:
+        import torch
+        from diffusers import FluxPipeline, AutoPipelineForText2Image
+        
+        # Determine device and dtype
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        dtype_name = str(dtype).replace("torch.", "")
+        
+        # Estimate Performance
+        tracker = PerformanceTracker()
+        est_values = tracker.estimate_image(model_id, width, height, device, dtype=dtype_name)
+        
+        # Display Info Header
+        print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+        tracker.print_estimate(*est_values)
+        
+    except ImportError:
+        print("❌ Failed to import torch/diffusers. Please check installation.")
+        return False
+
     print(f"🎨 Generating Image")
     print(f"   Model:  {model_id}")
     print(f"   Prompt: '{prompt}'")
@@ -50,15 +71,8 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         return False
     
     try:
-        import torch
-        from diffusers import FluxPipeline, AutoPipelineForText2Image
-        
-        # Determine device and dtype (prefer bfloat16 for better numerical stability on supported CUDA)
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
-        dtype_name = str(dtype).replace("torch.", "")
-        print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
-        
         # Determine Pipeline Class based on model
+        use_offload = False
         if "flux.2" in model_id.lower() or "flux2" in model_id.lower():
             # FLUX.2 uses Flux2Pipeline (different architecture from FLUX 1)
             from diffusers import Flux2Pipeline
@@ -75,15 +89,16 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 # Fall back to full model with offloading
                 model_id = "black-forest-labs/FLUX.2-dev"
                 flux2_dtype = torch.float32
-                use_offload = True
+                use_offload = False
             else:
-                # CUDA: use bfloat16 for quantized models, MPS/CPU: use float32-based offloading
+                # CUDA: use bfloat16 for quantized models
+                # Enable offloading even on CUDA because Flux 2 (32B) + T5 (4B+) > 24GB VRAM
                 if device.type == "cuda":
                     flux2_dtype = torch.bfloat16
-                    use_offload = False
+                    use_offload = True
                 else:
                     flux2_dtype = torch.float32 
-                    use_offload = True
+                    use_offload = False
             
             if is_quantized and device.type == "cuda":
                 print(f"   ℹ️  Loading FLUX.2 Pipeline (4-bit quantized for consumer GPUs)...")
@@ -94,14 +109,6 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 model_id, 
                 torch_dtype=flux2_dtype
             )
-            
-            # Apply memory optimizations for large model
-            if use_offload:
-                print(f"   ℹ️  Enabling CPU offloading for memory efficiency...")
-                if hasattr(pipe, 'enable_model_cpu_offload'):
-                    pipe.enable_model_cpu_offload()
-                elif hasattr(pipe, 'enable_sequential_cpu_offload'):
-                    pipe.enable_sequential_cpu_offload()
             
             # FLUX.2 parameters (higher quality, more steps than FLUX 1)
             extra_kwargs = {
@@ -115,6 +122,10 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 model_id, 
                 torch_dtype=flux_dtype
             )
+            
+            if device.type == "cuda":
+                use_offload = True
+                
             # Flux 1 parameters
             extra_kwargs = {
                 "guidance_scale": 0.0, 
@@ -147,7 +158,18 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             )
             extra_kwargs = {}  # Use defaults
             
-        pipe.to(device)
+        # Apply memory optimizations if requested
+        if use_offload:
+            print(f"   ℹ️  Enabling CPU offloading for memory efficiency...")
+            if hasattr(pipe, 'enable_model_cpu_offload'):
+                pipe.enable_model_cpu_offload()
+            elif hasattr(pipe, 'enable_sequential_cpu_offload'):
+                pipe.enable_sequential_cpu_offload()
+
+        if not use_offload:
+            pipe.to(device)
+            
+
         
         # Disable NSFW safety checker if requested
         if unsafe:
@@ -173,9 +195,6 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 pipe.vae.enable_tiling()
             else:
                 pipe.enable_vae_tiling()
-        
-        # --- Performance Tracking ---
-        tracker = PerformanceTracker()
         
         print(f"🎨 Generating {width}x{height} image... (This may take a moment)")
         
@@ -229,6 +248,9 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         
         image.save(output_file)
         print(f"✅ Image saved to {output_file}")
+        
+        tracker.print_actual(duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
+        print("")  # Spacer
         return True
         
     except ImportError as e:
