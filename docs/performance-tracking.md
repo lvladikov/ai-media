@@ -25,6 +25,28 @@ It **only** records anonymous metrics:
 - ✅ Average GPU Load (%) - *NVIDIA (CUDA) only*
 - ✅ Average VRAM Usage (GB) - *NVIDIA (CUDA) and Apple Silicon (MPS)*
 
+### 📂 Data Structure & Naming Convention
+
+The `performance.json` file uses a specific pipe-separated key format to store metrics for unique combinations of model type, hardware, precision, and resolution.
+
+**Key Format:**
+`Model Name | Device | Precision (dtype) | Resolution`
+
+**Example:**
+```json
+{
+  "image": {
+    "runwayml/stable-diffusion-v1-5|cuda|float16|512x512": {
+      "average_time": 4.25,
+      "average_cpu": 15.0,
+      "average_ram": 6.5,
+      "average_vram": 4.1,
+      "average_gpu": 98.5
+    }
+  }
+}
+```
+
 You can safely delete `performance.json` at any time to reset estimates.
 
 ### 🚫 Opting Out

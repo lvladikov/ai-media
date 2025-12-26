@@ -43,7 +43,11 @@ class PerformanceTracker:
 
     def record_image(self, model, width, height, device, time_taken, cpu=0, ram=0, vram=0, gpu=0, dtype=None):
         dev_str = device.type if hasattr(device, 'type') else str(device)
-        key = f"{model}|{dev_str}|{width}x{height}"
+        if dtype:
+            key = f"{model}|{dev_str}|{dtype}|{width}x{height}"
+        else:
+            key = f"{model}|{dev_str}|{width}x{height}"
+
         if "image" not in self.data:
             self.data["image"] = {}
         
@@ -68,9 +72,6 @@ class PerformanceTracker:
                 "average_gpu": gpu
             }
         
-        if dtype:
-            entry["dtype"] = dtype
-            
         self.data["image"][key] = entry
         self._save()
 
@@ -79,9 +80,15 @@ class PerformanceTracker:
         dev_str = device.type if hasattr(device, 'type') else str(device)
         # For video, resolution also matters, so we include it in key
         if category == "video":
-            key = f"{model}|{dev_str}|{width}x{height}"
+            if dtype:
+                key = f"{model}|{dev_str}|{dtype}|{width}x{height}"
+            else:
+                key = f"{model}|{dev_str}|{width}x{height}"
         else:
-            key = f"{model}|{dev_str}"
+            if dtype:
+                key = f"{model}|{dev_str}|{dtype}"
+            else:
+                key = f"{model}|{dev_str}"
             
         if category not in self.data:
             self.data[category] = {}
@@ -107,15 +114,15 @@ class PerformanceTracker:
                 "average_gpu": gpu
             }
             
-        if dtype:
-            entry["dtype"] = dtype
-            
         self.data[category][key] = entry
         self._save()
 
-    def estimate_image(self, model, width, height, device):
+    def estimate_image(self, model, width, height, device, dtype=None):
         dev_str = device.type if hasattr(device, 'type') else str(device)
-        key = f"{model}|{dev_str}|{width}x{height}"
+        if dtype:
+            key = f"{model}|{dev_str}|{dtype}|{width}x{height}"
+        else:
+            key = f"{model}|{dev_str}|{width}x{height}"
         stats = self.data.get("image", {}).get(key)
         if stats and "average_time" in stats:
             return (
@@ -127,12 +134,18 @@ class PerformanceTracker:
             )
         return 0, 0, 0, 0, 0
 
-    def estimate_linear(self, category, model, device, duration, width=None, height=None):
+    def estimate_linear(self, category, model, device, duration, width=None, height=None, dtype=None):
         dev_str = device.type if hasattr(device, 'type') else str(device)
         if category == "video":
-            key = f"{model}|{dev_str}|{width}x{height}"
+            if dtype:
+                key = f"{model}|{dev_str}|{dtype}|{width}x{height}"
+            else:
+                key = f"{model}|{dev_str}|{width}x{height}"
         else:
-            key = f"{model}|{dev_str}"
+            if dtype:
+                key = f"{model}|{dev_str}|{dtype}"
+            else:
+                key = f"{model}|{dev_str}"
             
         stats = self.data.get(category, {}).get(key)
         if stats and "average_rate" in stats:
