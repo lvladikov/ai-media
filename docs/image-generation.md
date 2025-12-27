@@ -16,7 +16,7 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sdxl` (default), `sd-1.5`, `flux`, `flux-dev`. See [Models](#models) below. |
+| `--image-model` | Model: `sdxl` (default), `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `sd3.5-turbo`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-mps`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
@@ -63,6 +63,11 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | :--- | :--- | :--- | :--- | :--- |
 | **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | **Default**. Fast, high quality. Uses float32 on Apple Silicon. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. |
+| **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
+| **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
+| **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | Fast (4 steps). 🔒 **Gated**. |
+| **Qwen-Image** | `qwen-image` | ~20GB | ~20GB | Best text rendering. 🔒 **CUDA only** (4-bit). |
+| **Qwen-Image (MPS)** | `qwen-image-mps` | ~40GB | ~40GB | Text rendering on Mac. Float32. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
 | **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
@@ -75,7 +80,35 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 >
 > **High Resolution (4K+):** For resolutions larger than 1536x1536 (e.g., 4K), the script automatically enables **VAE Tiling**. This processes the image in chunks to prevent "Out of Memory" errors, though generation will be slightly slower.
 >
-> **Gated Models (Flux, FLUX.2):** Require HuggingFace login. Accept the license at [huggingface.co/black-forest-labs](https://huggingface.co/black-forest-labs) and run `huggingface-cli login`.
+> **Gated Models (Flux, FLUX.2, SD 3.5):** Require HuggingFace login. Accept the license at [huggingface.co/black-forest-labs](https://huggingface.co/black-forest-labs) for Flux or [huggingface.co/stabilityai](https://huggingface.co/stabilityai) for SD 3.5 and run `huggingface-cli login`.
+
+### SD 3.5 Large vs Large Turbo
+
+Both models share the same **8.1B parameter** architecture but differ in speed and quality:
+
+| Aspect | SD 3.5 Large | SD 3.5 Large Turbo |
+|--------|-------------|-------------------|
+| **Steps** | 40 | 4 (10x faster) |
+| **Speed** | ~30-60 sec | ~5-10 sec |
+| **Quality** | Best details, anatomy, text | Slightly less nuanced |
+| **VRAM** | ~19 GB | ~19 GB |
+
+**Turbo** is a distilled version trained to produce high-quality results in fewer steps without guidance. Use **Large** for final production images; use **Turbo** for quick iterations and batch generation.
+
+### Qwen-Image: Best Text Rendering
+
+> [!IMPORTANT]
+> **Platform-Specific Variants:** Qwen-Image uses 4-bit quantization (`bitsandbytes`) which only works on CUDA/NVIDIA GPUs.
+> - **CUDA:** Uses `qwen-image` (4-bit, 20GB VRAM, 8 steps)
+> - **MPS (Mac):** Uses `qwen-image-mps` (Full, float32, 15 steps)
+>
+> The script **automatically switches** to the correct variant for your hardware. If you select `qwen-image` on Mac, it will switch to `qwen-image-mps` and display an info message.
+
+| Feature | Qwen-Image |
+|---------|-----------|
+| **Text in images** | ✅ Best (English + Chinese) |
+| **Parameters** | 20B |
+| **Speed** | ~8-15 steps |
 
 ## Examples
 
@@ -106,6 +139,14 @@ python ai-media.py -i -p "Oil painting of a cottage" -im sd-1.5
 # Requires HuggingFace login. VERY memory intensive (~33GB+ VRAM/RAM).
 # Delivers incredible text adherence and realism.
 python ai-media.py -i -p "A sign that says 'HELLO WORLD' in neon text" -im flux
+
+# SD 3.5 Medium - Best balance of quality/speed for consumer hardware (Gated)
+# ~10GB VRAM. Great prompt following, improved anatomy/typography.
+python ai-media.py -i -p "A capybara holding a sign that says Hello World" -im sd3.5-medium
+
+# SD 3.5 Large Turbo - Fast high-quality generation (Gated)
+# Only 4 inference steps, ~19GB VRAM.
+python ai-media.py -i -p "Photorealistic portrait of an astronaut" -im sd3.5-turbo
 ```
 
 ### Aspect Ratios & Formats

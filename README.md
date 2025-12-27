@@ -73,6 +73,9 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
         | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
         | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
         | FLUX.2 (`flux2`, `flux2-full`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.2-dev) |
+        | SD 3.5 Medium (`sd3.5-medium`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium) |
+        | SD 3.5 Large (`sd3.5-large`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-large) |
+        | SD 3.5 Large Turbo (`sd3.5-turbo`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo) |
         | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
         | Llama 3.1 8B Instruct (`llama-3.1-8b`) | [Accept License](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) |
     
@@ -294,6 +297,11 @@ This project uses the following open-source libraries:
 - **FLUX.2** by Black Forest Labs - [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)
 - **Stable Diffusion XL** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion](https://github.com/runwayml/stable-diffusion)
+- **Stable Diffusion 3.5 Medium** by Stability AI - [stabilityai/stable-diffusion-3.5-medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
+- **Stable Diffusion 3.5 Large** by Stability AI - [stabilityai/stable-diffusion-3.5-large](https://huggingface.co/stabilityai/stable-diffusion-3.5-large)
+- **Stable Diffusion 3.5 Large Turbo** by Stability AI - [stabilityai/stable-diffusion-3.5-large-turbo](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo)
+- **Qwen-Image** (Text-to-Image, best text rendering) - [Qwen/Qwen-Image](https://huggingface.co/Qwen/Qwen-Image)
+- **Qwen-Image-Edit** (Image editing) - [Qwen/Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)
 - **MusicGen** by Meta AI - [facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
 - **AudioLDM 2** by Haohe Liu etc. - [haoheliu/AudioLDM2](https://github.com/haoheliu/AudioLDM2)
 - **Stable Audio Open** by Stability AI - [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0)

@@ -368,6 +368,8 @@ Examples:
   -- Image Generation --
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
+  python ai-media.py -i -p "Capybara holding a sign" -im sd3.5-medium (SD 3.5 - Consumer-Friendly)
+  python ai-media.py -i -p "Astronaut portrait" -im sd3.5-turbo (SD 3.5 - Fast, 4 steps)
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -401,6 +403,7 @@ Examples:
   -- Creative Image Transformation --
   python ai-media.py -ti "photo.jpg" -p "Make it look like an anime drawing"
   python ai-media.py -ti "photo.jpg" -p "Make it anime" -o "edits/anime_version.png"
+  python ai-media.py -ti "photo.jpg" -p "Change text to 'Hello World'" -em qwen-image-edit (Precise Text Editing)
   python ai-media.py -ti "photo.jpg" --remove-background
   python ai-media.py -ti "photo.jpg" --remove-background -o "no_bg/photo_clean.png"
 
@@ -421,6 +424,11 @@ Supported Models (Code : Download Size | Description):
   Images:
     - sdxl (default)           : ~8GB  | Fast, high quality.
     - sd-1.5                   : ~4GB  | Lightweight, lower VRAM.
+    - sd3.5-medium             : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
+    - sd3.5-large              : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
+    - sd3.5-turbo              : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
+    - qwen-image               : ~20GB | Best text rendering. (CUDA 4-bit, auto-switches on MPS)
+    - qwen-image-mps           : ~40GB | ⚠️ HIGH RAM! Qwen-Image for Mac. Float32, slower.
     - flux                     : ~24GB | High quality (🔒 Gated - Free Login Required)
     - flux-dev                 : ~24GB | Professional creative work (🔒 Gated - Free Login Required)
     - flux2                    : ~18GB | FLUX.2 4-bit. SOTA (2025). (🔒 Gated - NVIDIA RTX 3090+ only)
@@ -462,6 +470,8 @@ Supported Models (Code : Download Size | Description):
   Creative Image Transformation:
     - instruct-pix2pix         : ~4GB  | Instructional image editing (e.g., "Make it anime").
     - instruct-pix2pix-sdxl    : ~8GB  | High quality, slow.
+    - qwen-image-edit          : ~20GB | Best for text editing, precision. (CUDA, auto-switches on MPS)
+    - qwen-image-edit-mps      : ~40GB | ⚠️ HIGH RAM! Qwen-Image-Edit for Mac. Float32.
     - remove-bg                : ~1GB  | Background removal and silhouette creation.
 
   Upscaling:
@@ -544,6 +554,7 @@ Supported Models (Code : Download Size | Description):
     # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
     transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
+    transform_group.add_argument("-em", "--edit-model", default="default", help=f"Model for image editing. Options: {', '.join(EDIT_MODELS.keys())}")
     transform_group.add_argument("-rb", "--remove-background", action="store_true", help="Remove background (Transparent PNG).")
     transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
     transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
@@ -921,7 +932,7 @@ Supported Models (Code : Download Size | Description):
              pkg_remove_background(args.transform_image, output_file, silhouette=args.silhouette)
         else:
              pkg_generate_edit(args.transform_image, args.prompt if args.prompt else args.transform_prompt, output_file, 
-                           model_name="default",
+                           model_name=args.edit_model,
                            guidance_scale=args.image_guidance if args.image_guidance else 7.5,
                            image_guidance_scale=args.image_guidance if args.image_guidance else 1.5,
                            unsafe=args.unsafe)

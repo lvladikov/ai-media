@@ -134,6 +134,60 @@
       "description": "Generate image with explicit --image-model sdxl flag"
     },
     {
+      "name": "Image - SD 3.5 Medium",
+      "timeout": 3600,
+      "command": "-i -p \"A blue car\" -o ai_media/testing/data/outputs/img_sd35_medium.jpg -s 64x64 --image-model sd3.5-medium --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sd35_medium.jpg"
+      ],
+      "description": "Generate image using SD 3.5 Medium model (gated)"
+    },
+    {
+      "name": "Image - SD 3.5 Large",
+      "timeout": 3600,
+      "runOn": "cuda",
+      "command": "-i -p \"A blue car\" -o ai_media/testing/data/outputs/img_sd35_large.jpg -s 64x64 --image-model sd3.5-large --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sd35_large.jpg"
+      ],
+      "description": "Generate image using SD 3.5 Large model (gated, CUDA recommended)"
+    },
+    {
+      "name": "Image - SD 3.5 Turbo",
+      "timeout": 3600,
+      "runOn": "cuda",
+      "command": "-i -p \"A blue car\" -o ai_media/testing/data/outputs/img_sd35_turbo.jpg -s 64x64 --image-model sd3.5-turbo --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sd35_turbo.jpg"
+      ],
+      "description": "Generate image using SD 3.5 Large Turbo model (gated, fast 4 steps)"
+    },
+    {
+      "name": "Image - Qwen-Image (CUDA)",
+      "timeout": 3600,
+      "runOn": "cuda",
+      "command": "-i -p \"A sign that says Hello World\" -o ai_media/testing/data/outputs/img_qwen.jpg -s 64x64 --image-model qwen-image --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_qwen.jpg"
+      ],
+      "description": "Generate image using Qwen-Image 4-bit model (CUDA only, best text rendering)"
+    },
+    {
+      "name": "Image - Qwen-Image-MPS (Mac)",
+      "timeout": 3600,
+      "runOn": "mps",
+      "command": "-i -p \"A sign that says Hello World\" -o ai_media/testing/data/outputs/img_qwen_mps.jpg -s 64x64 --image-model qwen-image-mps --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_qwen_mps.jpg"
+      ],
+      "description": "Generate image using Qwen-Image Full model (MPS, float32)"
+    },
+    {
       "name": "Image - Square Orientation",
       "command": "-i -p \"A tall tree\" -o ai_media/testing/data/outputs/img_square.jpg -s 64x64 -otn square --force --unsafe",
       "expectedInputItems": [],
@@ -626,6 +680,30 @@
         "ai_media/testing/data/outputs/sketch_sdxl.png"
       ],
       "description": "Transform image using InstructPix2Pix SDXL model"
+    },
+    {
+      "name": "Transform - Edit (Qwen CUDA)",
+      "runOn": "cuda",
+      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Change text to Hello\" -o ai_media/testing/data/outputs/qwen_edit.png -em qwen-image-edit --force --unsafe",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/qwen_edit.png"
+      ],
+      "description": "Transform image using Qwen-Image-Edit (CUDA) with -em alias"
+    },
+    {
+      "name": "Transform - Edit (Qwen MPS)",
+      "runOn": "mps",
+      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Change text to Hello\" -o ai_media/testing/data/outputs/qwen_edit_mps.png -em qwen-image-edit-mps --force --unsafe",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/qwen_edit_mps.png"
+      ],
+      "description": "Transform image using Qwen-Image-Edit (MPS) with -em alias"
     },
     {
       "name": "Transform - Edit + Remove BG",

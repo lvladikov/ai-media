@@ -13,6 +13,11 @@ IMAGE_MODELS = {
     "flux2-full": "black-forest-labs/FLUX.2-dev",      # FLUX 2 (Full model, 90GB+ VRAM required)
     "sdxl": "stabilityai/sdxl-turbo",                  # Fast, good quality (DEFAULT)
     "sd-1.5": "runwayml/stable-diffusion-v1-5",        # Classic, lightweight
+    "sd3.5-medium": "stabilityai/stable-diffusion-3.5-medium",    # SD 3.5 Medium (consumer-friendly)
+    "sd3.5-large": "stabilityai/stable-diffusion-3.5-large",       # SD 3.5 Large (best quality)
+    "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps)
+    "qwen-image": "ovedrive/qwen-image-4bit",                      # Qwen-Image 4-bit (CUDA, 20GB)
+    "qwen-image-mps": "Qwen/Qwen-Image",                           # Qwen-Image Full (MPS, float32, ~40GB RAM)
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler",  # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",      # 2x Latent Upscaling
     "default": "stabilityai/sdxl-turbo"
@@ -22,6 +27,8 @@ IMAGE_MODELS = {
 EDIT_MODELS = {
     "instruct-pix2pix": "timbrooks/instruct-pix2pix",
     "instruct-pix2pix-sdxl": "diffusers/sdxl-instructpix2pix-768",
+    "qwen-image-edit": "Qwen/Qwen-Image-Edit-2511",         # Qwen-Image-Edit (CUDA, 4-bit)
+    "qwen-image-edit-mps": "Qwen/Qwen-Image-Edit-2511",     # Qwen-Image-Edit (MPS, float32)
     "remove-bg": "briaai/RMBG-1.4",
     "default": "timbrooks/instruct-pix2pix"
 }
@@ -90,6 +97,11 @@ MODEL_REQUIREMENTS = {
     "black-forest-labs/FLUX.1-dev": {"vram": 24, "ram": 80, "max_resolution": (2048, 2048)},
     "diffusers/FLUX.2-dev-bnb-4bit": {"vram": 20, "ram": 32, "max_resolution": (4096, 4096)},
     "black-forest-labs/FLUX.2-dev": {"vram": 90, "ram": 120, "max_resolution": (4096, 4096)},
+    "stabilityai/stable-diffusion-3.5-medium": {"vram": 10, "ram": 24, "max_resolution": (1024, 1024)},
+    "stabilityai/stable-diffusion-3.5-large": {"vram": 19, "ram": 40, "max_resolution": (1024, 1024)},
+    "stabilityai/stable-diffusion-3.5-large-turbo": {"vram": 19, "ram": 40, "max_resolution": (1024, 1024)},
+    "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
+    "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)},
     
     # Audio Models (max_duration in seconds, based on model architecture limits)
     "facebook/musicgen-small": {"vram": 4, "ram": 8, "max_duration": 30},
@@ -119,6 +131,7 @@ MODEL_REQUIREMENTS = {
     # Edit/Transform Models
     "timbrooks/instruct-pix2pix": {"vram": 8, "ram": 12, "max_resolution": (1024, 1024)},
     "diffusers/sdxl-instructpix2pix-768": {"vram": 10, "ram": 16, "max_resolution": (1024, 1024)},
+    "Qwen/Qwen-Image-Edit-2511": {"vram": 20, "ram": 40, "max_resolution": (1664, 1664)},
     "briaai/RMBG-1.4": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
     
     # Text Models

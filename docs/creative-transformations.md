@@ -21,6 +21,7 @@ Instantly extract subjects from their background.
 | `-ti`, `--transform-image` | Path to the image file to transform. |
 | `-p`, `--prompt` | Edit instruction (works for standalone transformations). |
 | `-tp`, `--transform-prompt` | Edit instruction for chaining with generation (e.g., `-i -p "..." -ti file -tp "..."`). |
+| `-em`, `--edit-model` | Model for editing: `instruct-pix2pix`, `qwen-image-edit`, `qwen-image-edit-mps`, etc. |
 | `--remove-background`, `-rb` | Remove background (outputs transparent PNG). |
 | `--silhouette` | Create a black silhouette (requires `--remove-background`). |
 | `--image-guidance` | Image guidance scale (default: `1.5`). Higher = closer to original structure. |
@@ -35,7 +36,16 @@ See [Creative Transformation Examples](#examples) and [Models](#models).
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **InstructPix2Pix** | `instruct-pix2pix` | ~4GB | ~8GB (High Precision) | Instructional image editing (e.g., "Make it anime"). |
+| **Qwen-Image-Edit** | `qwen-image-edit` | ~20GB | ~20GB | **Best for:** text editing, precision, object removal. 🔒 **CUDA only**. |
+| **Qwen-Image-Edit (MPS)** | `qwen-image-edit-mps` | ~40GB | ~40GB | Same as above on Mac. Float32. |
 | **RMBG-1.4** | `remove-bg` | ~0.2GB | ~2GB | Background removal and silhouette creation. |
+
+> [!IMPORTANT]
+> **Qwen-Image-Edit Platform Variants:** Uses 4-bit quantization (`bitsandbytes`) which only works on CUDA.
+> - **CUDA:** Uses `qwen-image-edit` (4-bit, 20GB VRAM)
+> - **MPS (Mac):** Uses `qwen-image-edit-mps` (float32)
+>
+> The script **automatically switches** to the correct variant. If you select `qwen-image-edit` on Mac, it switches to `qwen-image-edit-mps`.
 
 ## Transformation Recipe Book 🪄
 
@@ -93,6 +103,28 @@ python ai-media.py --transform-image photo.jpg --transform-prompt "Make it look 
 python ai-media.py -ti portrait.jpg -tp "Add a pair of sunglasses"
 python ai-media.py -ti room.jpg -tp "Replace the chair with a sofa"
 ```
+
+### Qwen-Image-Edit (Professional Editing)
+
+Qwen-Image-Edit excels at **text editing** and **precise object manipulation**.
+
+```bash
+# Text Editing in Images (Qwen-Image-Edit is BEST at this!)
+python ai-media.py -ti sign.jpg -tp "Change the text from 'Hello' to 'Goodbye'" --edit-model qwen-image-edit
+python ai-media.py -ti poster.jpg -tp "Add Chinese text '欢迎' to the banner" -em qwen-image-edit
+
+# Precise Object Removal
+python ai-media.py -ti photo.jpg -tp "Remove the person in the background" -em qwen-image-edit
+
+# Object Addition with Proper Lighting
+python ai-media.py -ti table.jpg -tp "Add a coffee cup on the table" -em qwen-image-edit
+
+# Style Transfer
+python ai-media.py -ti portrait.jpg -tp "Apply Studio Ghibli art style" -em qwen-image-edit
+```
+
+> [!TIP]
+> For **text editing** within images (adding, changing, or removing text), always use `--edit-model qwen-image-edit`. It significantly outperforms InstructPix2Pix for this task.
 
 ### Guidance Scale
 

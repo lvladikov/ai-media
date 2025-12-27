@@ -62,7 +62,49 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
         image = image.convert("RGB")
         
         # Initialize Pipeline
-        if "sdxl" in model_id.lower():
+        if "qwen-image-edit" in model_name.lower():
+            # Qwen-Image-Edit for professional editing
+            from diffusers import DiffusionPipeline
+            
+            # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa
+            if device.type == "mps" and "-mps" not in model_name.lower():
+                print(f"   ℹ️  Switching to qwen-image-edit-mps (4-bit quantization not supported on MPS)")
+                model_id = EDIT_MODELS["qwen-image-edit-mps"]
+            elif device.type == "cuda" and "-mps" in model_name.lower():
+                print(f"   ℹ️  Switching to qwen-image-edit (using optimized CUDA variant)")
+                model_id = EDIT_MODELS["qwen-image-edit"]
+            
+            # CUDA: bfloat16, MPS: float32
+            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+            
+            print(f"   ℹ️  Loading Qwen-Image-Edit Pipeline...")
+            pipe = DiffusionPipeline.from_pretrained(
+                model_id,
+                torch_dtype=qwen_dtype
+            )
+            
+            # Enable CPU offload on CUDA
+            if device.type == "cuda":
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe = pipe.to(device)
+            
+            # Generate with Qwen-Image-Edit
+            print(f"✨ Applying edits with Qwen-Image-Edit... (Steps: {steps})")
+            with torch.inference_mode():
+                output = pipe(
+                    prompt,
+                    image=image,
+                    num_inference_steps=steps if steps != 50 else 20,
+                    guidance_scale=guidance_scale if guidance_scale != 7.5 else 4.0,
+                )
+            
+            result = output.images[0]
+            result.save(output_path)
+            print(f"✅ Edited image saved to {output_path}")
+            return True
+            
+        elif "sdxl" in model_id.lower():
             # SDXL InstructPix2Pix
             pipe = StableDiffusionXLInstructPix2PixPipeline.from_pretrained(
                 model_id,

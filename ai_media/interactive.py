@@ -360,6 +360,19 @@ def run_interactive(jump_point=None):
                 ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
             ]
             
+            # SD 3.5 models (gated, work on all platforms)
+            model_options.extend([
+                ("SD 3.5 Medium (High Quality, 🔒 Gated) ~10GB", "sd3.5-medium"),
+                ("SD 3.5 Large (Best Quality, 🔒 Gated) ~19GB", "sd3.5-large"),
+                ("SD 3.5 Turbo (Fast 4 Steps, 🔒 Gated) ~19GB", "sd3.5-turbo"),
+            ])
+            
+            # Qwen-Image models with platform-specific variants
+            if is_cuda:
+                model_options.append(("Qwen-Image (Best Text, CUDA 4-bit) ~20GB", "qwen-image"))
+            elif is_mac:
+                model_options.append(("Qwen-Image (Best Text, Mac Full) ~40GB", "qwen-image-mps"))
+            
             # Flux base models with Mac-specific notes
             if is_mac:
                 model_options.extend([
@@ -670,7 +683,32 @@ def run_interactive(jump_point=None):
             instruction = prompt_text("📝 Enter edit instruction (e.g., 'Make it anime')")
             if instruction is None:
                 return
-            cmd = f"-ti \"{input_file}\" -tp \"{instruction}\""
+            
+            # Model selection for edit
+            print("\n📦 Select Edit Model:\n")
+            try:
+                import torch
+                is_cuda = torch.cuda.is_available()
+                is_mps = torch.backends.mps.is_available() and not is_cuda
+            except ImportError:
+                is_cuda = False
+                is_mps = False
+            
+            edit_model_options = [
+                ("InstructPix2Pix (Default, Fast) ~4GB", "instruct-pix2pix"),
+            ]
+            
+            # Add Qwen-Image-Edit based on platform
+            if is_cuda:
+                edit_model_options.append(("Qwen-Image-Edit (Best for Text/Precision, CUDA) ~20GB", "qwen-image-edit"))
+            elif is_mps:
+                edit_model_options.append(("Qwen-Image-Edit (Best for Text/Precision, Mac) ~40GB", "qwen-image-edit-mps"))
+            
+            edit_model = prompt_choice("Edit Model", edit_model_options)
+            if edit_model is None:
+                return
+            
+            cmd = f"-ti \"{input_file}\" -tp \"{instruction}\" --edit-model {edit_model}"
         elif operation == "rembg":
             cmd = f"-ti \"{input_file}\" --remove-background"
         elif operation == "silhouette":

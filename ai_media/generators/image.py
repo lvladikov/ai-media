@@ -115,6 +115,64 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 "guidance_scale": 4.0, 
                 "num_inference_steps": 50,
             }
+        elif "stable-diffusion-3.5" in model_id.lower() or "sd3.5" in model_name.lower():
+            # SD 3.5 (Medium, Large, Large Turbo) uses StableDiffusion3Pipeline
+            from diffusers import StableDiffusion3Pipeline
+            
+            # SD 3.5 works best with bfloat16 on CUDA, float32 on MPS
+            sd35_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+            
+            print(f"   ℹ️  Loading Stable Diffusion 3.5 Pipeline...")
+            pipe = StableDiffusion3Pipeline.from_pretrained(
+                model_id,
+                torch_dtype=sd35_dtype
+            )
+            
+            # Enable CPU offload on CUDA to fit on 24GB cards
+            if device.type == "cuda":
+                use_offload = True
+            
+            # Turbo uses only 4 steps with zero guidance, Medium/Large use 40 steps with guidance
+            is_turbo = "turbo" in model_id.lower()
+            extra_kwargs = {
+                "guidance_scale": 0.0 if is_turbo else 4.5,
+                "num_inference_steps": 4 if is_turbo else 40,
+                "max_sequence_length": 512
+            }
+        elif "qwen-image" in model_name.lower() and "edit" not in model_name.lower():
+            # Qwen-Image Text-to-Image generation
+            from diffusers import DiffusionPipeline
+            
+            # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa
+            original_model_name = model_name
+            if device.type == "mps" and "-mps" not in model_name.lower():
+                print(f"   ℹ️  Switching to qwen-image-mps (4-bit quantization not supported on MPS)")
+                model_id = IMAGE_MODELS["qwen-image-mps"]
+                model_name = "qwen-image-mps"
+            elif device.type == "cuda" and "-mps" in model_name.lower():
+                print(f"   ℹ️  Switching to qwen-image (using optimized CUDA 4-bit variant)")
+                model_id = IMAGE_MODELS["qwen-image"]
+                model_name = "qwen-image"
+            
+            # CUDA: bfloat16, MPS: float32
+            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+            
+            print(f"   ℹ️  Loading Qwen-Image Pipeline...")
+            pipe = DiffusionPipeline.from_pretrained(
+                model_id,
+                torch_dtype=qwen_dtype
+            )
+            
+            # Enable CPU offload on CUDA for memory efficiency
+            if device.type == "cuda":
+                use_offload = True
+            
+            # Qwen-Image parameters: Distill uses 15 steps, 4-bit uses ~8 steps
+            is_distill = "distill" in model_id.lower()
+            extra_kwargs = {
+                "true_cfg_scale": 4.0,
+                "num_inference_steps": 15 if is_distill else 8,
+            }
         elif "flux" in model_id.lower():
             # FLUX 1 (Schnell/Dev) on MPS requires float32 to avoid dtype mismatch errors
             flux_dtype = torch.float32 if device.type == "mps" else dtype
