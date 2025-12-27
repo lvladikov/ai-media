@@ -125,7 +125,7 @@
       "description": "Generate image using SD 3.5 Turbo model (default)"
     },
     {
-      "name": "Image - SDXL Explicit",
+      "name": "Image - SDXL",
       "command": "-i -p \"Orange fruit\" -o ai_media/testing/data/outputs/img_sdxl_exp.jpg -s 64x64 --image-model sdxl --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
