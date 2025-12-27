@@ -180,7 +180,7 @@ hf auth login
 
 ## Usage
 
-The script `ai-media.py` serves as the main entry point, relying on feature modules located in the `ai_media` directory. To run the tool from a different location, ensure you move both the `ai-media.py` file and the `ai_media` directory together.
+The script `ai-media.py` serves as the main entry point, relying on feature modules located in the `ai_media` directory. To run the tool from a different location, ensure you move both `ai-media.py` and `requirements.txt` files, as well as the `ai_media` directory together.
 
 **Example Command:**
 
