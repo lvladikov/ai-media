@@ -13,6 +13,7 @@ from ..utils.system import get_optimal_device_and_dtype, clear_gpu_memory
 from ..utils.parsers import format_time
 from ..utils.performance import PerformanceTracker, ResourceMonitor, write_report_json
 from ..utils.ffmpeg import get_video_encoding_params, ffmpeg_resize_video
+from ..utils.interaction import emoji
 
 
 def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, strength=0.6):
@@ -232,8 +233,6 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     else:
         model_id = base_model
 
-    from ..utils.interaction import emoji
-    
     # ...
 
     print(f"{'='*60}")
