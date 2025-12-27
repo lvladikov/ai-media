@@ -93,7 +93,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             print(f"✨ Applying edits with Qwen-Image-Edit... (Steps: {steps})")
             with torch.inference_mode():
                 output = pipe(
-                    prompt,
+                    prompt=prompt,
                     image=image,
                     num_inference_steps=steps if steps != 50 else 20,
                     guidance_scale=guidance_scale if guidance_scale != 7.5 else 4.0,
