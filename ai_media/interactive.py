@@ -356,7 +356,8 @@ def run_interactive(jump_point=None):
             is_mac = sys.platform == 'darwin'
             
             model_options = [
-                ("SDXL Turbo (Default, Fast) ~8GB", "sdxl"),
+                ("SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated) ~19GB", "sd3.5-turbo"),
+                ("SDXL Turbo (Fast, no login) ~8GB", "sdxl"),
                 ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
             ]
             
@@ -364,7 +365,6 @@ def run_interactive(jump_point=None):
             model_options.extend([
                 ("SD 3.5 Medium (High Quality, 🔒 Gated) ~10GB", "sd3.5-medium"),
                 ("SD 3.5 Large (Best Quality, 🔒 Gated) ~19GB", "sd3.5-large"),
-                ("SD 3.5 Turbo (Fast 4 Steps, 🔒 Gated) ~19GB", "sd3.5-turbo"),
             ])
             
             # Qwen-Image models with platform-specific variants

@@ -116,13 +116,13 @@
       "description": "Generate image using Stable Diffusion 1.5 model"
     },
     {
-      "name": "Image - SDXL (Default)",
-      "command": "-i -p \"A red apple\" -o ai_media/testing/data/outputs/img_sdxl.jpg -s 64x64 --force --unsafe",
+      "name": "Image - Default (SD 3.5 Turbo)",
+      "command": "-i -p \"A red apple\" -o ai_media/testing/data/outputs/img_default.jpg -s 64x64 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/img_sdxl.jpg"
+        "ai_media/testing/data/outputs/img_default.jpg"
       ],
-      "description": "Generate image using SDXL model (default)"
+      "description": "Generate image using SD 3.5 Turbo model (default)"
     },
     {
       "name": "Image - SDXL Explicit",

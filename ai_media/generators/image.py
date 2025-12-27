@@ -119,6 +119,13 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             # SD 3.5 (Medium, Large, Large Turbo) uses StableDiffusion3Pipeline
             from diffusers import StableDiffusion3Pipeline
             
+            # SD 3.5 requires dimensions divisible by 16 (not 8 like other models)
+            if width % 16 != 0 or height % 16 != 0:
+                new_w = round(width / 16) * 16
+                new_h = round(height / 16) * 16
+                print(f"   ℹ️  Adjusting {width}x{height} → {new_w}x{new_h} (SD 3.5 requires divisible by 16)")
+                width, height = new_w, new_h
+            
             # SD 3.5 works best with bfloat16 on CUDA, float32 on MPS
             sd35_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
             
@@ -315,19 +322,47 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         print(f"❌ Error: Missing dependencies. {e}")
         return False
     except Exception as e:
-        err_str = str(e)
-        if "401" in err_str or "restricted" in err_str.lower():
-            print(f"❌ Access Denied (401). Test model '{model_id}' is gated.")
-            print("   👉 Solution 1: Run 'huggingface-cli login' with your token.")
-            print("   👉 Solution 2: Use an open model like '--image-model sd-1.5'.")
-        elif "divisible by 8" in err_str:
+        err_str = str(e).lower()
+        # Detect gated model access errors (various patterns from HuggingFace Hub)
+        is_gated_error = any(pattern in err_str for pattern in [
+            "401", "403", "restricted", "gated", "access to model", 
+            "you need to agree", "accept the license", "repository is gated"
+        ])
+        
+        if is_gated_error:
+            # Check if this is the default model (SD 3.5 Turbo)
+            is_default = model_id == IMAGE_MODELS.get("default", "") or "stable-diffusion-3.5" in model_id.lower()
+            
+            print(f"\n❌ Access Denied: Model '{model_id}' requires accepting a license agreement.")
+            print(f"")
+            print(f"   This model is 'gated' on Hugging Face (free, but requires agreement).")
+            print(f"")
+            print(f"   🔧 How to fix:")
+            print(f"      1. Visit: https://huggingface.co/{model_id}")
+            print(f"      2. Click 'Agree and access repository' (one-time)")
+            print(f"      3. Run: huggingface-cli login")
+            print(f"")
+            
+            if is_default:
+                print(f"   💡 Quick Alternative: Use an ungated model (no login required):")
+                print(f"      python ai-media.py -i -p \"your prompt\" --image-model sdxl")
+                print(f"")
+                print(f"   📖 See README.md > Gated Models for full setup instructions.")
+            else:
+                print(f"   💡 Alternative: Use '--image-model sdxl' (ungated, no login required).")
+        elif "divisible by 8" in err_str or "divisible by 16" in err_str:
+            # Extract the actual divisor from the error message
+            import re
+            divisor_match = re.search(r'divisible by (\d+)', err_str)
+            divisor = int(divisor_match.group(1)) if divisor_match else 8
+            
             print(f"❌ Resolution Error: {e}")
             
             # Smart Correction
-            new_w = round(width / 8) * 8
-            new_h = round(height / 8) * 8
+            new_w = round(width / divisor) * divisor
+            new_h = round(height / divisor) * divisor
             
-            print(f"\n💡 Tip: Dimensions must be multiples of 8.")
+            print(f"\n💡 Tip: Dimensions must be multiples of {divisor}.")
             print(f"   Closest valid size: {new_w}x{new_h}")
             
             try:
@@ -336,6 +371,57 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                     print("")  # Spacer
                     return generate_image(prompt, output_file, new_w, new_h, 
                                          model_name=model_name, unsafe=unsafe)
+            except KeyboardInterrupt:
+                pass
+            print("")
+        elif "pos_embed_max_size" in err_str:
+            # SD 3.5 positional embedding limit (max latent size = 192 → hard limit ~1536x1536)
+            # But quality degrades above 1296x1296, so recommend that
+            max_latent = 192
+            hard_limit = max_latent * 8  # 1536 (architectural limit)
+            quality_max = 1296  # Recommended max before noise artifacts
+            print(f"\n❌ SD 3.5 Resolution Limit Exceeded")
+            print(f"   Error: {e}")
+            print(f"\n   Explanation:")
+            print(f"   • SD 3.5 uses fixed positional embeddings (pos_embed_max_size = {max_latent}).")
+            print(f"   • Architectural hard limit: {hard_limit}x{hard_limit} pixels.")
+            print(f"   • Recommended max (before noise): {quality_max}x{quality_max} pixels.")
+            print(f"   • Your request ({width}x{height}) exceeds the hard limit.")
+            print(f"\n   💡 Solution: Generate at ≤{quality_max}x{quality_max} and upscale, or use a different model.")
+            print(f"      Example: python ai-media.py -i -p \"prompt\" -s 1024 --upscale -uf 5x\n")
+            
+            # Auto-Upscale Fallback
+            try:
+                # Calculate base resolution that fits within limits while maintaining aspect ratio
+                aspect_ratio = width / height
+                if aspect_ratio >= 1:  # Landscape or square
+                    base_w = min(1024, max_res)
+                    base_h = int(base_w / aspect_ratio)
+                    base_h = round(base_h / 8) * 8  # Ensure divisible by 8
+                else:  # Portrait
+                    base_h = min(1024, max_res)
+                    base_w = int(base_h * aspect_ratio)
+                    base_w = round(base_w / 8) * 8
+                
+                # Calculate upscale factor needed
+                upscale_factor = max(width / base_w, height / base_h)
+                final_w = int(base_w * upscale_factor)
+                final_h = int(base_h * upscale_factor)
+                
+                print(f"   ✨ Alternative: Generate at {base_w}x{base_h} and Auto-Upscale {upscale_factor:.1f}x?")
+                print(f"      This produces a {final_w}x{final_h} image using the Upscaler model.")
+                choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
+                if choice in ['y', 'yes']:
+                    print(f"\n📉 Switching to base resolution: {base_w}x{base_h}...")
+                    # Import upscaler here to avoid circular import
+                    from ..upscaling import upscale_image_file
+                    # 1. Generate Base Image
+                    success = generate_image(prompt, output_file, base_w, base_h, 
+                                            model_name=model_name, unsafe=unsafe)
+                    if success:
+                        # 2. Upscale Result
+                        print("")
+                        return upscale_image_file(output_file, output_file, strength=0.0, factor=upscale_factor)
             except KeyboardInterrupt:
                 pass
             print("")

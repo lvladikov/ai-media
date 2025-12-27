@@ -422,11 +422,11 @@ Examples:
 
 Supported Models (Code : Download Size | Description):
   Images:
-    - sdxl (default)           : ~8GB  | Fast, high quality.
-    - sd-1.5                   : ~4GB  | Lightweight, lower VRAM.
-    - sd3.5-medium             : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
-    - sd3.5-large              : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
-    - sd3.5-turbo              : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
+    - sd3.5-turbo (default)     : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
+    - sdxl                      : ~8GB  | Fast, high quality.
+    - sd-1.5                    : ~4GB  | Lightweight, lower VRAM.
+    - sd3.5-medium              : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
+    - sd3.5-large               : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
     - qwen-image               : ~20GB | Best text rendering. (CUDA 4-bit, auto-switches on MPS)
     - qwen-image-mps           : ~40GB | ⚠️ HIGH RAM! Qwen-Image for Mac. Float32, slower.
     - flux                     : ~24GB | High quality (🔒 Gated - Free Login Required)
@@ -503,7 +503,7 @@ Supported Models (Code : Download Size | Description):
     common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
     common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
     common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3). Article: md/pdf/doc/html.")
-    common_group.add_argument("-s", "--size", help="Resolution for Image/Video: '720p', '1080p', '4k', '1280x720'. For zeroscope: triggers dynamic upscaling (XL + Real-ESRGAN) for targets > 576x320. Default: 720p")
+    common_group.add_argument("-s", "--size", help="Resolution: '720p', '1080p', '4k', '1280x720', '1536' (square). For zeroscope: triggers dynamic upscaling (XL + Real-ESRGAN) for targets > 576x320. Default: 720p")
     common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
     
     
@@ -561,17 +561,17 @@ Supported Models (Code : Download Size | Description):
 
     # Media Conversion (Standalone - No AI)
     convert_group = parser.add_argument_group("Media Conversion Options")
-    convert_group.add_argument("-ci", "--convert-image", metavar="FILE", help="Convert image format (e.g., gif→png)")
+    convert_group.add_argument("-ci", "--convert-image", metavar="FILE", help="Convert image format (e.g., gif->png)")
     convert_group.add_argument("-cit", "--convert-image-to", metavar="FMT", help="Output format (png, .webp, out.jpg)")
-    convert_group.add_argument("-cv", "--convert-video", metavar="FILE", help="Convert video (mov→mp4)")
+    convert_group.add_argument("-cv", "--convert-video", metavar="FILE", help="Convert video (mov->mp4)")
     convert_group.add_argument("-cvt", "--convert-video-to", metavar="FMT", help="Output format (mp4, .webm, out.avi)")
-    convert_group.add_argument("-ca", "--convert-audio", metavar="FILE", help="Convert audio (wav→mp3)")
+    convert_group.add_argument("-ca", "--convert-audio", metavar="FILE", help="Convert audio (wav->mp3)")
     convert_group.add_argument("-cat", "--convert-audio-to", metavar="FMT", help="Output format (mp3, .flac, out.ogg)")
     convert_group.add_argument("--convert-image-engine", choices=["pil", "ffmpeg"], default="pil", help="pil (default) or ffmpeg")
     
     # Document Conversion
     doc_conv_group = parser.add_argument_group("Document Conversion Options")
-    doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document format (e.g., report.docx→pdf)")
+    doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document format (e.g., report.docx->pdf)")
     doc_conv_group.add_argument("-cdt", "--convert-document-to", metavar="FMT", help="Output format: md, html, pdf, docx, rtf, txt, json")
     
     # AI Upscaling (Standalone Mode)

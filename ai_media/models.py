@@ -11,16 +11,16 @@ IMAGE_MODELS = {
     "flux-dev": "black-forest-labs/FLUX.1-dev",        # Higher quality, slower
     "flux2": "diffusers/FLUX.2-dev-bnb-4bit",          # FLUX 2 (4-bit quantized for consumer GPUs)
     "flux2-full": "black-forest-labs/FLUX.2-dev",      # FLUX 2 (Full model, 90GB+ VRAM required)
-    "sdxl": "stabilityai/sdxl-turbo",                  # Fast, good quality (DEFAULT)
+    "sdxl": "stabilityai/sdxl-turbo",                  # Fast, good quality
     "sd-1.5": "runwayml/stable-diffusion-v1-5",        # Classic, lightweight
     "sd3.5-medium": "stabilityai/stable-diffusion-3.5-medium",    # SD 3.5 Medium (consumer-friendly)
     "sd3.5-large": "stabilityai/stable-diffusion-3.5-large",       # SD 3.5 Large (best quality)
-    "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps)
+    "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps) (DEFAULT)
     "qwen-image": "ovedrive/qwen-image-4bit",                      # Qwen-Image 4-bit (CUDA, 20GB)
     "qwen-image-mps": "Qwen/Qwen-Image",                           # Qwen-Image Full (MPS, float32, ~40GB RAM)
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler",  # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",      # 2x Latent Upscaling
-    "default": "stabilityai/sdxl-turbo"
+    "default": "stabilityai/stable-diffusion-3.5-large-turbo"
 }
 
 # --- Edit/Transform Models ---
@@ -97,9 +97,9 @@ MODEL_REQUIREMENTS = {
     "black-forest-labs/FLUX.1-dev": {"vram": 24, "ram": 80, "max_resolution": (2048, 2048)},
     "diffusers/FLUX.2-dev-bnb-4bit": {"vram": 20, "ram": 32, "max_resolution": (4096, 4096)},
     "black-forest-labs/FLUX.2-dev": {"vram": 90, "ram": 120, "max_resolution": (4096, 4096)},
-    "stabilityai/stable-diffusion-3.5-medium": {"vram": 10, "ram": 24, "max_resolution": (1024, 1024)},
-    "stabilityai/stable-diffusion-3.5-large": {"vram": 19, "ram": 40, "max_resolution": (1024, 1024)},
-    "stabilityai/stable-diffusion-3.5-large-turbo": {"vram": 19, "ram": 40, "max_resolution": (1024, 1024)},
+    "stabilityai/stable-diffusion-3.5-medium": {"vram": 10, "ram": 24, "max_resolution": (1296, 1296)},
+    "stabilityai/stable-diffusion-3.5-large": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
+    "stabilityai/stable-diffusion-3.5-large-turbo": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
     "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
     "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)},
     

@@ -33,7 +33,7 @@ def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, st
     Returns:
         List of upscaled PIL Images at 1024x576, or None on failure
     """
-    print(f"\n🔄 Upscaling with Zeroscope XL (Video-to-Video)...")
+    print(f"\n{emoji('🔄 ', '')}Upscaling with Zeroscope XL (Video-to-Video)...")
     print(f"   Input:    576x320 ({len(video_frames)} frames)")
     print(f"   Output:   1024x576")
     print(f"   Strength: {strength}")
@@ -192,7 +192,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             if is_mps:
                 needs_xl_upscale = False
                 needs_esrgan_upscale = True
-                print(f"📐 Dynamic Upscaling Pipeline (MPS Optimized):")
+                print(f"{emoji('📐 ', '')}Dynamic Upscaling Pipeline (MPS Optimized):")
                 print(f"   ⚠️  Skipping XL V2V (CPU diffusion too slow on Apple Silicon)")
                 print(f"   Target:  {target_width}x{target_height}")
                 print(f"   Step 1:  Generate at {gen_width}x{gen_height} (Zeroscope native)")
@@ -203,7 +203,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 if width > zeroscope_xl_w or height > zeroscope_xl_h:
                     needs_esrgan_upscale = True
                     
-                print(f"📐 Dynamic Upscaling Pipeline Activated:")
+                print(f"{emoji('📐 ', '')}Dynamic Upscaling Pipeline Activated:")
                 print(f"   Target:  {target_width}x{target_height}")
                 print(f"   Step 1:  Generate at {gen_width}x{gen_height} (Zeroscope native)")
                 if needs_xl_upscale:
@@ -232,11 +232,15 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     else:
         model_id = base_model
 
+    from ..utils.interaction import emoji
+    
+    # ...
+
     print(f"{'='*60}")
     if needs_xl_upscale:
-        print(f"📐 Step 1: Generate at {gen_width}x{gen_height} (Zeroscope native)")
+        print(f"{emoji('📐 ', '')}Step 1: Generate at {gen_width}x{gen_height} (Zeroscope native)")
     else:
-        print(f"🎬 Generating Video ({'Image-to-Video' if is_i2v else 'Text-to-Video'})")
+        print(f"{emoji('🎬 ', '')}Generating Video ({'Image-to-Video' if is_i2v else 'Text-to-Video'})")
     print(f"{'='*60}")
     print(f"   Model:    {model_id}")
     print(f"   Prompt:   '{prompt}'")
@@ -284,7 +288,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Display platform and dtype info
         dtype_name = str(dtype).replace("torch.", "")
         print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
-        print("⚠️  Video generation is resource intensive.")
+        print(f"{emoji('⚠️  ', '')}Video generation is resource intensive.")
         
         # cuDNN workaround
         if torch.cuda.is_available():
@@ -296,66 +300,66 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         # Load Pipeline based on model
         if "cogvideox" in model_id.lower() and is_i2v:
             pipe = CogVideoXImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
-            print(f"   ℹ️  Applying Memory Optimizations for CogVideoX...")
+            print(f"   {emoji('ℹ️', 'i')}  Applying Memory Optimizations for CogVideoX...")
             pipe.enable_sequential_cpu_offload() 
             pipe.vae.enable_tiling()
             pipe.vae.enable_slicing()
 
         elif "wan2.2" in model_id.lower():
             if is_i2v:
-                print(f"   ℹ️  Loading Wan 2.2 Image-to-Video Pipeline...")
+                print(f"   {emoji('ℹ️', 'i')}  Loading Wan 2.2 Image-to-Video Pipeline...")
                 pipe = WanImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
             else:
-                print(f"   ℹ️  Loading Wan 2.2 Text-to-Video Pipeline...")
+                print(f"   {emoji('ℹ️', 'i')}  Loading Wan 2.2 Text-to-Video Pipeline...")
                 pipe = WanPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             if device.type == "mps":
-                print("   ℹ️  MPS: Enabling Sequential CPU Offload for Wan 2.2 (memory-safe)...")
+                print(f"   {emoji('ℹ️', 'i')}  MPS: Enabling Sequential CPU Offload for Wan 2.2 (memory-safe)...")
                 pipe.enable_sequential_cpu_offload()
             else:
-                print("   ℹ️  Enabling Model CPU Offload for Wan 2.2...")
+                print(f"   {emoji('ℹ️', 'i')}  Enabling Model CPU Offload for Wan 2.2...")
                 pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
             
         elif "ltx-video" in model_id.lower():
             from diffusers import LTXPipeline
-            print(f"   ℹ️  Loading LTX-Video Pipeline...")
+            print(f"   {emoji('ℹ️', 'i')}  Loading LTX-Video Pipeline...")
             pipe = LTXPipeline.from_pretrained(model_id, torch_dtype=dtype)
             pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
 
         elif "mochi-1" in model_id.lower():
             from diffusers import MochiPipeline
-            print(f"   ℹ️  Loading Mochi 1 Pipeline...")
+            print(f"   {emoji('ℹ️', 'i')}  Loading Mochi 1 Pipeline...")
             pipe = MochiPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             if device.type == "mps":
-                print("   ℹ️  MPS: Enabling Sequential CPU Offload for Mochi 1 (memory-safe)...")
+                print(f"   {emoji('ℹ️', 'i')}  MPS: Enabling Sequential CPU Offload for Mochi 1 (memory-safe)...")
                 pipe.enable_sequential_cpu_offload()
             else:
-                print("   ℹ️  Enabling Model CPU Offload for Mochi 1...")
+                print(f"   {emoji('ℹ️', 'i')}  Enabling Model CPU Offload for Mochi 1...")
                 pipe.enable_model_cpu_offload()
             pipe.vae.enable_tiling()
 
         elif "hunyuan" in model_id.lower():
             if is_i2v:
-                print(f"   ℹ️  Loading HunyuanVideo Image-to-Video Pipeline...")
+                print(f"   {emoji('ℹ️', 'i')}  Loading HunyuanVideo Image-to-Video Pipeline...")
                 pipe = HunyuanVideoImageToVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
             else:
-                print(f"   ℹ️  Loading HunyuanVideo Text-to-Video Pipeline...")
+                print(f"   {emoji('ℹ️', 'i')}  Loading HunyuanVideo Text-to-Video Pipeline...")
                 pipe = HunyuanVideoPipeline.from_pretrained(model_id, torch_dtype=dtype)
             
             if device.type == "mps":
-                print("   ℹ️  MPS: Enabling Sequential CPU Offload for HunyuanVideo (memory-safe)...")
+                print(f"   {emoji('ℹ️', 'i')}  MPS: Enabling Sequential CPU Offload for HunyuanVideo (memory-safe)...")
                 pipe.enable_sequential_cpu_offload()
                 try:
                     pipe.vae.enable_tiling()
                     pipe.vae.enable_slicing()
-                    print("   ℹ️  Enabled VAE Tiling & Slicing for HunyuanVideo")
+                    print(f"   {emoji('ℹ️', 'i')}  Enabled VAE Tiling & Slicing for HunyuanVideo")
                 except Exception as e:
-                    print(f"   ⚠️  Could not enable VAE optimizations: {e}")
+                    print(f"   {emoji('⚠️  ', '')}Could not enable VAE optimizations: {e}")
             else:
-                print("   ℹ️  Enabling Model CPU Offload for HunyuanVideo...")
+                print(f"   {emoji('ℹ️', 'i')}  Enabling Model CPU Offload for HunyuanVideo...")
                 pipe.enable_model_cpu_offload()
                 pipe.vae.enable_tiling()
 
@@ -407,7 +411,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             render_width = (render_width // 16) * 16
             render_height = (render_height // 16) * 16
         
-        print(f"🎬 Rendering video frames at {render_width}x{render_height}... (This might be slow)")
+        print(f"{emoji('🎬 ', '')}Rendering video frames at {render_width}x{render_height}... (This might be slow)")
         
         start_time = time.time()
         with ResourceMonitor() as monitor:
@@ -438,7 +442,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         tracker.record_linear("video", model_id, device, duration, gen_duration, 
                              gen_width, gen_height, cpu=avg_cpu, ram=avg_ram, 
                              vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
-        print(f"   ✓ Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
+        print(f"   {emoji('✓', 'OK')} Rendered in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
               f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
         tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
         
@@ -449,7 +453,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             clear_gpu_memory()
             
             print(f"\n{'='*60}")
-            print(f"📐 Step 2: XL Upscale to {zeroscope_xl_w}x{zeroscope_xl_h} (V2V diffusion)")
+            print(f"{emoji('📐 ', '')}Step 2: XL Upscale to {zeroscope_xl_w}x{zeroscope_xl_h} (V2V diffusion)")
             print(f"{'='*60}")
             
             upscaled_frames = upscale_video_zeroscope_xl(
@@ -480,29 +484,84 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             write_report_json(report_json, stats)
         
         # Save Video
-        temp_raw_video = video_out + ".raw.mp4"
+        import tempfile
+        # Use system temp directory to avoid cluttering output folder if deletion fails
+        fd, temp_raw_video = tempfile.mkstemp(suffix=".mp4")
+        os.close(fd) # Close low-level handle immediately
+        
         export_to_video(video_frames, temp_raw_video, 
                        fps=7 if "stable-video-diffusion" in model_id.lower() else 8)
         
         # Re-encode with FFmpeg for universal playback
         import subprocess
+        import gc
         encoding_params = get_video_encoding_params(video_out)
+        
+        encoding_success = False
         try:
+            # Add timeout (5 min) and capture stderr for debugging hangs
             subprocess.run([
                 "ffmpeg", "-y", "-i", temp_raw_video,
                 *encoding_params,
                 video_out
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            os.remove(temp_raw_video)
-            print(f"✅ Video saved to {video_out} ({gen_width}x{gen_height})")
-        except Exception:
-            os.rename(temp_raw_video, video_out)
-            print(f"⚠️  Video saved (may require VLC to play): {video_out}")
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=300)
+            encoding_success = True
+        except subprocess.TimeoutExpired:
+            print(f"❌ Error: FFmpeg encoding timed out after 300s.")
+            print(f"   The process was likely stuck. Try a different format or codec.")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ FFmpeg Error: {e}")
+            if e.stderr:
+                print(f"   Details: {e.stderr.decode().strip()}")
+        except Exception as e:
+            print(f"⚠️  Encoding failed: {e}")
+
+        # Post-processing / Cleanup
+        gc.collect() 
+        time.sleep(0.5)
+
+        if encoding_success and os.path.exists(video_out):
+            # Encoding worked, try to cleanup raw file
+            # Encoding worked, try to cleanup raw file with retries
+            # Windows often holds locks briefly (Defender, Indexing, etc.)
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    if os.path.exists(temp_raw_video):
+                        os.remove(temp_raw_video)
+                    # If successful (or file gone), break
+                    break
+                except PermissionError:
+                    if attempt < max_retries - 1:
+                        time.sleep(1.0) # Wait for lock release
+                        gc.collect() # Force ensure release
+                    else:
+                        # Final attempt failed
+                        print(f"{emoji('⚠️', '!')} Warning: Could not delete temp file '{temp_raw_video}' after {max_retries} attempts.")
+                except Exception as e:
+                    print(f"{emoji('⚠️', '!')} Warning: Error deleting temp file: {e}")
+                    break
+            
+            print(f"{emoji('✅', 'OK')} Video saved to {video_out} ({gen_width}x{gen_height})")
+        else:
+            # Encoding failed, fallback to raw file
+            print(f"⚠️  Falling back to raw video output.")
+            try:
+                if os.path.exists(temp_raw_video):
+                    # On Windows, rename might fail if locked, so copy+del or just warn?
+                    # Try rename with retries?
+                    if os.path.exists(video_out):
+                        os.remove(video_out) # Clean up partial output
+                    os.rename(temp_raw_video, video_out)
+                    print(f"⚠️  Saved raw video (may be large/uncompressed): {video_out}")
+            except Exception as e:
+                 print(f"❌ Fallback failed: Could not rename raw video: {e}")
+                 print(f"   Raw video location: {temp_raw_video}")
         
         # Real-ESRGAN upscale for target > 1024x576
         if needs_esrgan_upscale:
             print(f"\n{'='*60}")
-            print(f"📐 Step 3: Real-ESRGAN Upscale to ~{target_width}x{target_height}")
+            print(f"{emoji('📐 ', '')}Step 3: Real-ESRGAN Upscale to ~{target_width}x{target_height}")
             print(f"{'='*60}")
             
             # Import here to avoid circular import
@@ -529,7 +588,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                 
                 if esrgan_w != target_width or esrgan_h != target_height:
                     print(f"\n{'='*60}")
-                    print(f"📐 Step 4: FFmpeg resize to exact {target_width}x{target_height}")
+                    print(f"{emoji('📐 ', '')}Step 4: FFmpeg resize to exact {target_width}x{target_height}")
                     print(f"{'='*60}")
                     
                     temp_final = video_out + ".final.mp4"
@@ -555,7 +614,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         clear_gpu_memory()
         
         if audio_prompt:
-            print("🔊 Generating Audio track...")
+            print(f"{emoji('🔊', '')} Generating Audio track...")
             audio_out = output_path + ".temp_audio.wav"
             
             # Import audio generator
@@ -563,7 +622,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             audio_success = gen_audio(audio_prompt, audio_out, duration, 32000, model_name=audio_model)
             
             if audio_success:
-                print("🔗 Muxing Video and Audio...")
+                print(f"{emoji('🔗', '')} Muxing Video and Audio...")
                 cmd = [
                     "ffmpeg", "-y",
                     "-i", video_out,
@@ -584,9 +643,9 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                             except:
                                 pass
                 except subprocess.CalledProcessError:
-                    print(f"❌ Muxing failed. Check FFmpeg.")
+                    print(f"{emoji('❌', 'X')} Muxing failed. Check FFmpeg.")
             else:
-                print("❌ Audio generation failed. Returning silent video (renaming temp).")
+                print(f"{emoji('❌', 'X')} Audio generation failed. Returning silent video (renaming temp).")
                 os.rename(video_out, output_path)
                 if os.path.exists(audio_out):
                     try:
@@ -597,7 +656,7 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         return True
         
     except Exception as e:
-        print(f"❌ Video generation failed: {e}")
+        print(f"{emoji('❌', 'X')} Video generation failed: {e}")
         if audio_prompt and os.path.exists(video_out):
             try:
                 os.remove(video_out)

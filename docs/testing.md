@@ -51,7 +51,7 @@ You can run a specific test by providing its name (exact match):
 
 ```bash
 # Run specific test
-python ai-media.py --test "Image - SDXL (Default)"
+python ai-media.py --test "Image - Default (SD 3.5 Turbo)"
 
 # Run specific test with verbose output
 python ai-media.py --test-verbose "Image - Auto Filename"
@@ -200,7 +200,7 @@ python ai-media.py --unittests-verbose --test-verbose
 python ai-media.py --unittests ai_media.testing.unit_tests.TestParseSize --test-verbose
 
 # Run All Unit Tests (Verbose) + Specific Integration Test
-python ai-media.py --unittests-verbose --test "Image - SDXL (Default)"
+python ai-media.py --unittests-verbose --test "Image - Default (SD 3.5 Turbo)"
 
 # Run Unit Tests (Summary) + Multiple Specific Integration Tests
 python ai-media.py --unittests --test "Image - Auto Filename" "Audio - Bark TTS"

@@ -16,13 +16,13 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sdxl` (default), `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `sd3.5-turbo`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-mps`. See [Models](#models) below. |
+| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-mps`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
 | `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
 | `-f, --format` | File format: jpg, png (default: jpg). |
-| `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
+| `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", "1536" (square), `{w:1280, h:720}`. Default: 720p. |
 
 See [Image Generation Examples](#examples) and [Models](#models).
 
@@ -30,6 +30,7 @@ See [Image Generation Examples](#examples) and [Models](#models).
 The tool supports natural language and object-style inputs:
 - **Presets**: `480p`, `576p`, `720p`, `900p`, `1080p`, `1440p`, `1k` ... `10k`, `HD`, `FHD`, `UHD`
 - **Dimensions**: `1280x720`, `1024x1024`
+- **Single Number (Square)**: `1536` → 1536×1536, `1024` → 1024×1024
 - **Objects**: `{w: 800, h: 600}`, `{width: 1920, height: 1080}`
 
 ## High-Resolution Optimization (Proactive Workflow)
@@ -61,11 +62,11 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | **Default**. Fast, high quality. Uses float32 on Apple Silicon. |
-| **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. |
+| **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. Uses float32 on Apple Silicon. |
+| **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. Older model. |
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
-| **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | Fast (4 steps). 🔒 **Gated**. |
+| **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | **Default**. Fast (4 steps) and Good Quality. 🔒 **Gated**. |
 | **Qwen-Image** | `qwen-image` | ~20GB | ~20GB | Best text rendering. 🔒 **CUDA only** (4-bit). |
 | **Qwen-Image (MPS)** | `qwen-image-mps` | ~40GB | ~40GB | Text rendering on Mac. Float32. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
@@ -76,9 +77,9 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 > [!NOTE]
 > **Apple Silicon/MPS:** SDXL Turbo uses float32 precision on Mac to avoid black images (float16 produces NaN values in VAE). This doubles memory usage compared to NVIDIA/CUDA.
 >
-> **FLUX.2 on Mac:** The 4-bit quantized version (`flux2`) requires `bitsandbytes` which only works on CUDA/NVIDIA GPUs. On Mac, it falls back to the full model with CPU offloading. **⚠️ Even 64GB unified RAM is not enough** — the process will be killed by macOS OOM. Recommended only for **high-end Macs with 128GB+ RAM**. For most Mac users, use `flux` or `sdxl` instead.
+> **FLUX.2 on Mac:** The 4-bit quantized version (`flux2`) requires `bitsandbytes` which only works on CUDA/NVIDIA GPUs. On Mac, it falls back to the full model with CPU offloading. **⚠️ Even 64GB unified RAM is not enough** — the process will be killed by Mac OS OOM. Recommended only for **high-end Macs with 128GB+ RAM**. For most Mac users, use `flux`, `sd3.5-turbo` or `sdxl` instead.
 >
-> **High Resolution (4K+):** For resolutions larger than 1536x1536 (e.g., 4K), the script automatically enables **VAE Tiling**. This processes the image in chunks to prevent "Out of Memory" errors, though generation will be slightly slower.
+> **High Resolution & SD 3.5 Limit:** SD 3.5 models have a recommended max resolution of **1296×1296** (higher causes noise artifacts). Architectural hard limit is 1536×1536. For larger sizes, use `--upscale`. VAE Tiling is auto-enabled for resolutions above 1536×1536.
 >
 > **Gated Models (Flux, FLUX.2, SD 3.5):** Require HuggingFace login. Accept the license at [huggingface.co/black-forest-labs](https://huggingface.co/black-forest-labs) for Flux or [huggingface.co/stabilityai](https://huggingface.co/stabilityai) for SD 3.5 and run `huggingface-cli login`.
 
@@ -115,7 +116,7 @@ Both models share the same **8.1B parameter** architecture but differ in speed a
 ### Basic Usage (Quick Start)
 
 ```bash
-# Generate a standard 720p image (Default model: SDXL Turbo)
+# Generate a standard 720p image (Default model: SD 3.5 Turbo)
 python ai-media.py -i -p "Cyberpunk city at night with neon lights"
 
 # Explicit output filename
@@ -127,8 +128,8 @@ python ai-media.py --generate-image --prompt "A cute robot holding a flower" --o
 Different models have different strengths and resource requirements.
 
 ```bash
-# SDXL Turbo (Default) - Fast & High Quality
-# Uses ~8GB VRAM (or ~16GB RAM on Mac). Best all-rounder.
+# SDXL Turbo - Fast & High Quality
+# Uses ~8GB VRAM (or ~16GB RAM on Mac). Best all-rounder without login.
 python ai-media.py -i -p "Cinematic portrait of an astronaut" --image-model sdxl
 
 # Stable Diffusion 1.5 - Low Resource / Vintage Style
@@ -144,7 +145,7 @@ python ai-media.py -i -p "A sign that says 'HELLO WORLD' in neon text" -im flux
 # ~10GB VRAM. Great prompt following, improved anatomy/typography.
 python ai-media.py -i -p "A capybara holding a sign that says Hello World" -im sd3.5-medium
 
-# SD 3.5 Large Turbo - Fast high-quality generation (Gated)
+# SD 3.5 Large Turbo (Default) - Fast high-quality generation (Gated)
 # Only 4 inference steps, ~19GB VRAM.
 python ai-media.py -i -p "Photorealistic portrait of an astronaut" -im sd3.5-turbo
 ```

@@ -8,6 +8,41 @@ import os
 import subprocess
 
 
+def get_optimal_video_codec(ext, has_cuda, has_mps):
+    """Determine best video codec by probing availability."""
+    candidates = []
+    
+    if ext in ['.mp4', '.m4v', '.mkv', '.mov']:
+        if has_cuda:
+            candidates = ["h264_nvenc", "libx264"]
+        elif has_mps:
+            candidates = ["h264_videotoolbox", "libx264"]
+        else:
+            candidates = ["libx264"]
+            
+    elif ext == '.webm':
+        if has_cuda:
+            # Prioritize AV1 HW -> VP9 HW -> VP9 SW
+            candidates = ["av1_nvenc", "vp9_nvenc", "libvpx-vp9"]
+        else:
+            candidates = ["libvpx-vp9"]
+            
+    elif ext == '.wmv':
+        candidates = ["wmv2"]
+    elif ext == '.avi':
+        candidates = ["mpeg4"]
+        
+    # Probe candidates
+    for codec in candidates:
+        if codec.startswith("lib") or codec in ["wmv2", "mpeg4"]:
+            return codec # Assume SW codecs always available
+            
+        if _check_ffmpeg_encoder(codec):
+            return codec
+            
+    return "libx264" # Fallback
+
+
 def get_video_encoding_params(output_path):
     """Get FFmpeg encoding parameters based on output file extension.
     
@@ -22,19 +57,8 @@ def get_video_encoding_params(output_path):
     has_cuda = torch.cuda.is_available()
     has_mps = torch.backends.mps.is_available()
     
-    # 1. Video Codec Selection (Default to H.264 for widest compatibility)
-    vcodec = "libx264"
-    if ext in ['.mp4', '.m4v', '.mkv', '.mov']:
-        if has_cuda:
-            vcodec = "h264_nvenc"
-        elif has_mps:
-            vcodec = "h264_videotoolbox"
-    elif ext == '.webm':
-        vcodec = "libvpx-vp9"
-    elif ext == '.wmv':
-        vcodec = "wmv2"
-    elif ext == '.avi':
-        vcodec = "mpeg4"
+    # 1. Video Codec Selection (Dynamic Probing)
+    vcodec = get_optimal_video_codec(ext, has_cuda, has_mps)
         
     # 2. Audio Codec Selection
     acodec = "aac"
@@ -48,8 +72,8 @@ def get_video_encoding_params(output_path):
     # 3. Parameters
     params = ["-c:v", vcodec, "-pix_fmt", "yuv420p", "-c:a", acodec]
     
-    # Add bitrate for less efficient formats
-    if ext in ['.webm', '.wmv', '.avi']:
+    # Add bitrate for less efficient formats or SW encoding
+    if ext in ['.webm', '.wmv', '.avi'] or "libvpx" in vcodec:
         params.extend(["-b:v", "2M"])
         
     return params

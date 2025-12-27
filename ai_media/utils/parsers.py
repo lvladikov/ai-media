@@ -12,17 +12,17 @@ def parse_size(value):
     """
     Parse size string or object into (width, height).
     Accepts:
-      - "480p", "720p", "1080p", "1440p"
-      - "1k", "2k", "3k", "4k", "5k", ... "10k"
-      - "1280x720"
-      - "w: 1280, h: 720" (Braces {} are optional)
+      - Presets: "480p", "720p", "1080p", "1440p", "2k", "3k", "4k", "5k", ..., "10k"
+      - WxH format: "1280x720"
+      - Single number (square): "1536" → (1536, 1536)
+      - Object format: "w: 1280, h: 720" (Braces {} are optional)
     """
     if not value:
         return RESOLUTIONS[DEFAULT_IMAGE_SIZE]
         
     normalized = value.strip().lower()
     
-    # Check presets
+    # Check presets first
     if normalized in RESOLUTIONS:
         return RESOLUTIONS[normalized]
         
@@ -33,6 +33,11 @@ def parse_size(value):
             return (w, h)
         except ValueError:
             pass
+    
+    # Check single number format (square image)
+    if normalized.isdigit():
+        size = int(normalized)
+        return (size, size)
             
     # Check Object/JSON-like format
     if '{' in normalized and '}' in normalized:

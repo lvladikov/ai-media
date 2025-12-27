@@ -2381,7 +2381,7 @@ class TestGlobPatternFiltering(unittest.TestCase):
         
     def test_wildcard_star_prefix(self):
         """Test wildcard * at start matches suffix."""
-        result = self.matches_filter("Image - SDXL (Default)", ["*Default*"])
+        result = self.matches_filter("Image - Default (SD 3.5 Turbo)", ["*Default*"])
         self.assertTrue(result)
         
     def test_wildcard_star_middle(self):
