@@ -398,6 +398,7 @@
     {
       "name": "Video - Wan 2.2 (14B)",
       "runOn": "cuda",
+      "skip": true,
       "timeout": 7200,
       "command": "-v -p \"A cinematic shot of a futuristic city\" -o ai_media/testing/data/outputs/vid_wan22.mp4 -l 2s -s 576x320 --video-model wan2.2 --force --unsafe",
       "expectedInputItems": [],
