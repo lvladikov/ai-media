@@ -74,8 +74,8 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 print(f"   ℹ️  Switching to qwen-image-edit (using optimized CUDA variant)")
                 model_id = EDIT_MODELS["qwen-image-edit"]
             
-            # CUDA: bfloat16, MPS: float32
-            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+            # CUDA: bfloat16, MPS: try float16 to save RAM
+            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
             
             print(f"   ℹ️  Loading Qwen-Image-Edit Pipeline...")
             pipe = DiffusionPipeline.from_pretrained(
@@ -83,8 +83,8 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 torch_dtype=qwen_dtype
             )
             
-            # Enable CPU offload on CUDA
-            if device.type == "cuda":
+            # Enable CPU offload on CUDA/MPS
+            if device.type == "cuda" or device.type == "mps":
                 pipe.enable_model_cpu_offload()
             else:
                 pipe = pipe.to(device)

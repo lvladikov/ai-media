@@ -782,7 +782,9 @@ Supported Models (Code : Download Size | Description):
         # Resolve Model ID
         model_id = get_model_id(args.image_model, IMAGE_MODELS)
             
-        pkg_generate_image(args.prompt, outfile, w, h, model_id, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
+        success = pkg_generate_image(args.prompt, outfile, w, h, model_id, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
+        if not success:
+            sys.exit(1)
         
         if args.upscale or args.simple_upscale:
             base, ext = os.path.splitext(outfile)
@@ -822,10 +824,14 @@ Supported Models (Code : Download Size | Description):
                  full_prompt = f"{args.prompt}. {caption}"
              
              print(f"   🎶 Generating audio for: '{full_prompt}'")
-             pkg_generate_audio(full_prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             success = pkg_generate_audio(full_prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             if not success:
+                 sys.exit(1)
              
         else:
-             pkg_generate_audio(args.prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             success = pkg_generate_audio(args.prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             if not success:
+                 sys.exit(1)
 
     elif args.generate_video:
         w, h = pkg_parsers.parse_size(args.size)
@@ -844,7 +850,7 @@ Supported Models (Code : Download Size | Description):
         if not pkg_system.check_resources_and_warn(VIDEO_MODELS[args.video_model], w, h, dur, args.force, MODEL_REQUIREMENTS):
            sys.exit(0)
 
-        pkg_generate_video(
+        success = pkg_generate_video(
             prompt=args.prompt, 
             output_path=outfile, 
             duration=dur,
@@ -854,6 +860,8 @@ Supported Models (Code : Download Size | Description):
             audio_prompt=args.audio_prompt,
             image_input=args.input_image
         )
+        if not success:
+            sys.exit(1)
 
         if args.upscale or args.simple_upscale:
             base, ext = os.path.splitext(outfile)
@@ -931,11 +939,13 @@ Supported Models (Code : Download Size | Description):
         if args.remove_background:
              pkg_remove_background(args.transform_image, output_file, silhouette=args.silhouette)
         else:
-             pkg_generate_edit(args.transform_image, args.prompt if args.prompt else args.transform_prompt, output_file, 
+             success = pkg_generate_edit(args.transform_image, args.prompt if args.prompt else args.transform_prompt, output_file, 
                            model_name=args.edit_model,
                            guidance_scale=args.image_guidance if args.image_guidance else 7.5,
                            image_guidance_scale=args.image_guidance if args.image_guidance else 1.5,
                            unsafe=args.unsafe)
+             if not success:
+                 sys.exit(1)
 
     elif args.convert_image:
         pkg_convert_image(args.convert_image, args.convert_image_to)

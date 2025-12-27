@@ -135,8 +135,8 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 torch_dtype=sd35_dtype
             )
             
-            # Enable CPU offload on CUDA to fit on 24GB cards
-            if device.type == "cuda":
+            # Enable CPU offload to fit on limited RAM (consumer GPUs/Macs)
+            if device.type == "cuda" or device.type == "mps":
                 use_offload = True
             
             # Turbo uses only 4 steps with zero guidance, Medium/Large use 40 steps with guidance
@@ -161,8 +161,8 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 model_id = IMAGE_MODELS["qwen-image"]
                 model_name = "qwen-image"
             
-            # CUDA: bfloat16, MPS: float32
-            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+            # CUDA: bfloat16, MPS: try float16 to save RAM (Qwen is huge)
+            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
             
             print(f"   ℹ️  Loading Qwen-Image Pipeline...")
             pipe = DiffusionPipeline.from_pretrained(
@@ -170,8 +170,8 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 torch_dtype=qwen_dtype
             )
             
-            # Enable CPU offload on CUDA for memory efficiency
-            if device.type == "cuda":
+            # Enable CPU offload on CUDA/MPS for memory efficiency
+            if device.type == "cuda" or device.type == "mps":
                 use_offload = True
             
             # Qwen-Image parameters: Distill uses 15 steps, 4-bit uses ~8 steps
