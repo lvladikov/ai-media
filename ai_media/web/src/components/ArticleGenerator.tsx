@@ -12,6 +12,7 @@ interface ModelInfo {
 
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
+import { formatDuration } from '../utils/formatTime';
 
 // Display names matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
@@ -43,6 +44,8 @@ export function ArticleGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [reasoning, setReasoning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -62,6 +65,8 @@ export function ArticleGenerator() {
     if (!topic.trim()) return;
     setIsLoading(true);
     setResult(null);
+    setDuration(null);
+    setReasoning(null);
     setError(null);
 
     try {
@@ -105,10 +110,29 @@ export function ArticleGenerator() {
         if (job) {
             if (job.status === 'complete') {
                 setResult(job.result_path);
+                
+                // Calculate duration
+                if (job.generation_started_at && job.updated_at) {
+                    const start = new Date(job.generation_started_at).getTime();
+                    const end = new Date(job.updated_at).getTime();
+                    const seconds = Math.round((end - start) / 1000);
+                    setDuration(seconds > 0 ? seconds : 1);
+                } else if (job.created_at && job.updated_at) {
+                    // Fallback
+                    const start = new Date(job.created_at).getTime();
+                    const end = new Date(job.updated_at).getTime();
+                    setDuration(Math.round((end - start) / 1000));
+                }
+                
+                setReasoning(job.reasoning || null);
                 setIsLoading(false);
-            } else if (job.status === 'failed') {
+            } else if (job.status === 'failed' || job.status === 'cancelled') {
                 setIsLoading(false);
             }
+        } else {
+            // Job not found in store (removed on cancellation)
+            setIsLoading(false);
+            setCurrentJobId(null);
         }
     });
 
@@ -116,7 +140,8 @@ export function ArticleGenerator() {
   }, [currentJobId]);
 
   const handleCloseModal = () => {
-      setCurrentJobId(null);
+    setCurrentJobId(null);
+    setIsLoading(false);
   };
 
   // Sort models
@@ -125,11 +150,13 @@ export function ArticleGenerator() {
   );
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <FileText className="text-primary-400" />
-        Article Generator
-      </h1>
+    <div className="w-full max-w-none px-4 mx-auto">
+      <div className="card p-6 mb-8">
+        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <FileText className="text-primary-400" />
+          Article Generation
+        </h1>
+      </div>
 
       <div className="card space-y-4">
         <div>
@@ -141,7 +168,7 @@ export function ArticleGenerator() {
              <RandomPrompt type="article" onPromptSelect={setTopic} />
           </div>
           <textarea
-            className="input min-h-[100px] resize-y"
+            className="input min-h-[150px] resize-y"
             placeholder="The future of renewable energy technologies..."
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
@@ -237,7 +264,10 @@ export function ArticleGenerator() {
 
       {result && (
         <div className="mt-6 card">
-          <h2 className="text-lg font-semibold mb-4 text-primary">Result</h2>
+          <div className="flex items-end justify-between mb-4">
+             <h2 className="text-lg font-semibold text-primary">Result</h2>
+             {duration && <span className="text-xs text-secondary mb-1">Generated in {formatDuration(duration * 1000)}</span>}
+          </div>
           <div className="p-4 bg-tertiary rounded-lg flex items-center justify-between border border-border">
              <span className="truncate text-primary">{result.split('/').pop()}</span>
              <div className="flex gap-2">
@@ -247,9 +277,21 @@ export function ArticleGenerator() {
                 >
                   Preview
                 </button>
-                <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+                 <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
              </div>
           </div>
+          
+          {/* Reasoning / Thinking Block */}
+          {reasoning && (
+             <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
+               <div className="flex items-center gap-2 mb-2 text-primary-400">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Reasoning Process</span>
+               </div>
+               <div className="text-xs text-secondary font-mono whitespace-pre-wrap max-h-48 overflow-y-auto italic">
+                  {reasoning}
+               </div>
+             </div>
+          )}
         </div>
       )}
       {currentJobId && (

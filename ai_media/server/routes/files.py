@@ -1,19 +1,57 @@
 """File upload and download routes."""
 
+import io
 import os
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import FileResponse, StreamingResponse
 
 from ..config import CONFIG
 
 router = APIRouter(tags=["Files"])
 
 
+@router.get("/api/files/zip")
+async def zip_folder(path: str = Query(..., description="Path to folder to zip")):
+    """Create a zip archive from a folder and return as download."""
+    # Handle both absolute and relative paths
+    if path.startswith("/"):
+        full_path = path
+    else:
+        full_path = os.path.join(CONFIG["paths"]["media_output"], path)
+    
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="Path not found")
+    
+    if not os.path.isdir(full_path):
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+    
+    # Create zip in memory
+    zip_buffer = io.BytesIO()
+    folder_name = os.path.basename(full_path.rstrip("/"))
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(full_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # Use relative path within zip
+                arcname = os.path.relpath(file_path, full_path)
+                zf.write(file_path, arcname)
+    
+    zip_buffer.seek(0)
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={folder_name}.zip"}
+    )
+
+
 @router.get("/api/files/{file_path:path}")
-async def get_file(file_path: str):
+async def get_file(file_path: str, download: bool = Query(False, description="Force download instead of inline preview")):
     """Serve generated files for preview/download."""
     # Handle both absolute and relative paths
     if file_path.startswith("/"):
@@ -23,6 +61,14 @@ async def get_file(file_path: str):
     
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="File not found")
+    
+    filename = os.path.basename(full_path)
+    
+    if download:
+        return FileResponse(
+            full_path,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
     
     return FileResponse(full_path)
 

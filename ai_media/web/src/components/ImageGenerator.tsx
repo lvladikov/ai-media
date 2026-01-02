@@ -158,10 +158,14 @@ export function ImageGenerator() {
                 setResult(updatedJob.result_path);
                 setIsLoading(false);
                 // Modal stays open to show success until closed manually
-            } else if (updatedJob.status === 'failed') {
+            } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
                 setIsLoading(false);
                 // Modal stays open to show error
             }
+        } else {
+            // Job not found in store (removed on cancellation)
+            setIsLoading(false);
+            setCurrentJobId(null);
         }
     });
 
@@ -174,15 +178,18 @@ export function ImageGenerator() {
   );
   
   const handleCloseModal = () => {
-      setCurrentJobId(null);
+    setCurrentJobId(null);
+    setIsLoading(false);
   };
 
   return (
-    <div className="max-w-4xl relative">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Sparkles className="text-primary-400" />
-        Image Generation
-      </h1>
+    <div className="w-full max-w-none px-4 mx-auto relative">
+      <div className="card p-6 mb-8">
+        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <Sparkles className="text-primary-400" />
+          Image Generation
+        </h1>
+      </div>
 
       <div className="card space-y-4">
         {/* Prompt */}
@@ -192,7 +199,7 @@ export function ImageGenerator() {
              <RandomPrompt type="image" onPromptSelect={setPrompt} />
           </div>
           <textarea
-            className="input min-h-[100px] resize-y"
+            className="input min-h-[150px] resize-y"
             placeholder="A majestic mountain landscape at sunset with dramatic clouds..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}

@@ -43,6 +43,13 @@ class ModelCache:
         with self._lock:
             self._cache[category] = {"model_name": model_name, "instance": instance}
     
+    def is_loaded(self, category: str) -> bool:
+        """
+        Check if a model category is currently loaded in cache.
+        """
+        with self._lock:
+            return category in self._cache
+    
     def unload(self, category: str):
         """
         Unload a specific model category from cache.
@@ -53,6 +60,18 @@ class ModelCache:
     def _unload_internal(self, category: str):
         """Internal unload without lock for call-within-lock usage."""
         if category in self._cache:
+            try:
+                instance = self._cache[category].get("instance")
+                # Ensure we stop any running generation
+                if instance and hasattr(instance, "stop"):
+                    print(f"🧹 Stopping {category} generator before unload...")
+                    instance.stop()
+                elif instance and hasattr(instance, "is_cancelled"):
+                     # Fallback for simple flag setting
+                     instance.is_cancelled = True
+            except Exception as e:
+                print(f"⚠️ Error stopping {category}: {e}")
+                
             del self._cache[category]
             self._clear_memory()
     

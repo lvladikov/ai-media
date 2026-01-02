@@ -65,6 +65,15 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
+      keyframes: {
+        'progress-bounce': {
+          '0%': { left: '-35%', right: '100%' },
+          '100%': { left: '100%', right: '-35%' },
+        },
+      },
+      animation: {
+        'progress-bounce': 'progress-bounce 1.5s linear infinite',
+      },
     },
   },
   plugins: [

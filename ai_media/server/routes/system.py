@@ -192,5 +192,6 @@ async def clear_cache():
 @router.delete("/api/cache/{category}")
 async def clear_cache_category(category: str):
     """Unload a specific model category (text, image, audio, video)."""
+    print(f"🧹 Unloading {category} model via API...")
     model_cache.unload(category)
     return {"message": f"Unloaded {category} model"}

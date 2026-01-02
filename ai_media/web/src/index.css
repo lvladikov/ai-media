@@ -131,7 +131,35 @@
 }
 
 @layer utilities {
-  /* Other utilities can go here */
+  /* Themed scrollbars for dark mode */
+  .scrollbar-themed {
+    scrollbar-width: thin;
+    scrollbar-color: #475569 transparent; /* slate-600 thumb, transparent track */
+  }
+  
+  .scrollbar-themed::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-themed::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-themed::-webkit-scrollbar-thumb {
+    background-color: #475569; /* slate-600 */
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  
+  .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b; /* slate-500 */
+  }
+  
+  .scrollbar-themed::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 /* Global overrides for Prose lists - using specificity to override defaults */

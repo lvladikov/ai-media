@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Download, Loader2, Copy, Check } from 'lucide-react';
+import { X, Download, Loader2, Copy, Check, Image } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
+import domToImage from 'dom-to-image';
 
 // Load extra languages
 import 'prismjs/components/prism-python';
@@ -67,7 +68,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = fileUrl;
+    a.href = `${fileUrl}?download=true`;
     a.download = fileName;
     a.click();
   };
@@ -157,7 +158,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         </div>
 
         {/* Content */}
-        <div className="relative flex-1 min-h-0 overflow-auto">
+        <div className="relative flex-1 min-h-0 overflow-auto scrollbar-themed">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <Loader2 className="animate-spin" size={32} />
@@ -177,7 +178,9 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
 function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url: string; onLoad: () => void; onError: () => void }) {
   const [content, setContent] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedImage, setCopiedImage] = useState(false);
   const codeRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const language = getLanguage(fileName);
 
   useEffect(() => {
@@ -203,20 +206,79 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyAsImage = async () => {
+    if (!containerRef.current) return;
+    
+    try {
+      const el = containerRef.current;
+      const scale = 2;
+      
+      // Get the full scroll dimensions (not just visible area)
+      const fullWidth = el.scrollWidth;
+      const fullHeight = el.scrollHeight;
+      
+      // Temporarily adjust styles to capture full content
+      const originalOverflow = el.style.overflow;
+      const originalHeight = el.style.height;
+      const originalMaxHeight = el.style.maxHeight;
+      
+      el.style.overflow = 'visible';
+      el.style.height = 'auto';
+      el.style.maxHeight = 'none';
+      
+      const blob = await domToImage.toBlob(el, { 
+        width: fullWidth * scale,
+        height: fullHeight * scale,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          overflow: "visible",
+          height: "auto",
+          maxHeight: "none",
+        },
+      });
+      
+      // Restore original styles
+      el.style.overflow = originalOverflow;
+      el.style.height = originalHeight;
+      el.style.maxHeight = originalMaxHeight;
+      
+      if (blob) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        setCopiedImage(true);
+        setTimeout(() => setCopiedImage(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to copy as image:', err);
+    }
+  };
+
   if (!content) return null;
 
   return (
     <div className="relative group h-full flex flex-col">
-       <button 
-        onClick={handleCopy}
-        className="absolute top-2 right-2 p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        title="Copy to clipboard"
-      >
-        {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
-      </button>
+      {/* Action buttons */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button 
+          onClick={handleCopyAsImage}
+          className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200"
+          title="Copy as image"
+        >
+          {copiedImage ? <Check size={16} className="text-green-400" /> : <Image size={16} />}
+        </button>
+        <button 
+          onClick={handleCopy}
+          className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200"
+          title="Copy to clipboard"
+        >
+          {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+        </button>
+      </div>
       <div 
-        className="flex-1 rounded-lg border border-slate-700 bg-[#2d2d2d]"
-        style={{ overflow: 'scroll', overflowX: 'scroll', overflowY: 'scroll' }}
+        ref={containerRef}
+        className="flex-1 rounded-lg border border-slate-700 bg-[#2d2d2d] overflow-auto scrollbar-themed"
       >
          <pre 
            className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 !m-0 text-sm`}

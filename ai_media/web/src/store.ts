@@ -13,7 +13,10 @@ export interface Job {
   progress: number;
   phase: string;
   message: string;
+  logs?: string[];  // Accumulated log messages for display
   result_path: string | null;
+  is_multi_file?: boolean;  // True if result is a multi-file project (ZIP)
+  generated_files?: string[];  // List of files in multi-file project
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -21,6 +24,8 @@ export interface Job {
   prompt?: string;
   model?: string;
   params?: Record<string, string | number | boolean>;
+  generation_started_at?: string;
+  reasoning?: string; // Optional reasoning/thinking block from R1 models
 }
 
 
@@ -84,6 +89,7 @@ interface AppState {
   setJobs: (jobs: Job[]) => void;
   addJob: (job: Job) => void;
   updateJob: (jobId: string, updates: Partial<Job>) => void;
+  removeJob: (jobId: string) => void;
   
   // Chat
   chatMessages: ChatMessage[];
@@ -133,6 +139,9 @@ export const useAppStore = create<AppState>((set) => ({
   addJob: (job) => set((state) => ({ jobs: [job, ...state.jobs] })),
   updateJob: (jobId, updates) => set((state) => ({
     jobs: state.jobs.map((j) => j.job_id === jobId ? { ...j, ...updates } : j),
+  })),
+  removeJob: (jobId) => set((state) => ({
+    jobs: state.jobs.filter((j) => j.job_id !== jobId),
   })),
   
   // Chat

@@ -21,7 +21,7 @@ export function RandomPrompt({ type, onPromptSelect, className = "" }: RandomPro
 
   return (
     <div className={`inline-flex items-center ${className}`}>
-      <Tooltip content="Click here to use a random prompt">
+      <Tooltip content="Click here to use a random prompt" align="right">
         <button
           onClick={handleRandomClick}
           className="p-1.5 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/50"

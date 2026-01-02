@@ -247,9 +247,8 @@ export async function generateArticle(params: {
 
 export async function generateCode(params: {
   prompt: string;
-  filename: string;
+  output_name?: string;
   model?: string;
-  language?: string;
 }) {
   const response = await fetch(`${API_BASE}/api/generate/code`, {
     method: 'POST',

@@ -107,8 +107,7 @@ class CodeGenerateRequest(BaseModel):
     """Code generation request."""
     prompt: str = Field(..., description="Code generation prompt")
     model: str = Field("default", description="LLM model name")
-    filename: str = Field("generated_code.py", description="Output filename")
-    language: str = Field("python", description="Programming language")
+    output_name: str = Field("", description="Output name (optional). Empty = auto-generated. Multi-file = zip filename")
 
 
 class TransformRequest(BaseModel):

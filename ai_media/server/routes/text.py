@@ -52,14 +52,20 @@ async def generate_article(request: ArticleGenerateRequest, background_tasks: Ba
 @router.post("/api/generate/code")
 async def generate_code(request: CodeGenerateRequest, background_tasks: BackgroundTasks):
     """Start a code generation job."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Use output_name if provided, otherwise generate timestamped folder
+    output_name = request.output_name.strip() if request.output_name else f"code_{timestamp}"
+    
+    # Always use folder-based output - generate_code handles single vs multi-file
+    output_path = os.path.join(CONFIG["paths"]["media_output"], output_name)
+    
     job = create_job(
         "code",
         prompt=request.prompt,
         model=request.model,
-        params={"language": request.language, "filename": request.filename}
+        params={"output_name": output_name}
     )
-    
-    output_path = os.path.join(CONFIG["paths"]["media_output"], request.filename)
     
     background_tasks.add_task(
         text_tasks.run_code_generation,
@@ -67,7 +73,7 @@ async def generate_code(request: CodeGenerateRequest, background_tasks: Backgrou
         request.prompt,
         output_path,
         request.model,
-        request.language,
+        asyncio.get_running_loop(),
     )
     
     return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}

@@ -105,10 +105,14 @@ export function AudioGenerator() {
             if (updatedJob.status === 'complete') {
                 setResult(updatedJob.result_path);
                 setIsLoading(false);
-            } else if (updatedJob.status === 'failed') {
+            } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
                 setIsLoading(false);
                 setError(updatedJob.error || updatedJob.message || "Generation failed");
             }
+        } else {
+            // Job not found in store (removed on cancellation)
+            setIsLoading(false);
+            setCurrentJobId(null);
         }
     });
     return () => unsubscribe();
@@ -120,11 +124,13 @@ export function AudioGenerator() {
   );
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <FileAudio className="text-primary-400" />
-        Audio Generation
-      </h1>
+    <div className="w-full max-w-none px-4 mx-auto">
+      <div className="card p-6 mb-8">
+        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <FileAudio className="text-primary-400" />
+          Audio Generation
+        </h1>
+      </div>
 
       <div className="card space-y-4">
         <div>
@@ -133,7 +139,7 @@ export function AudioGenerator() {
             <RandomPrompt type="audio" onPromptSelect={setPrompt} />
           </div>
           <textarea
-            className="input min-h-[100px] resize-y"
+            className="input min-h-[150px] resize-y"
             placeholder="Upbeat electronic music with a driving beat..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -232,7 +238,10 @@ export function AudioGenerator() {
       )}
 
       {currentJobId && (
-        <JobProgressModal jobId={currentJobId} onClose={() => setCurrentJobId(null)} />
+        <JobProgressModal jobId={currentJobId} onClose={() => {
+          setCurrentJobId(null);
+          setIsLoading(false);
+        }} />
       )}
 
       {result && (

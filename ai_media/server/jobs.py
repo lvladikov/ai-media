@@ -23,6 +23,7 @@ def create_job(job_type: str, prompt: str = None, model: str = None, params: Dic
         "progress": 0,
         "phase": "queued",
         "message": "Job queued",
+        "logs": [],  # Accumulates log messages for display
         "result_path": None,
         "error": None,
         "created_at": now,
@@ -56,6 +57,23 @@ def create_job(job_type: str, prompt: str = None, model: str = None, params: Dic
 def update_job(job_id: str, event_loop: asyncio.AbstractEventLoop = None, **kwargs):
     """Update job status and broadcast via WebSocket."""
     if job_id in jobs:
+        # Prevent reviving a cancelled job unless we're explicitly setting it to cancelled/failed
+        current_status = jobs[job_id].get("status")
+        new_status = kwargs.get("status")
+        
+        if current_status == "cancelled" and new_status != "cancelled" and new_status != "failed":
+            # Ignore updates for cancelled jobs to stop background tasks from overwriting state
+            return
+
+        # Append message to logs if provided
+        if "message" in kwargs and kwargs["message"]:
+            if "logs" not in jobs[job_id]:
+                jobs[job_id]["logs"] = []
+            jobs[job_id]["logs"].append(kwargs["message"])
+            # Keep last 50 lines to avoid memory bloat
+            if len(jobs[job_id]["logs"]) > 50:
+                jobs[job_id]["logs"] = jobs[job_id]["logs"][-50:]
+        
         jobs[job_id].update(kwargs)
         jobs[job_id]["updated_at"] = datetime.now().isoformat()
         
@@ -108,8 +126,38 @@ async def cancel_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     
+    job = jobs[job_id]
+    
     # Use update_job to broadcast cancellation via WebSocket
     update_job(job_id, status="cancelled", message="Job cancelled by user")
     print(f"🛑 Job {job_id[:8]}... cancelled")
+    
+    # Force unload model to free resources immediately
+    from .cache import model_cache
+    
+    # Map job types to cache categories
+    type_map = {
+        "article": "text",
+        "code": "text",
+        "chat": "text",
+        "image": "image",
+        "audio": "audio",
+        "video": "video",
+        "transform": "transform",
+        "upscale": "upscale"
+    }
+    
+    category = type_map.get(job["type"])
+    if category:
+        # Attempt to stop the generator if it supports it
+        generator = model_cache.get(category, job.get("model"))
+        if generator and hasattr(generator, "stop"):
+            generator.stop()
+            
+        print(f"🧹 Unloading {category} model due to cancellation...")
+        model_cache.unload(category)
+    else:
+        # Default fallback: unload everything heavy
+        model_cache.unload_all()
     
     return {"message": "Job cancelled"}

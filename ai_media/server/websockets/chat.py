@@ -182,7 +182,7 @@ async def websocket_chat(websocket: WebSocket):
             del chat_sessions[session_id]
             
         # Unload model to free resources
-        if model:
+        if model and model_cache.is_loaded("text"):
            print(f"🧹 Unloading model {model} on disconnect...")
            model_cache.unload("text")
            

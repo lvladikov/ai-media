@@ -12,6 +12,7 @@ import gc
 import torch
 import threading
 from datetime import datetime
+from transformers import StoppingCriteria, StoppingCriteriaList
 
 from ..models import TEXT_MODELS, get_model_id
 from ..utils.system import get_optimal_device_and_dtype
@@ -55,6 +56,18 @@ COLOR_REFERENCE = (
 )
 
 
+
+
+class CancelStopCriteria(StoppingCriteria):
+    """Criteria to stop HuggingFace generation when is_cancelled is True."""
+    def __init__(self, generator):
+        self.generator = generator
+        
+    def __call__(self, input_ids, scores, **kwargs):
+        if self.generator.is_cancelled:
+            return True
+        return False
+
 class ArticleGenerator:
     """Text generation for articles, code, research, and chat using LLMs."""
     
@@ -91,6 +104,13 @@ class ArticleGenerator:
         self._last_location = None  # Track location for change detection
         self._first_message_sent = False  # Track if full system prompt was sent
         self._lock = threading.Lock()
+        self.last_reasoning = None  # Store reasoning from last generation
+        self.is_cancelled = False
+
+    def stop(self):
+        """Signal the generator to stop current operation."""
+        self.is_cancelled = True
+        print(f"🛑 Interruption requested for {self.model_name}")
 
         
     @staticmethod
@@ -174,6 +194,10 @@ class ArticleGenerator:
     def _load_model(self):
         """Load the LLM pipeline."""
         if self.pipeline:
+            return
+            
+        if self.is_cancelled:
+            print(f"🛑 Model loading skipped for {self.model_name} (Cancelled)")
             return
         
         from transformers import AutoTokenizer, pipeline
@@ -489,6 +513,10 @@ class ArticleGenerator:
         )
         
         with console.status("[bold green]Thinking... (Writing Article)[/bold green]", spinner="dots"):
+            # Prepare stopping criteria
+            stop_criteria = StoppingCriteriaList([CancelStopCriteria(self)])
+            self.is_cancelled = False # Reset before generation
+            
             with self._lock:  # Ensure thread-safe model access
                 outputs = self.pipeline(
                     full_prompt, 
@@ -496,12 +524,18 @@ class ArticleGenerator:
                     do_sample=True, 
                     temperature=0.7,
                     return_full_text=False,
+                    stopping_criteria=stop_criteria
                 )
         
-        final_md = outputs[0]['generated_text'].strip()
+        raw_text = outputs[0]['generated_text'].strip()
         
-        # Extract and save <think> blocks separately
-        think_matches = re.findall(r'<think>(.*?)</think>', final_md, re.DOTALL)
+        # Extract reasoning
+        extracted = self.extract_reasoning(raw_text)
+        self.last_reasoning = extracted["reasoning"]
+        final_md = extracted["content"]
+        
+        # Extract and save <think> blocks separately (Legacy/Additional safeguard)
+        think_matches = re.findall(r'<think>(.*?)</think>', raw_text, re.DOTALL)
         if think_matches:
             final_md = re.sub(r'<think>.*?</think>\s*', '', final_md, flags=re.DOTALL).strip()
             base, ext = os.path.splitext(output_file)
@@ -556,6 +590,9 @@ class ArticleGenerator:
         console = Console()
         console.print(f"💻 Generating Code for: '{prompt}'...")
         
+        if self.progress_callback:
+            self.progress_callback("generating", 10, "Preparing prompt...")
+
         system_prompt = (
             "You are an expert coding assistant. Write clean, efficient, and well-commented code "
             "based on the user's request. Return ONLY the code blocks. "
@@ -577,8 +614,15 @@ class ArticleGenerator:
             messages, tokenize=False, add_generation_prompt=True
         )
         
+        if self.progress_callback:
+            self.progress_callback("generating", 20, "Generating code... (this may take a while)")
+
         console.print()
         with console.status("[yellow] Thinking...[/yellow]", spinner="dots"):
+            # Prepare stopping criteria
+            stop_criteria = StoppingCriteriaList([CancelStopCriteria(self)])
+            self.is_cancelled = False # Reset before generation
+            
             with self._lock:  # Ensure thread-safe model access
                 outputs = self.pipeline(
                     full_prompt, 
@@ -587,13 +631,29 @@ class ArticleGenerator:
                     temperature=0.2,
                     top_p=0.9,
                     return_full_text=False,
+                    stopping_criteria=stop_criteria
                 )
         
-        response = outputs[0]['generated_text'].strip()
+        response_raw = outputs[0]['generated_text'].strip()
         
-        # Remove markdown code fences if present
-        response = re.sub(r"```\w*\n?", "", response)
+        # Extract reasoning if present
+        extracted = self.extract_reasoning(response_raw)
+        self.last_reasoning = extracted["reasoning"]
+        response = extracted["content"]
         
+        # Try to detect language from markdown fence before stripping
+        detected_lang = None
+        match = re.search(r"```(\w+)\s*\n", response)
+        if match:
+            detected_lang = match.group(1).lower()
+            
+        # Remove markdown code fences if present (strip ONLY the fences, keep content)
+        response = re.sub(r"```\w*\n?", "", response)  # This removes opening fence '```python'
+        response = response.replace("```", "")         # This removes closing fence '```'
+        
+        if self.progress_callback:
+            self.progress_callback("generating", 80, "Parsing output...")
+
         # Parse multiple files from response
         file_pattern = re.compile(
             r"^(?:#|//)\s*(?:filename:\s*)?([^\s]+\.(?:py|js|ts|jsx|tsx|html|css|java|cpp|c|h|go|rs|rb|php|sh|sql|json|yaml|yml|md|txt))\s*$",
@@ -616,12 +676,15 @@ class ArticleGenerator:
                 if "." in os.path.basename(output_file):
                     files_to_write.append((output_file, content))
                 else:
-                    ext = self._infer_extension(content)
+                    ext = self._infer_extension(content, prompt=prompt, language=detected_lang)
                     files_to_write.append((f"{output_file}{ext}", content))
             else:
-                ext = self._infer_extension(content)
+                ext = self._infer_extension(content, prompt=prompt, language=detected_lang)
                 files_to_write.append((f"generated_code_{int(time.time())}{ext}", content))
         
+        if self.progress_callback:
+            self.progress_callback("generating", 90, f"Saving {len(files_to_write)} file(s)...")
+
         # Write all files
         output_is_dir = output_file and os.path.isdir(output_file)
         always_overwrite = self.args.force if self.args and hasattr(self.args, 'force') else False
@@ -658,22 +721,69 @@ class ArticleGenerator:
             except Exception as e:
                 print(f"❌ Error saving {filepath}: {e}")
                 
-    def _infer_extension(self, code_content):
-        """Infer file extension from code content."""
-        if "import " in code_content or "def " in code_content or "print(" in code_content:
-            return ".py"
-        elif "function " in code_content or "const " in code_content or "console.log" in code_content:
-            return ".js"
-        elif "#include" in code_content:
-            return ".cpp"
-        elif "public class" in code_content:
-            return ".java"
-        elif "<html" in code_content:
-            return ".html"
-        elif "package main" in code_content:
+    def _infer_extension(self, code_content, prompt=None, language=None):
+        """Infer file extension from code content, detected language, and optional prompt."""
+        # Language tag from markdown fence is strongest signal
+        if language:
+            lang = language.lower()
+            if lang in ['python', 'py']: return '.py'
+            if lang in ['javascript', 'js', 'node']: return '.js'
+            if lang in ['typescript', 'ts']: return '.ts'
+            if lang in ['go', 'golang']: return '.go'
+            if lang in ['rust', 'rs']: return '.rs'
+            if lang in ['cpp', 'c++']: return '.cpp'
+            if lang in ['java']: return '.java'
+            if lang in ['html']: return '.html'
+            if lang in ['css']: return '.css'
+            if lang in ['sql']: return '.sql'
+            if lang in ['bash', 'sh', 'shell']: return '.sh'
+            if lang in ['json']: return '.json'
+            if lang in ['xml']: return '.xml'
+            if lang in ['yaml', 'yml']: return '.yaml'
+        
+        # Check for shebangs first
+        if code_content.startswith("#!"):
+            if "python" in code_content.split("\n", 1)[0]:
+                return ".py"
+            if "bash" in code_content.split("\n", 1)[0] or "sh" in code_content.split("\n", 1)[0]:
+                return ".sh"
+            if "node" in code_content.split("\n", 1)[0]:
+                return ".js"
+
+        # Content based checks
+        if "package main" in code_content or ("func main()" in code_content and "{" in code_content):
             return ".go"
         elif "fn main" in code_content or "use std::" in code_content:
             return ".rs"
+        elif "#include" in code_content:
+            if "<iostream>" in code_content or "std::" in code_content:
+                return ".cpp"
+            return ".c"
+        elif "public class" in code_content or "System.out.println" in code_content:
+            return ".java"
+        elif "<html" in code_content or "<!DOCTYPE html" in code_content:
+            return ".html"
+        elif "import " in code_content or "def " in code_content or "print(" in code_content:
+            # Python is common, so check it after specific compiled languages but before generic JS
+            return ".py"
+        elif "function " in code_content or "const " in code_content or "console.log" in code_content:
+            return ".js"
+        # Prompt-based fallback
+        if prompt:
+            prompt_lower = prompt.lower()
+            if "python" in prompt_lower: return ".py"
+            if "javascript" in prompt_lower or "node" in prompt_lower or " js " in prompt_lower: return ".js"
+            if "typescript" in prompt_lower or " ts " in prompt_lower: return ".ts"
+            if "golang" in prompt_lower or " go " in prompt_lower: return ".go"
+            if "rust" in prompt_lower: return ".rs"
+            if "cpp" in prompt_lower or "c++" in prompt_lower: return ".cpp"
+            if "java" in prompt_lower: return ".java"
+            if "html" in prompt_lower: return ".html"
+            if "css" in prompt_lower: return ".css"
+            if "sql" in prompt_lower: return ".sql"
+            if "bash" in prompt_lower or "shell" in prompt_lower: return ".sh"
+            if "json" in prompt_lower: return ".json"
+
         return ".txt"
 
     def _save_formatted(self, markdown_text, filename, fmt, online=False):

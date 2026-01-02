@@ -669,7 +669,11 @@ Supported Models (Code : Download Size | Description):
                 procs.append(start_client("npm run electron", "Electron", env=env))
             
             from ai_media.server import main as server_main
-            server_main(host=host, port=server_port, reload=reload_enabled)
+            
+            # Restrict watcher to source code only to avoid loops with generated content in media-output/
+            reload_dirs = ["ai_media", "ai-media.py"] if reload_enabled else None
+            
+            server_main(host=host, port=server_port, reload=reload_enabled, reload_dirs=reload_dirs)
         finally:
             # Cleanup background processes
             for p in procs:

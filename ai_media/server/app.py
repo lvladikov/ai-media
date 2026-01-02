@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
     
     # Register routes
     from .routes import system, files, generate, text, transform, convert, upscale
-    from .websockets import jobs as jobs_ws, chat as chat_ws
+    from .websockets import jobs as jobs_ws, chat as chat_ws, code as code_ws
     from . import sse
     from . import jobs as jobs_api
     
@@ -79,11 +79,12 @@ def create_app() -> FastAPI:
     app.include_router(jobs_api.router)
     app.include_router(jobs_ws.router)
     app.include_router(chat_ws.router)
+    app.include_router(code_ws.router)
     
     return app
 
 
-def main(host: str = None, port: int = None, reload: bool = None):
+def main(host: str = None, port: int = None, reload: bool = None, reload_excludes: list = None, reload_dirs: list = None):
     """Run the server."""
     import uvicorn
     import sys
@@ -113,16 +114,61 @@ def main(host: str = None, port: int = None, reload: bool = None):
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
     
+    # Configure reload parameters
+    reload_kwargs = {}
+    if reload:
+        reload_kwargs["reload"] = True
+        if reload_excludes:
+            reload_kwargs["reload_excludes"] = reload_excludes
+            print(f"🔍 Server reload exclusions active: {len(reload_excludes)} patterns configured")
+            if len(reload_excludes) > 0:
+                # Show first 3 patterns as confirmation
+                print(f"   (Excludes sample: {', '.join(reload_excludes[:3])}...)")
+        if reload_dirs:
+            reload_kwargs["reload_dirs"] = reload_dirs
+            print(f"📂 Reload directories: {', '.join(reload_dirs)}")
+    
     print(f"🌐 Starting AI-Media Server on http://{host}:{port}")
     print(f"📚 API docs: http://{host}:{port}/docs")
+    sys.stdout.flush()
     
+    # Create custom log config to suppress health checks
+    log_config = uvicorn.config.LOGGING_CONFIG.copy()
+    log_config["loggers"]["uvicorn.access"] = {
+        "handlers": ["access"],
+        "level": "INFO",
+        "propagate": False
+    }
+    
+    # Define a custom filter class inline to be used by the config
+    # Since we can't easily inject a class into the dict config that uvicorn parses,
+    # we'll use the easier approach: set access_log=False for noisy paths? 
+    # Or just set log_level="warning" for access logs generally if user wants quiet?
+    # The user asked "can we suppress *those*", referring to the GET logs.
+    # The simplest way is to disable access logs entirely or filter them.
+    # Let's filter them by modifying the log level for uvicorn.access to WARNING.
+    # This will hide all 200 OK logs but keep errors.
+    
+    # Actually, let's keep it simple and just bump the level for uvicorn.access to WARNING.
+    # This suppresses the standard "INFO: ... GET /... 200 OK" messages.
+    # Errors and startup info will still be shown.
+    
+    # Set all uvicorn status/access logs to WARNING to keep the console clean
+    # This suppresses "GET /... 200 OK", "WebSocket ... [accepted]", "connection open/closed"
+    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi"]:
+        if logger_name in log_config["loggers"]:
+            log_config["loggers"][logger_name]["level"] = "WARNING"
+        else:
+            # Create if missing (e.g. uvicorn root might not be in default config sometimes)
+            log_config["loggers"][logger_name] = {"level": "WARNING"}
+
     uvicorn.run(
         "ai_media.server.app:create_app",
         host=host,
         port=port,
-        reload=reload,
-        log_level="warning",
         factory=True,
+        log_config=log_config,
+        **reload_kwargs
     )
 
 
