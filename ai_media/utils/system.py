@@ -346,6 +346,14 @@ def signal_handler(sig, frame):
         
         # Immediately exit - GPU/multiprocessing cleanup causes hangs
         print("\n\n⚠️  Interrupted!")
+        
+        # Restore terminal state if possible before brutal exit
+        if sys.stdout.isatty():
+            # ANSI: Disable Mouse Reporting (SGR + Basic), Reset Color, Show Cursor
+            print("\033[?1000l\033[?1006l\033[0m\033[?25h", end="", flush=True)
+            if os.name != 'nt':
+                os.system('stty sane')
+                
         os._exit(0)  # Immediate exit, no cleanup (cleanup hangs with model_cpu_offload)
 
 

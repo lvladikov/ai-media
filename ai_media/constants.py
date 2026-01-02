@@ -35,3 +35,7 @@ RESOLUTIONS = {
     "sd": (640, 480),
     "vga": (640, 480)
 }
+
+def get_resolutions():
+    """Get all resolution presets."""
+    return RESOLUTIONS

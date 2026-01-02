@@ -83,6 +83,7 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `11/2` | | `test/integration` | Integration Tests |
 | `11/3` | | `test/codec` | Codec Limits Test |
 | `12` | **Sysinfo** | `sysinfo` | System Information |
+| `13` | **Web Server** | `web` | Web Server Mode Menu |
 
 ```bash
 python ai-media.py --interactive "image/sdxl"
@@ -91,6 +92,7 @@ python ai-media.py --interactive code
 python ai-media.py --interactive chat
 python ai-media.py --interactive "5/2"
 python ai-media.py --interactive 12
+python ai-media.py --interactive 13
 ```
 
 ← [Back to Main README](../README.md)

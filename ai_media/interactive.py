@@ -42,11 +42,12 @@ JUMP_POINTS = {
     'upscale': ('upscale', None),
     'convert': ('convert', None),
     'test': ('test', None),
+    'web': ('web', None),
 }
 
 
 def run_self_command(cmd_string):
-    """Run ai-media.py with the given command arguments."""
+    """Run ai-media.py with the given command arguments. Returns exit code."""
     import subprocess
     import shlex
     
@@ -64,7 +65,47 @@ def run_self_command(cmd_string):
     else:
         args = shlex.split(cmd_string)
     
-    subprocess.run([sys.executable, script_path] + args)
+    p = subprocess.Popen([sys.executable, script_path] + args)
+    
+    try:
+        return p.wait()
+    except KeyboardInterrupt:
+        # On Ctrl+C, the child also receives the signal.
+        # Wait for it to shutdown gracefully.
+        try:
+            return p.wait()
+        except KeyboardInterrupt:
+            # Force kill if mashed
+            p.kill()
+            return -999
+
+def run_shell_command(cmd_string, cwd=None):
+    """Run a generic shell command. Returns exit code."""
+    import subprocess
+    import shlex
+    
+    print(f"\n🚀 Running: {cmd_string}\n")
+    
+    try:
+        if os.name == 'nt':
+            p = subprocess.Popen(cmd_string, shell=True, cwd=cwd)
+        else:
+            args = shlex.split(cmd_string)
+            p = subprocess.Popen(args, cwd=cwd)
+            
+        try:
+            return p.wait()
+        except KeyboardInterrupt:
+            # Wait for child to shutdown gracefully
+            try:
+                return p.wait()
+            except KeyboardInterrupt:
+                p.kill()
+                return -999
+                
+    except Exception as e:
+        print(f"❌ Error running command: {e}")
+        return 1
 def run_interactive(jump_point=None):
     """Run interactive mode.
     
@@ -109,6 +150,7 @@ def run_interactive(jump_point=None):
         'test/integration': ('test', 'integration'),
         'test/codec': ('test', 'codec'),
         'sysinfo': ('sysinfo', None),
+        'web': ('web', None),
         # By number (matching menu order)
         '1': ('image', None),
         '1/1': ('image', 'sdxl'),
@@ -143,6 +185,7 @@ def run_interactive(jump_point=None):
         '11/2': ('test', 'integration'),
         '11/3': ('test', 'codec'),
         '12': ('sysinfo', None),
+        '13': ('web', None),
     }
     
     # Parse jump point
@@ -328,6 +371,7 @@ def run_interactive(jump_point=None):
             ("📈  Upscale Media", "upscale"),
             ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
+            ("🌐  Web Server Mode", "web"),
             ("❌  Exit", None)
         ]
         
@@ -1384,6 +1428,75 @@ def run_interactive(jump_point=None):
             wait_for_back()
 
 
+    def web_server_menu():
+        """Web Server Mode submenu."""
+        while True:
+            clear_screen()
+            show_header("Web Server Mode")
+            
+            options = [
+                ("🚀  Start Server (No Client)", "SERVER_ONLY"),
+                ("🌐  Start Client (Web)", "WEB_CLIENT"),
+                ("💻  Start Client (Electron Dev)", "ELECTRON_DEV"),
+                ("🔥  Start Both Server and Web Client", "BOTH_WEB"),
+                ("⚡  Start Both Server and Web + Electron Dev Client", "BOTH_FULL"),
+                ("🛠️   Electron Build Options", "BUILD_OPTS"),
+            ]
+            
+            choice = prompt_choice("Select an option:", options, allow_back=True, default_index=3)
+            
+            if choice is None: return
+            
+            web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+            
+            code = 0
+            if choice == "SERVER_ONLY":
+                code = run_self_command("--serve-no-client")
+            elif choice == "WEB_CLIENT":
+                code = run_shell_command("npm run dev:client", cwd=web_dir)
+            elif choice == "ELECTRON_DEV":
+                code = run_shell_command("npm run electron", cwd=web_dir)
+            elif choice == "BOTH_WEB":
+                code = run_self_command("--serve-web-only-client")
+            elif choice == "BOTH_FULL":
+                code = run_self_command("--serve")
+            elif choice == "BUILD_OPTS":
+                electron_build_menu()
+                
+            if choice != "BUILD_OPTS":
+                # If code is non-zero (likely interrupted by Ctrl+C or error), 
+                # return to menu immediately instead of waiting
+                if code is not None and code != 0:
+                    continue
+                wait_for_back()
+
+    def electron_build_menu():
+        """Electron build options submenu."""
+        clear_screen()
+        show_header("Electron Build Options")
+        
+        options = [
+            ("🍎  Mac: ARM64 (Apple Silicon)", "electron:build:mac:arm64"),
+            ("🍎  Mac: x64 (Intel)", "electron:build:mac:x64"),
+            ("🍎  Mac: Universal", "electron:build:mac:universal"),
+            ("🍎  Mac: All", "electron:build:mac:all"),
+            ("🪟  Windows: x64", "electron:build:win:x64"),
+            ("🪟  Windows: ARM64", "electron:build:win:arm64"),
+            ("🪟  Windows: All", "electron:build:win:all"),
+            ("🐧  Linux: x64", "electron:build:linux:x64"),
+            ("🐧  Linux: ARM64", "electron:build:linux:arm64"),
+            ("🐧  Linux: All", "electron:build:linux:all"),
+            ("🌎  Build All Platforms", "electron:build:all"),
+        ]
+        
+        choice = prompt_choice("Select build target:", options, allow_back=True)
+        if choice is None: return
+        
+        web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+        run_shell_command(f"npm run {choice}", cwd=web_dir)
+        wait_for_back()
+
+
     
     # Main loop
     first_run = True
@@ -1433,6 +1546,8 @@ def run_interactive(jump_point=None):
             initial_model = None
         elif action == "sysinfo":
             system_info_menu()
+        elif action == "web":
+            web_server_menu()
 
 # --- Test Runner ---
 

@@ -64,7 +64,9 @@ try:
     from ai_media.models import *
     
     # Install signal handlers early for clean CTRL+C behavior
-    setup_signal_handlers()
+    # BUT skip if in interactive mode (parent process), let interactive module handle signals
+    if not (len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ('--interactive', '-I'))):
+        setup_signal_handlers()
     
     HAS_AI_MEDIA_PKG = True
 except ImportError:
@@ -419,6 +421,13 @@ Examples:
   python ai-media.py -uv input.mp4 -vu realesrgan (Fast AI - Recommended)
   python ai-media.py -uv input.mp4 -uf 2x -vu sd (High Detail AI)
 
+  -- Web Server --
+  python ai-media.py --serve (Loads Server + both Web & Electron)
+  python ai-media.py --serve-web-only-client
+  python ai-media.py --serve-electron-dev-only-client
+  python ai-media.py --serve-no-client (Server only)
+  python ai-media.py --serve --reload
+
 
 Supported Models (Code : Download Size | Description):
   Images:
@@ -602,6 +611,14 @@ Supported Models (Code : Download Size | Description):
     parser.add_argument("-I", "--interactive", nargs="?", const="menu", metavar="JUMP",
                         help="Run in interactive mode. Optional: Jump point (e.g., 'image/sdxl', 'audio/bark').")
     
+    # Server Mode
+    server_group = parser.add_argument_group("Web Server")
+    server_group.add_argument("--serve", action="store_true", help="Start the web server and launch both Web and Electron clients (Loads Server + both Web & Electron)")
+    server_group.add_argument("--serve-web-only-client", action="store_true", help="Start the web server and launch only the Web client")
+    server_group.add_argument("--serve-electron-dev-only-client", action="store_true", help="Start the web server and launch only the Electron client")
+    server_group.add_argument("--serve-no-client", action="store_true", help="Start the backend server only (no clients)")
+    server_group.add_argument("--reload", action="store_true", help="Enable auto-reload for development (On by default for Client modes)")
+    
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
     # --- Parse Arguments ---
     args = parser.parse_args()
@@ -611,6 +628,56 @@ Supported Models (Code : Download Size | Description):
         # Only import lightweight interactive module, skip heavy AI generators
         from ai_media.interactive import run_interactive
         run_interactive(jump_point=args.interactive if args.interactive != "menu" else None)
+        sys.exit(0)
+    
+    # Server Mode - start web server
+    serve_any = args.serve or args.serve_web_only_client or args.serve_electron_dev_only_client or args.serve_no_client
+    if serve_any:
+        # Load config for host/ports
+        from ai_media.server.config import CONFIG
+        
+        host = CONFIG["server"]["host"]
+        server_port = CONFIG["server"]["port"]
+        web_port = CONFIG["client"]["port"]
+        
+        # Determine if reload should be on (default True for clients, False for server-only)
+        reload_enabled = args.reload
+        if not reload_enabled and (args.serve or args.serve_web_only_client or args.serve_electron_dev_only_client):
+            reload_enabled = True
+        
+        # Determine which clients to start
+        start_web = args.serve or args.serve_web_only_client
+        start_electron = args.serve or args.serve_electron_dev_only_client
+        
+        procs = []
+        try:
+            # Helper to launch clients
+            import subprocess
+            def start_client(cmd, name, env=None):
+                print(f"🚀 Launching {name} client...")
+                web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_media", "web")
+                return subprocess.Popen(cmd, shell=True, cwd=web_dir, env=env)
+
+            # Build environment for clients to know about ports
+            env = os.environ.copy()
+            env["VITE_API_PORT"] = str(server_port)
+            env["VITE_WEB_PORT"] = str(web_port)
+            
+            if start_web:
+                procs.append(start_client("npm run dev:client", "Web", env=env))
+            if start_electron:
+                procs.append(start_client("npm run electron", "Electron", env=env))
+            
+            from ai_media.server import main as server_main
+            server_main(host=host, port=server_port, reload=reload_enabled)
+        finally:
+            # Cleanup background processes
+            for p in procs:
+                try:
+                    print(f"🛑 Stopping client process {p.pid}...")
+                    p.terminate()
+                except Exception:
+                    pass
         sys.exit(0)
     
     # LAZY LOADING: Load heavy AI modules ONLY for non-interactive modes

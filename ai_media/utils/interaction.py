@@ -500,9 +500,9 @@ def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15)
     return selected_val
 
 
-def prompt_choice(prompt, options, allow_back=True):
+def prompt_choice(prompt, options, allow_back=True, default_index=0):
     """Simplified choice prompt using menu system."""
-    return prompt_menu(prompt, options, allow_back=allow_back)
+    return prompt_menu(prompt, options, allow_back=allow_back, default_index=default_index)
 
 
 def prompt_text(prompt, default=None, required=True):

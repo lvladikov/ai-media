@@ -18,6 +18,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](docs/media-conversion.md#document-conversion-options).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](docs/upscaling.md#options), [Examples](docs/upscaling.md#examples) and [Models](docs/upscaling.md#models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
+- 🌐 **Web Client & Desktop App** - Browser-based interface and Electron desktop app for all features with real-time resource monitoring. Launch with `python ai-media.py --serve` (both clients), `--serve-web-only-client`, or `--serve-electron-dev-only-client`. See [Web Client](docs/web-client.md).
 - 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](docs/testing.md).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
@@ -60,7 +61,9 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **rich**: Beautiful terminal formatting, syntax highlighting, and progress spinners
     - **prompt_toolkit**: Interactive command line features (history, arrow keys, tab autocomplete)
     - **psutil**: System resource monitoring (RAM/CPU tracking)
+    - **psutil**: System resource monitoring (RAM/CPU tracking)
     - **beautifulsoup4**: Web scraping for Deep Research
+    - **Web Server**: `fastapi`, `uvicorn`, `python-multipart`, `sse-starlette`, `websockets` for the Web UI & API
 
 4.  **Gated Models (Optional)**
     Some state-of-the-art models (like `FLUX.1`) require Hugging Face authentication (but are **free to use**):
@@ -235,6 +238,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | **Edit** | `python ai-media.py -ti photo.jpg -tp "Make it anime"` |
 | **Upscale** | `python ai-media.py -ui photo.jpg -uf 4.0` |
 | **Convert** | `python ai-media.py -cv video.mov -cvt mp4` |
+| **Web UI** | `python ai-media.py --serve` (Web & Electron) |
 
 ### Feature Documentation
 
@@ -289,7 +293,13 @@ This project uses the following open-source libraries:
 | [xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) | HTML to PDF conversion | [xhtml2pdf/xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) |
 | [psutil](https://github.com/giampaolo/psutil) | System resource monitoring | [giampaolo/psutil](https://github.com/giampaolo/psutil) |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
+| [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
 | [ftfy](https://github.com/rspeer/python-ftfy) | Text encoding fixes | [rspeer/python-ftfy](https://github.com/rspeer/python-ftfy) |
+| [fastapi](https://github.com/tiangolo/fastapi) | High-performance web framework for API | [tiangolo/fastapi](https://github.com/tiangolo/fastapi) |
+| [uvicorn](https://github.com/encode/uvicorn) | Lightning-fast ASGI server for Python | [encode/uvicorn](https://github.com/encode/uvicorn) |
+| [python-multipart](https://github.com/Kludex/python-multipart) | Multipart/form-data support for file uploads | [Kludex/python-multipart](https://github.com/Kludex/python-multipart) |
+| [sse-starlette](https://github.com/sysid/sse-starlette) | Server-Sent Events (SSE) for real-time monitoring | [sysid/sse-starlette](https://github.com/sysid/sse-starlette) |
+| [websockets](https://github.com/python-websockets/websockets) | WebSocket protocol implementation for Chat | [python-websockets/websockets](https://github.com/python-websockets/websockets) |
 
 **AI Models used:**
 

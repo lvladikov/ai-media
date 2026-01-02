@@ -19,7 +19,9 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
+import asyncio
 from unittest.mock import patch, MagicMock, mock_open, Mock
+from datetime import datetime
 import io
 
 # =============================================================================
@@ -113,6 +115,7 @@ sys.modules['accelerate'] = MagicMock()
 sys.modules['scipy'] = MagicMock()
 sys.modules['scipy.io'] = MagicMock()
 sys.modules['scipy.io.wavfile'] = MagicMock()
+sys.modules['psutil'] = MagicMock()
 sys.modules['PIL'] = MagicMock(__version__='10.0.0')
 sys.modules['PIL.Image'] = MagicMock()
 sys.modules['PIL.ImageOps'] = MagicMock()
@@ -123,6 +126,11 @@ import ai_media
 from ai_media.utils import parsers, system, performance, ffmpeg, interaction
 from ai_media.generators import text, image, video, audio, transform, description
 from ai_media import upscaling, interactive, models
+import ai_media.server.state as server_state
+from ai_media.server.cache import ModelCache
+from ai_media.server.jobs import create_job, update_job, is_job_cancelled
+from ai_media.server.config import load_config
+from ai_media.server.app import create_app
 import inspect
 
 # Compatibility Patching 
@@ -2166,6 +2174,96 @@ class TestJumpPointsTextFeatures(unittest.TestCase):
         self.assertTrue(hasattr(gen, 'chat_session'))
 
 
+
+class TestSlashCommands(unittest.TestCase):
+    """Tests for slash command processing in ArticleGenerator."""
+    
+    def setUp(self):
+        self.generator = ai_media.ArticleGenerator(model_name="default")
+        # Mock dependencies to avoid actual IO/Networking
+        self.generator.deep_research = MagicMock()
+        
+    @patch('os.path.exists')
+    @patch('builtins.open', new_callable=mock_open, read_data="file content")
+    def test_read_command_success(self, mock_file, mock_exists):
+        """Test /read command successfully reads a file."""
+        mock_exists.return_value = True
+        
+        response = self.generator.process_command("/read test.txt", [])
+        
+        self.assertTrue(response["handled"])
+        self.assertIn("file content", response["context"])
+        self.assertIn("test.txt", response["message"])
+        self.assertEqual(response["error"], "")
+        
+    @patch('os.path.exists')
+    def test_read_command_not_found(self, mock_exists):
+        """Test /read command handles missing file."""
+        mock_exists.return_value = False
+        
+        response = self.generator.process_command("/read missing.txt", [])
+        
+        self.assertTrue(response["handled"])
+        self.assertIn("File not found", response["error"])
+        
+    def test_search_command(self):
+        """Test /search command calls deep_research."""
+        self.generator.deep_research.return_value = "Search Summary"
+        
+        response = self.generator.process_command("/search AI query", [])
+        
+        self.assertTrue(response["handled"])
+        self.generator.deep_research.assert_called_with("AI query", iterations=3)
+        self.assertIn("Search Summary", response["context"])
+        
+    def test_online_search_alias(self):
+        """Test /online-search alias matches /search."""
+        self.generator.deep_research.return_value = "Result"
+        response = self.generator.process_command("/online-search query", [])
+        self.assertTrue(response["handled"])
+        self.generator.deep_research.assert_called()
+
+    @patch('ai_media.generators.text.check_overwrite')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_save_command_code_block(self, mock_file, mock_check):
+        """Test /save extracts and saves the last code block."""
+        # Setup mock history with a code block
+        history = [
+            {"role": "user", "content": "gen code"},
+            {"role": "assistant", "content": "Here is code:\n```python\nprint('hello')\n```"}
+        ]
+        
+        # Mock check_overwrite to allow writing (should_write, final_path, always_overwrite, never_overwrite)
+        mock_check.return_value = (True, "output.py", False, False)
+        
+        response = self.generator.process_command("/save output.py", history)
+        
+        self.assertTrue(response["handled"])
+        mock_file.assert_called_with("output.py", "w", encoding="utf-8")
+        # Verify written content is just the code
+        mock_file().write.assert_called_with("print('hello')\n")
+        self.assertIn("Exported code block", response["message"])
+
+    @patch('ai_media.generators.text.check_overwrite')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_save_command_full_history(self, mock_file, mock_check):
+        """Test /save|all saves entire conversation."""
+        history = [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello"}
+        ]
+        mock_check.return_value = (True, "chat.md", False, False)
+        
+        response = self.generator.process_command("/save|all chat.md", history)
+        
+        self.assertTrue(response["handled"])
+        # Verify content includes metadata format
+        written_content = mock_file().write.call_args[0][0]
+        self.assertIn("# Chat Conversation History", written_content)
+        self.assertIn("## User\nHi", written_content)
+        self.assertIn("## Assistant\nHello", written_content)
+
+
 class TestArticleOutputFormats(unittest.TestCase):
     """Tests for supported article output formats."""
     
@@ -2435,6 +2533,154 @@ class TestGlobPatternFiltering(unittest.TestCase):
         result3 = self.matches_filter("Video - Zeroscope", ["video*zeroscope"])
         self.assertTrue(result3)
 
+
+# =============================================================================
+# Server Logic Tests
+# =============================================================================
+
+class TestServerConfig(unittest.TestCase):
+    """Tests for server configuration loading."""
+    
+    @patch('pathlib.Path.exists')
+    @patch('builtins.open', new_callable=Mock)
+    def test_load_config_defaults(self, mock_open, mock_exists):
+        """Test that defaults are used when config.json is missing."""
+        mock_exists.return_value = False
+        config = load_config()
+        self.assertEqual(config["server"]["port"], 8000)
+        self.assertEqual(config["client"]["port"], 5173)
+        self.assertEqual(config["server"]["host"], "127.0.0.1")
+
+    @patch('pathlib.Path.exists')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('json.load')
+    def test_load_config_overrides(self, mock_json_load, mock_open, mock_exists):
+        """Test that config.json overrides defaults."""
+        mock_exists.return_value = True
+        mock_json_load.return_value = {
+            "server": {"port": 9000},
+            "client": {"port": 6000}
+        }
+        config = load_config()
+        self.assertEqual(config["server"]["port"], 9000)
+        self.assertEqual(config["client"]["port"], 6000)
+        self.assertEqual(config["server"]["host"], "127.0.0.1") # Still default
+
+class TestServerCache(unittest.TestCase):
+    """Tests for the ModelCache logic."""
+    
+    def setUp(self):
+        self.cache = ModelCache()
+        # Mock _clear_memory to avoid actual torch/gpu calls
+        self.cache._clear_memory = MagicMock()
+
+    def test_cache_get_set(self):
+        """Test basic caching and retrieval."""
+        instance = MagicMock()
+        self.cache.set("image", "flux", instance)
+        self.assertEqual(self.cache.get("image", "flux"), instance)
+        
+    def test_cache_auto_unload(self):
+        """Test that requesting a different model unloads the previous one."""
+        inst1 = MagicMock()
+        inst2 = MagicMock()
+        self.cache.set("image", "flux", inst1)
+        
+        # Requesting a different model should return None and trigger unload
+        self.assertIsNone(self.cache.get("image", "sdxl"))
+        self.cache._clear_memory.assert_called()
+        
+        # New model should not be in cache yet
+        self.assertIsNone(self.cache.get("image", "sdxl"))
+
+    def test_unload_all(self):
+        """Test unloading all models."""
+        self.cache.set("image", "flux", MagicMock())
+        self.cache.set("text", "llama", MagicMock())
+        self.cache.unload_all()
+        self.assertEqual(len(self.cache._cache), 0)
+        self.cache._clear_memory.assert_called()
+
+class TestJobManagement(unittest.TestCase):
+    """Tests for job state and management."""
+    
+    def setUp(self):
+        server_state.jobs.clear()
+        server_state.job_manager.broadcast = MagicMock()
+        # Mock event loop to avoid asyncio issues in sync tests
+        server_state.MAIN_LOOP = MagicMock()
+
+    def test_create_job(self):
+        """Test creating a new job."""
+        with patch('asyncio.get_running_loop', side_effect=RuntimeError):
+            job = create_job("image", prompt="test prompt", model="flux")
+            
+        self.assertEqual(job["type"], "image")
+        self.assertEqual(job["status"], "pending")
+        self.assertEqual(job["prompt"], "test prompt")
+        self.assertIn(job["job_id"], server_state.jobs)
+        server_state.job_manager.broadcast.assert_called()
+
+    def test_update_job(self):
+        """Test updating an existing job."""
+        job = {"job_id": "123", "status": "pending"}
+        server_state.jobs["123"] = job
+        
+        with patch('asyncio.get_running_loop', side_effect=RuntimeError):
+            update_job("123", status="completed", progress=100)
+            
+        self.assertEqual(server_state.jobs["123"]["status"], "completed")
+        self.assertEqual(server_state.jobs["123"]["progress"], 100)
+
+    def test_is_job_cancelled(self):
+        """Test cancellation check."""
+        server_state.jobs["456"] = {"status": "cancelled"}
+        server_state.jobs["789"] = {"status": "running"}
+        
+        self.assertTrue(is_job_cancelled("456"))
+        self.assertFalse(is_job_cancelled("789"))
+        self.assertFalse(is_job_cancelled("non-existent"))
+
+class TestConnectionManagers(unittest.IsolatedAsyncioTestCase):
+    """Async tests for WebSocket connection managers."""
+    
+    async def test_job_connection_manager(self):
+        manager = server_state.JobConnectionManager()
+        ws = MagicMock()
+        ws.accept = MagicMock(return_value=asyncio.Future())
+        ws.accept.return_value.set_result(None)
+        
+        await manager.connect(ws)
+        self.assertIn(ws, manager.active_connections)
+        
+        manager.disconnect(ws)
+        self.assertNotIn(ws, manager.active_connections)
+
+    async def test_chat_connection_manager(self):
+        manager = server_state.ChatConnectionManager()
+        ws = MagicMock()
+        ws.accept = MagicMock(return_value=asyncio.Future())
+        ws.accept.return_value.set_result(None)
+        
+        await manager.connect("session1", ws)
+        self.assertIn("session1", manager.active_connections)
+        
+        manager.disconnect("session1")
+        self.assertNotIn("session1", manager.active_connections)
+
+class TestServerApp(unittest.TestCase):
+    """Tests for FastAPI app initialization."""
+    
+    def test_create_app(self):
+        """Test that the FastAPI app is created with all routes."""
+        app = create_app()
+        self.assertEqual(app.title, "AI-Media API")
+        
+        # Check if some expected routes are present
+        routes = [r.path for r in app.routes]
+        self.assertIn("/api/system", routes)
+        self.assertIn("/api/jobs", routes)
+        self.assertIn("/sse/resources", routes)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

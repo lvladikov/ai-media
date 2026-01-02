@@ -8,6 +8,9 @@ Uses LLMs like Llama, Qwen, DeepSeek, and Mistral.
 import os
 import re
 import time
+import gc
+import torch
+import threading
 from datetime import datetime
 
 from ..models import TEXT_MODELS, get_model_id
@@ -16,17 +19,53 @@ from ..utils.system import get_optimal_device_and_dtype
 
 from ..utils.interaction import check_overwrite, prompt_choice
 
+# Comprehensive color reference for ANSI TrueColor output
+# Format: "ColorName=R,G,B" - used in system prompts to teach the model correct RGB values
+COLOR_REFERENCE = (
+    # Basic Colors
+    "Red=255,0,0 | Green=0,128,0 | Blue=0,0,255 | Yellow=255,255,0 | "
+    "Cyan=0,255,255 | Magenta=255,0,255 | White=255,255,255 | Black=0,0,0 | "
+    # Grays
+    "Gray=128,128,128 | DarkGray=64,64,64 | LightGray=192,192,192 | Silver=192,192,192 | "
+    # Reds/Pinks
+    "Pink=255,192,203 | HotPink=255,105,180 | DeepPink=255,20,147 | Crimson=220,20,60 | "
+    "DarkRed=139,0,0 | Maroon=128,0,0 | Salmon=250,128,114 | Coral=255,127,80 | "
+    # Oranges
+    "Orange=255,165,0 | DarkOrange=255,140,0 | OrangeRed=255,69,0 | Tomato=255,99,71 | "
+    # Browns
+    "Brown=165,42,42 | Chocolate=210,105,30 | SaddleBrown=139,69,19 | Sienna=160,82,45 | Tan=210,180,140 | "
+    # Yellows/Golds
+    "Gold=255,215,0 | Khaki=240,230,140 | LemonChiffon=255,250,205 | LightYellow=255,255,224 | "
+    # Greens
+    "Lime=0,255,0 | LimeGreen=50,205,50 | LightGreen=144,238,144 | DarkGreen=0,100,0 | "
+    "ForestGreen=34,139,34 | SeaGreen=46,139,87 | SpringGreen=0,255,127 | Olive=128,128,0 | "
+    "Teal=0,128,128 | Aquamarine=127,255,212 | MediumSeaGreen=60,179,113 | "
+    # Blues
+    "Navy=0,0,128 | DarkBlue=0,0,139 | MediumBlue=0,0,205 | RoyalBlue=65,105,225 | "
+    "SkyBlue=135,206,235 | LightBlue=173,216,230 | DeepSkyBlue=0,191,255 | DodgerBlue=30,144,255 | "
+    "CornflowerBlue=100,149,237 | SteelBlue=70,130,180 | CadetBlue=95,158,160 | "
+    # Purples/Violets
+    "Purple=128,0,128 | Violet=238,130,238 | Indigo=75,0,130 | DarkViolet=148,0,211 | "
+    "Orchid=218,112,214 | Plum=221,160,221 | Lavender=230,230,250 | MediumPurple=147,112,219 | "
+    "SlateBlue=106,90,205 | DarkSlateBlue=72,61,139 | MediumSlateBlue=123,104,238 | "
+    # Others
+    "Turquoise=64,224,208 | MediumTurquoise=72,209,204 | DarkTurquoise=0,206,209 | "
+    "Aqua=0,255,255 | Beige=245,245,220 | Ivory=255,255,240 | Azure=240,255,255 | "
+    "MistyRose=255,228,225 | Snow=255,250,250 | Honeydew=240,255,240 | AliceBlue=240,248,255"
+)
+
 
 class ArticleGenerator:
     """Text generation for articles, code, research, and chat using LLMs."""
     
-    def __init__(self, model_name="llama-3.1-8b", device=None, args=None):
+    def __init__(self, model_name="llama-3.1-8b", device=None, args=None, progress_callback=None):
         """Initialize the article generator.
         
         Args:
             model_name: Model short code or HF ID
             device: Torch device (auto-detected if None)
             args: Optional argparse namespace for flags like --force
+            progress_callback: Optional async function(status, progress, message) to report progress
         """
         import torch
         self.torch = torch
@@ -35,6 +74,55 @@ class ArticleGenerator:
         self.device = device or get_optimal_device_and_dtype(quiet=True)[0]
         self.pipeline = None
         self.args = args
+        self.progress_callback = progress_callback
+        
+        # Import DDGS for web search
+        try:
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS
+            self.ddgs = DDGS()
+        except ImportError:
+            self.ddgs = None
+            print("⚠️  duckduckgo_search/ddgs not installed. Online search unavailable.")
+            
+        self.location_cache = None
+        self._last_location = None  # Track location for change detection
+        self._first_message_sent = False  # Track if full system prompt was sent
+        self._lock = threading.Lock()
+
+        
+    @staticmethod
+    def extract_reasoning(content: str) -> dict:
+        """Extract reasoning and final answer from deepseek content.
+        
+        Args:
+            content: Raw model output.
+            
+        Returns:
+            dict: {
+                "reasoning": str or None,
+                "content": str
+            }
+        """
+        if '</think>' in content:
+            # Split by closing tag to be robust against missing opening tag
+            parts = content.split('</think>', 1)
+            reasoning = parts[0].replace('<think>', '').strip()
+            final_answer = parts[1].strip() if len(parts) > 1 else ""
+            
+            return {
+                "reasoning": reasoning,
+                "content": final_answer
+            }
+        
+        return {
+            "reasoning": None,
+            "content": content
+        }
+        
+
         
         # Import DDGS for web search
         # Try importing 'ddgs' first (new package name), then 'duckduckgo_search' (legacy)
@@ -48,6 +136,41 @@ class ArticleGenerator:
             self.ddgs = None
             print("⚠️  duckduckgo_search/ddgs not installed. Online search unavailable.")
         
+        self.location_cache = None
+        
+    def _cleanup_memory(self):
+        """Perform light memory cleanup (GC and Cache) without unloading models."""
+        import gc
+        gc.collect()
+        if self.torch.backends.mps.is_available():
+            self.torch.mps.empty_cache()
+        elif self.torch.cuda.is_available():
+            self.torch.cuda.empty_cache()
+
+    def _unload_model(self):
+        """Fully unload the model and tokenizer to free all possible RAM/VRAM."""
+        import gc
+        
+        # Unload model if it exists
+        if hasattr(self, 'model') and self.model is not None:
+            del self.model
+            self.model = None
+        
+        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+
+        if hasattr(self, 'pipeline') and self.pipeline is not None:
+            del self.pipeline
+            self.pipeline = None
+            
+        gc.collect()
+        
+        if self.torch.backends.mps.is_available():
+            self.torch.mps.empty_cache()
+        elif self.torch.cuda.is_available():
+            self.torch.cuda.empty_cache()
+
     def _load_model(self):
         """Load the LLM pipeline."""
         if self.pipeline:
@@ -55,6 +178,8 @@ class ArticleGenerator:
         
         from transformers import AutoTokenizer, pipeline
         
+        if self.progress_callback:
+            self.progress_callback("loading", 10, f"Loading Text Model: {self.model_name}...")
         print(f"📚 Loading Text Model: {self.model_name}...")
         try:
             # Use bfloat16 on CUDA if supported (Ampere+), otherwise float16
@@ -99,14 +224,65 @@ class ArticleGenerator:
                 
             # Load model manually to prevent 'quantization_config' leakage into generate()
             from transformers import AutoModelForCausalLM
+            import sys
+            import contextlib
             
+            # Simple wrapper to capture tqdm output (which goes to stderr)
+            class TqdmCapture:
+                def __init__(self, callback):
+                    self.callback = callback
+                    self.buffer = ""
+                    
+                def write(self, text):
+                    # Progress bars use \r to overwrite lines. 
+                    # We pass raw text to frontend which handles the display logic or
+                    # we can strip it here. For now, pass raw to let frontend handle animation
+                    # ALWAYS write original raw text to real stderr so terminal logic (TQDM) works
+                    sys.__stderr__.write(text)
+
+                    # Only process for web callback if there's actual content
+                    if self.callback and text.strip():
+                        try:
+                            # Strip ANSI escape codes (like [A) ONLY for web logs
+                            clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+                            if clean_text.strip():
+                                self.callback("loading", 0, clean_text) 
+                        except:
+                            pass
+
+                def flush(self):
+                    sys.__stderr__.flush()
+
             # Ensure model_kwargs are clean for from_pretrained
-            print(f"   Using Device Map: {model_kwargs.get('device_map', 'Default')}")
+            device_map_info = model_kwargs.get('device_map', 'Default')
+            if self.progress_callback:
+                self.progress_callback("loading", 15, f"Using Device Map: {device_map_info}")
+            print(f"   Using Device Map: {device_map_info}")
             
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                **model_kwargs
-            )
+            if self.progress_callback:
+                self.progress_callback("loading", 20, "Downloading/Loading model weights... (check terminal for progress)")
+            
+            # Capture stderr during loading
+            try:
+                if self.progress_callback:
+                    capture = TqdmCapture(self.progress_callback)
+                    with contextlib.redirect_stderr(capture):
+                        model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            **model_kwargs
+                        )
+                else:
+                     model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        **model_kwargs
+                    )
+            except Exception as e:
+                print(f"Error loading model with capture: {e}")
+                # Fallback
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    **model_kwargs
+                )
             
             self.pipeline = pipeline(
                 "text-generation",
@@ -116,72 +292,85 @@ class ArticleGenerator:
             
             dtype_name = str(dtype).replace("torch.", "")
             print(f"   Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
+            if self.progress_callback:
+                self.progress_callback("loading", 20, f"Model loaded. Platform: {self.device.type.upper()}")
             print("✅ Model loaded.")
+            return True
             
         except RuntimeError as e:
             error_msg = str(e)
             if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
                 size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
-                
-                print(f"\n❌ Model too large for this system.")
-                if size_match:
-                     print(f"   Allocation failed when trying to reserve {size_match.group(0)}.")
-                     
-                print(f"   The model '{self.model_name}' cannot fit in available memory.")
-                print(f"   💡 Try a smaller model like:")
-                print(f"      - deepseek-r1-qwen-7b (~7GB)")
-                print(f"      - deepseek-r1-llama-8b (~8GB)")
-                print(f"      - llama-3.1-8b (~16GB)")
-                return
+                full_error = f"❌ Model too large for this system.\nAllocation failed when trying to reserve {size_match.group(0) if size_match else 'memory'}.\nThe model '{self.model_name}' cannot fit in available memory."
+                print(full_error)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, full_error)
+                return False
             else:
-                print(f"❌ Failed to load model: {e}")
-                raise
+                err = f"❌ Failed to load model: {e}"
+                print(err)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, err)
+                return False
                 
         except OSError as e:
             error_msg = str(e)
             if "not a valid model identifier" in error_msg or "Repository Not Found" in error_msg:
-                print(f"\n❌ Model not found: '{self.model_name}'")
-                print(f"   This model doesn't exist on HuggingFace.")
-                print(f"   💡 Available models:")
-                print(f"      - deepseek-r1-qwen-7b, deepseek-r1-qwen-14b, deepseek-r1-qwen-32b")
-                print(f"      - deepseek-r1-llama-8b, deepseek-r1-llama-70b")
-                print(f"      - llama-3.1-8b, qwen3-8b, qwen-2.5-14b, mistral-nemo-12b")
-                return
+                full_error = f"❌ Model not found: '{self.model_name}'\nThis model doesn't exist on HuggingFace."
+                print(full_error)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, full_error)
+                return False
             else:
-                print(f"❌ Failed to load model: {e}")
-                raise
+                err = f"❌ Failed to load model: {e}"
+                print(err)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, err)
+                return False
                 
         except (ValueError, Exception) as e:
             error_msg = str(e)
             if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
                 size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
-                
-                print(f"\n❌ Model too large for this system.")
-                if size_match:
-                     print(f"   Allocation failed when trying to reserve {size_match.group(0)}.")
-                     
-                print(f"   The model '{self.model_name}' cannot fit in available memory.")
-                print(f"   💡 Try a smaller model like:")
-                print(f"      - deepseek-r1-qwen-7b (~7GB)")
-                print(f"      - deepseek-r1-llama-8b (~8GB)")
-                print(f"      - llama-3.1-8b (~16GB)")
-                return
+                full_error = f"❌ Model too large for this system.\nAllocation failed when trying to reserve {size_match.group(0) if size_match else 'memory'}.\nThe model '{self.model_name}' cannot fit in available memory."
+                print(full_error)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, full_error)
+                return False
             else:
-                print(f"❌ Failed to load model: {e}")
-                raise
+                err = f"❌ Failed to load model: {e}"
+                print(err)
+                if self.progress_callback:
+                    self.progress_callback("error", 0, err)
+                return False
 
-    def deep_research(self, query, iterations=3):
+    def deep_research(self, query, iterations=3, include_images=True):
         """Perform recursive web search and summarization."""
         if not self.ddgs:
             print("❌ Online search unavailable (duckduckgo_search not installed)")
             return ""
             
-        print(f"\n🔎 Deep Researching: '{query}' ({iterations} iterations)...")
+        # Refine query for "latest" or "news" searches
+        current_year = datetime.now().year
+        refined_query = query
+        
+        # Keywords that suggest a need for a temporal anchor
+        is_news_query = any(w in query.lower() for w in ["news", "latest", "update", "breaking"])
+        # Keywords that already provide temporal context (don't add year if these are present)
+        has_temporal = any(w in query.lower() for w in ["today", "yesterday", "week", "month", "year", "now", "current"])
+        
+        if is_news_query and not has_temporal and str(current_year) not in query:
+            refined_query = f"{query} {current_year}"
+            print(f"   💡 Refined news query: '{refined_query}'")
+
+        if self.progress_callback:
+            self.progress_callback("generating", 30, f"Deep Researching: '{refined_query}' ({iterations} iterations)...")
+        print(f"\n🔎 Deep Researching: '{refined_query}' ({iterations} iterations)...")
         results = []
         
         # 1. Initial Broad Search
         try:
-            search_results = list(self.ddgs.text(query, max_results=iterations))
+            search_results = list(self.ddgs.text(refined_query, max_results=iterations))
             pad_width = len(str(iterations))
             for i, res in enumerate(search_results, 1):
                 num_str = str(i).zfill(pad_width)
@@ -211,26 +400,29 @@ class ArticleGenerator:
         
         # 2. Image Search
         image_results = []
-        try:
-            image_query = f"{query} photos"
-            print(f"   🖼️  Searching for images...")
-            image_search = list(self.ddgs.images(image_query, max_results=5))
+        if include_images:
+            try:
+                image_query = f"{query} photos"
+                print(f"   🖼️  Searching for images...")
+                image_search = list(self.ddgs.images(image_query, max_results=5))
+                
+                for img in image_search:
+                    img_url = img.get('image', '')
+                    img_title = img.get('title', 'Image')
+                    if img_url and img_url.startswith('http'):
+                        image_results.append(f"![{img_title}]({img_url})")
+                
+                if image_results:
+                    print(f"   ✅ Found {len(image_results)} images")
+            except Exception as e:
+                print(f"   ⚠️  Image search failed: {e}")
             
-            for img in image_search:
-                img_url = img.get('image', '')
-                img_title = img.get('title', 'Image')
-                if img_url and img_url.startswith('http'):
-                    image_results.append(f"![{img_title}]({img_url})")
-            
-            if image_results:
-                print(f"   ✅ Found {len(image_results)} images")
-        except Exception as e:
-            print(f"   ⚠️  Image search failed: {e}")
-            
-        research_context = "\n\n".join(results)
+        research_context = f"CURRENT DATE: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        research_context += "The following information was retrieved from the web. Prioritize RECENT data over historical matches.\n\n"
+        research_context += "\n\n".join(results)
         
         if image_results:
-            research_context += "\n\n## Available Images (use these exact URLs)\n"
+            research_context += "\n\n## Available Images (found during research)\n"
             research_context += "\n".join(image_results)
         
         return research_context
@@ -268,6 +460,8 @@ class ArticleGenerator:
         if not self.pipeline:
             return
         
+        if self.progress_callback:
+            self.progress_callback("generating", 40, f"Writing {style} article on '{topic}'...")
         print(f"✍️  Writing {style} article on '{topic}'...")
         
         # Prompt Engineering
@@ -295,14 +489,16 @@ class ArticleGenerator:
         )
         
         with console.status("[bold green]Thinking... (Writing Article)[/bold green]", spinner="dots"):
-            outputs = self.pipeline(
-                full_prompt, 
-                max_new_tokens=max_tokens, 
-                do_sample=True, 
-                temperature=0.7
-            )
+            with self._lock:  # Ensure thread-safe model access
+                outputs = self.pipeline(
+                    full_prompt, 
+                    max_new_tokens=max_tokens, 
+                    do_sample=True, 
+                    temperature=0.7,
+                    return_full_text=False,
+                )
         
-        final_md = outputs[0]['generated_text'][len(full_prompt):].strip()
+        final_md = outputs[0]['generated_text'].strip()
         
         # Extract and save <think> blocks separately
         think_matches = re.findall(r'<think>(.*?)</think>', final_md, re.DOTALL)
@@ -347,6 +543,8 @@ class ArticleGenerator:
                     research_iter=research_iter,
                     length=length
                 )
+        
+        return True
 
     def generate_code(self, prompt, output_file=None):
         """Generate Code from Prompt (supports multi-file output)."""
@@ -381,16 +579,17 @@ class ArticleGenerator:
         
         console.print()
         with console.status("[yellow] Thinking...[/yellow]", spinner="dots"):
-            outputs = self.pipeline(
-                full_prompt, 
-                max_new_tokens=4096, 
-                do_sample=True, 
-                temperature=0.2,
-                top_p=0.9,
-            )
+            with self._lock:  # Ensure thread-safe model access
+                outputs = self.pipeline(
+                    full_prompt, 
+                    max_new_tokens=4096, 
+                    do_sample=True, 
+                    temperature=0.2,
+                    top_p=0.9,
+                    return_full_text=False,
+                )
         
-        generated_text = outputs[0]['generated_text']
-        response = generated_text[len(full_prompt):].strip()
+        response = outputs[0]['generated_text'].strip()
         
         # Remove markdown code fences if present
         response = re.sub(r"```\w*\n?", "", response)
@@ -481,9 +680,9 @@ class ArticleGenerator:
         """Convert and save to specific format.
         
         Returns:
-            int: Number of failed image fetches
+            int: Number of failed image fetches (legacy return, now 0)
         """
-        import markdown as md_module
+        from ai_media.utils.text_conversion import convert_text
         
         failed_image_count = 0
         base, _ = os.path.splitext(filename)
@@ -493,280 +692,298 @@ class ArticleGenerator:
             
         print(f"💾 Saving as {fmt.upper()}...")
         
-        if fmt == "md":
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(markdown_text)
-                
-        elif fmt == "html" or fmt == "xhtml":
-            html = md_module.markdown(markdown_text, extensions=['extra', 'codehilite'])
-            full_html = (
-                f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Article</title>"
-                f"<style>body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}"
-                f"pre{{background:#f4f4f4;padding:1em;border-radius:5px}}</style></head>"
-                f"<body>{html}</body></html>"
-            )
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(full_html)
-                
-        elif fmt == "json":
-            import json
-            data = {"content": markdown_text, "html": md_module.markdown(markdown_text)}
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-
-        elif fmt == "txt":
-            from bs4 import BeautifulSoup
-            html = md_module.markdown(markdown_text)
-            text = BeautifulSoup(html, "html.parser").get_text()
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(text)
-                
-        elif fmt == "docx":
-            import io
-            import urllib.request
-            import re as re_module
-            import docx
-            from docx.shared import Inches
+        try:
+            content_bytes = convert_text(markdown_text, fmt, filename)
             
-            doc = docx.Document()
-            MIN_IMAGE_SIZE = 5 * 1024  # 5KB threshold
+            mode = "wb" if fmt in ["pdf", "docx"] else "w"
+            encoding = None if fmt in ["pdf", "docx"] else "utf-8"
             
-            def fetch_image_for_docx(url):
-                """Fetch image and return as BytesIO for docx embedding."""
-                nonlocal failed_image_count
-                try:
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        image_data = response.read()
-                    
-                    if len(image_data) < MIN_IMAGE_SIZE:
-                        failed_image_count += 1
-                        print(f"⚠️  Image too small (likely placeholder): {url[:50]}...")
-                        return None
-                    
-                    return io.BytesIO(image_data)
-                except Exception as e:
-                    failed_image_count += 1
-                    print(f"⚠️  Could not fetch image: {url[:50]}... ({e})")
-                    return None
-            
-            # Process markdown line by line
-            for line in markdown_text.split('\n'):
-                # Check for markdown image: ![alt](url)
-                img_match = re_module.match(r'!\[([^\]]*)\]\((https?://[^\)]+)\)', line)
-                if img_match:
-                    alt_text = img_match.group(1)
-                    img_url = img_match.group(2)
-                    img_stream = fetch_image_for_docx(img_url)
-                    if img_stream:
-                        try:
-                            doc.add_picture(img_stream, width=Inches(5))
-                            if alt_text:
-                                caption = doc.add_paragraph(alt_text)
-                                caption.alignment = 1  # Center
-                        except Exception as e:
-                            print(f"⚠️  Could not embed image: {e}")
-                            doc.add_paragraph(f"[Image: {alt_text}]")
-                    else:
-                        doc.add_paragraph(f"[Image: {alt_text}]")
-                elif line.startswith('# '):
-                    doc.add_heading(line[2:], level=1)
-                elif line.startswith('## '):
-                    doc.add_heading(line[3:], level=2)
-                elif line.startswith('### '):
-                    doc.add_heading(line[4:], level=3)
+            with open(filename, mode, encoding=encoding) as f:
+                if mode == "wb":
+                    f.write(content_bytes)
                 else:
-                    doc.add_paragraph(line)
-            doc.save(filename)
-        
-        elif fmt == "rtf":
-            import urllib.request
-            import re as re_module
-            import binascii
-            
-            MIN_IMAGE_SIZE = 5 * 1024
-            
-            def rtf_escape(text):
-                return text.replace('\\', '\\\\').replace('{', '\\{').replace('}', '\\}')
-            
-            def fetch_image_for_rtf(url):
-                nonlocal failed_image_count
-                try:
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        image_data = response.read()
+                    f.write(content_bytes.decode("utf-8"))
                     
-                    if len(image_data) < MIN_IMAGE_SIZE:
-                        failed_image_count += 1
-                        return None
-                    
-                    if image_data[:3] == b'\xff\xd8\xff':
-                        img_format = 'jpegblip'
-                    elif image_data[:8] == b'\x89PNG\r\n\x1a\n':
-                        img_format = 'pngblip'
-                    else:
-                        img_format = 'jpegblip'
-                    
-                    hex_data = binascii.hexlify(image_data).decode('ascii')
-                    return (img_format, hex_data)
-                except Exception as e:
-                    failed_image_count += 1
-                    return None
+            print(f"✅ Saved to {filename}")
+        except Exception as e:
+            print(f"❌ Error saving {filename}: {e}")
             
-            rtf_lines = []
-            rtf_lines.append(r'{\rtf1\ansi\deff0')
-            rtf_lines.append(r'{\fonttbl{\f0 Helvetica;}{\f1 Courier;}}')
-            rtf_lines.append(r'{\colortbl;\red0\green0\blue0;\red51\green51\blue51;}')
-            rtf_lines.append(r'\f0\fs24')
-            
-            for line in markdown_text.split('\n'):
-                img_match = re_module.match(r'!\[([^\]]*)\]\((https?://[^\)]+)\)', line)
-                if img_match:
-                    alt_text = img_match.group(1)
-                    img_url = img_match.group(2)
-                    img_data = fetch_image_for_rtf(img_url)
-                    if img_data:
-                        img_format, hex_data = img_data
-                        rtf_lines.append(r'\pard\qc\sb200\sa100')
-                        rtf_lines.append(r'{\pict\\' + img_format + r'\picwgoal6000\pichgoal4000')
-                        rtf_lines.append(hex_data)
-                        rtf_lines.append(r'}')
-                        if alt_text:
-                            rtf_lines.append(r'\pard\qc\i\fs20 ' + rtf_escape(alt_text) + r'\i0\fs24\par')
-                    else:
-                        rtf_lines.append(r'\pard\sa100 [Image: ' + rtf_escape(alt_text) + r']\par')
-                    continue
-                
-                line = rtf_escape(line)
-                if line.startswith('# '):
-                    rtf_lines.append(r'\pard\sb400\sa200\b\fs48 ' + line[2:] + r'\b0\fs24\par')
-                elif line.startswith('## '):
-                    rtf_lines.append(r'\pard\sb300\sa150\b\fs36 ' + line[3:] + r'\b0\fs24\par')
-                elif line.startswith('### '):
-                    rtf_lines.append(r'\pard\sb200\sa100\b\fs28 ' + line[4:] + r'\b0\fs24\par')
-                elif line.startswith('- ') or line.startswith('* '):
-                    rtf_lines.append(r'\pard\li720\fi-360\bullet  ' + line[2:] + r'\par')
-                elif line.startswith('```'):
-                    continue
-                elif line.strip():
-                    rtf_lines.append(r'\pard\sa100 ' + line + r'\par')
-                else:
-                    rtf_lines.append(r'\par')
-            
-            rtf_lines.append('}')
-            
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write('\n'.join(rtf_lines))
-                
-        elif fmt == "pdf":
-            import base64
-            import urllib.request
-            import re as re_module
-            from xhtml2pdf import pisa
-            
-            # Pre-process markdown
-            processed_md = re_module.sub(
-                r'\[([Ii]mage[^\]]*)\]\((https?://[^\)]+\.(jpg|jpeg|png|gif|webp)[^\)]*)\)',
-                r'![\1](\2)',
-                markdown_text
-            )
-            
-            # Remove bolding from table rows
-            md_lines = processed_md.split('\n')
-            for idx, line in enumerate(md_lines):
-                if line.strip().startswith('|'):
-                    md_lines[idx] = line.replace('**', '')
-            processed_md = '\n'.join(md_lines)
-            
-            # Convert MD -> HTML
-            html_content = md_module.markdown(processed_md, extensions=['extra', 'fenced_code', 'tables', 'toc'])
-            
-            # Strip emojis
-            def strip_emojis(text):
-                result = []
-                for char in text:
-                    code = ord(char)
-                    if (0x1F300 <= code <= 0x1FFFF or 0x2600 <= code <= 0x27BF or
-                        0x2300 <= code <= 0x23FF or 0xFE00 <= code <= 0xFE0F):
-                        continue
-                    result.append(char)
-                return ''.join(result)
-            
-            html_content = strip_emojis(html_content)
-            
-            # Fetch and embed images
-            def fetch_and_encode_image(url):
-                nonlocal failed_image_count
-                MIN_IMAGE_SIZE = 5 * 1024
-                try:
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        image_data = response.read()
-                    
-                    if len(image_data) < MIN_IMAGE_SIZE:
-                        failed_image_count += 1
-                        return None
-                    
-                    content_type = 'image/jpeg'
-                    if 'png' in url.lower():
-                        content_type = 'image/png'
-                    elif 'gif' in url.lower():
-                        content_type = 'image/gif'
-                    
-                    b64_data = base64.b64encode(image_data).decode('utf-8')
-                    return f'data:{content_type};base64,{b64_data}'
-                except Exception as e:
-                    failed_image_count += 1
-                    return None
-            
-            def replace_src(match):
-                url = match.group(1)
-                data_uri = fetch_and_encode_image(url)
-                if data_uri:
-                    return f'src="{data_uri}"'
-                return match.group(0)
-            
-            html_content = re_module.sub(r'src="(https?://[^"]+)"', replace_src, html_content)
-            
-            # Full HTML document for xhtml2pdf
-            full_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-@page {{ size: a4 portrait; margin: 1.5cm; }}
-body {{ font-family: Helvetica, sans-serif; font-size: 9pt; line-height: 1.4; }}
-h1 {{ font-size: 18pt; color: #333; margin-top: 0.8em; margin-bottom: 0.4em; }}
-h2 {{ font-size: 14pt; color: #444; margin-top: 0.6em; margin-bottom: 0.3em; }}
-h3 {{ font-size: 12pt; color: #555; margin-top: 0.5em; margin-bottom: 0.2em; }}
-pre {{ background: #f4f4f4; padding: 6px; font-family: Courier, monospace; font-size: 6pt; }}
-code {{ background: #f0f0f0; padding: 1px 2px; font-family: Courier, monospace; font-size: 6pt; }}
-table {{ border-collapse: collapse; width: 100%; font-size: 6pt; margin: 0.4em 0; }}
-th, td {{ border: 1px solid #999; padding: 2px 4px; text-align: left; }}
-th {{ background: #e8e8e8; font-weight: bold; }}
-img {{ max-width: 100%; height: auto; }}
-a {{ color: #0066cc; text-decoration: underline; }}
-</style>
-</head>
-<body>
-{html_content}
-</body>
-</html>"""
-            
-            with open(filename, "wb") as f:
-                pisa_status = pisa.CreatePDF(full_html, dest=f)
-            
-            if pisa_status.err:
-                print("❌ PDF conversion failed")
-                return failed_image_count
-                
-        else:
-            print(f"⚠️ Unknown format '{fmt}', saving as MD.")
-            with open(f"{base}.md", "w", encoding="utf-8") as f:
-                f.write(markdown_text)
-
-        print(f"✅ Saved to {filename}")
         return failed_image_count
+
+    def _detect_location(self):
+        """Detect approximate location based on IP."""
+        if self.location_cache:
+            return self.location_cache
+            
+        try:
+            import json
+            from urllib.request import urlopen
+            # Short timeout to avoid hanging
+            with urlopen("http://ip-api.com/json/", timeout=1.5) as response:
+                ip_data = json.loads(response.read().decode())
+                if ip_data.get('status') == 'success':
+                    self.location_cache = f"{ip_data.get('city')}, {ip_data.get('regionName')}, {ip_data.get('country')}"
+                    return self.location_cache
+        except Exception as e:
+            pass
+            
+        return "Unknown"
+
+    def chat_single(self, message: str, history: list = None, stream_callback=None) -> str:
+        """Generate a single chat response.
+        
+        Args:
+            message: The user's message
+            history: List of previous messages as [{"role": "user"|"assistant", "content": "..."}]
+            stream_callback: Optional callback for streaming progress/status updates
+            
+        Returns:
+            The assistant's response string
+        """
+        self._load_model()
+        if not self.pipeline:
+            return "Error: Model failed to load"
+        
+        history = history or []
+        
+        # Build conversation with system prompt
+        # Optimization: Full prompt only on first message, minimal updates after
+        # Use explicit, clear format to prevent model confusion/hallucination
+        # The dynamic %c format (Thu Jan 1 ...) caused the model to over-reason about the date validity
+        current_time = datetime.now().strftime("%A, %B %d, %Y %I:%M:%S %p")
+        current_location = self._detect_location()
+        
+        is_first_message = not self._first_message_sent
+        location_changed = self._last_location is not None and self._last_location != current_location
+        
+        # Always send the full system prompt with the current time.
+        # Previously, we reduced this on subsequent turns, but that removed the "Source of truth" instruction
+        # and "Helpful assistant" identity, causing the model to degrade and refuse to answer time questions.
+        # Refined System Prompt: More concise to prevent over-reasoning/hallucination
+        # DeepSeek R1 Distill is sensitive to prompt length and can over-analyze simple greetings.
+        system_prompt = (
+            "You are a helpful AI assistant. Provide direct, accurate, and concise answers. "
+            f"Current date and time: {current_time}. Location: {current_location}. "
+            "If the user says a simple greeting (like 'hi' or 'hello'), just greet them back warmly and briefly."
+        )
+        
+        if is_first_message:
+            self._first_message_sent = True
+            self._last_location = current_location
+        elif location_changed:
+            self._last_location = current_location
+        
+        # Construct message history
+        # Optimization: Merge system messages into one if possible, or convert late ones to user messages
+        # to ensure the model pays attention to them.
+        processed_history = []
+        for msg in history:
+            if msg["role"] == "system":
+                # Convert following system messages to user messages to ensure LLM visibility
+                processed_history.append({"role": "user", "content": f"[SYSTEM CONTEXT UPDATE]\n{msg['content']}"})
+            else:
+                processed_history.append(msg)
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(processed_history)
+        messages.append({"role": "user", "content": message})
+        
+        # Apply chat template
+        prompt = self.pipeline.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+
+        
+        # Moderate max tokens for chat to prevent runaway generation/RAM spikes
+        # Articles/Research still use the dedicated high-limit methods
+        chat_max_tokens = 2048 
+        
+        # Generate response with LOCK to prevent concurrent model use
+        with self._lock:
+            outputs = self.pipeline(
+                prompt,
+                max_new_tokens=chat_max_tokens,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+                return_full_text=False, # Optimization: Only return new tokens
+            )
+        
+        response = outputs[0]['generated_text'].strip()
+        
+        # Cleanup memory after generation
+        self._cleanup_memory()
+        
+        return response
+
+
+    def process_command(self, user_input, history):
+        """Process slash commands shared between CLI and Web."""
+        response = {"handled": False, "message": "", "context": "", "error": ""}
+        
+        # /read <path>
+        if user_input.startswith("/read "):
+            response["handled"] = True
+            file_path = user_input[6:].strip()
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    response["context"] = f"\n\n[File Context: {file_path}]\n{content}\n"
+                    response["message"] = f"📄 Added file context: {file_path}"
+                except Exception as e:
+                    response["error"] = f"Error reading file: {e}"
+            else:
+                response["error"] = f"File not found: {file_path}"
+            return response
+
+        # /reset (Manual RAM cleanup)
+        if user_input.strip() == "/reset":
+            response["handled"] = True
+            self._unload_model()
+            response["message"] = "🧹 Model fully unloaded from RAM/VRAM. Next message will trigger reload."
+            return response
+
+        # /search <query>
+        is_search = False
+        for s_cmd in ["/search", "/online-search"]:
+            if user_input.startswith(s_cmd + " ") or user_input.startswith(s_cmd + "|"):
+                is_search = True
+                break
+        
+        if is_search:
+            response["handled"] = True
+            parts = user_input.split(' ', 1)
+            cmd_part = parts[0]
+            query = parts[1].strip() if len(parts) > 1 else ""
+            
+            iterations = 3
+            if '|' in cmd_part:
+                try:
+                    iter_str = cmd_part.split('|', 1)[1]
+                    if iter_str.isdigit():
+                        iterations = int(iter_str)
+                except:
+                    pass
+            
+            if query:
+                try:
+                    # Chat search skips images
+                    search_results = self.deep_research(query, iterations=iterations, include_images=False)
+                    if search_results:
+                        response["context"] = f"\n\n[Online Search Context: '{query}']\n{search_results}\n"
+                        response["message"] = f"🌍 Added search results for: '{query}'. You can ask questions about it or ask for summary."
+                    else:
+                        response["message"] = f"⚠️ No results found for: '{query}'"
+                except Exception as e:
+                    response["error"] = f"Search error: {e}"
+            else:
+                response["error"] = "Please provide a search query."
+            return response
+
+        # /save <path>
+        if user_input.startswith("/save"):
+            response["handled"] = True
+            # Handle /save|all syntax or regular /save
+            parts = user_input.split(' ', 1)
+            cmd_part = parts[0]
+            file_path = parts[1].strip() if len(parts) > 1 else ""
+            
+            save_all = "|all" in cmd_part.lower()
+            content_to_save = None
+            label = "response"
+            ext_suggestion = ".md"
+
+            if save_all:
+                # Format full history as markdown
+                history_content = "# Chat Conversation History\n\n"
+                for msg in history:
+                    role = "User" if msg["role"] == "user" else "Assistant"
+                    history_content += f"## {role}\n{msg['content']}\n\n"
+                content_to_save = history_content
+                label = "full conversation history"
+                ext_suggestion = ".md"
+            else:
+                # 1. Try to find last code block
+                for msg in reversed(history):
+                    if msg["role"] == "assistant":
+                        content = msg["content"]
+                        # Attempt to find code blocks and language
+                        matches = re.findall(r"```(.*?)\n(.*?)```", content, re.DOTALL)
+                        if matches:
+                            lang, code = matches[-1]
+                            content_to_save = code
+                            label = "code block"
+                            # Suggest extension based on language
+                            lang_map = {"python": ".py", "bash": ".sh", "javascript": ".js", "html": ".html", "css": ".css", "markdown": ".md"}
+                            ext_suggestion = lang_map.get(lang.strip().lower(), ".txt")
+                            
+                            # Heuristic: look for filename in the text before the block
+                            if not file_path:
+                                fn_match = re.search(r"(\w+[\.\w]+)", content[:content.find("```")].split("\n")[-1])
+                                if fn_match and "." in fn_match.group(1):
+                                    suggested_fn = fn_match.group(1)
+                                    if os.path.splitext(suggested_fn)[1] in lang_map.values():
+                                        file_path = suggested_fn
+                            break
+                        else:
+                            # 2. Fallback to full last response
+                            content_to_save = content
+                            label = "last response"
+                            ext_suggestion = ".md"
+                            break
+
+            if not file_path:
+                # Try to get a descriptive name from context
+                context_str = ""
+                if save_all and history:
+                    for msg in history:
+                        if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
+                            context_str = msg["content"]
+                            break
+                elif history:
+                    for msg in reversed(history):
+                        if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
+                            context_str = msg["content"]
+                            break
+                
+                # Slugify: lowercase, alphanumeric and underscores only
+                clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', context_str).strip()
+                slug = re.sub(r'\s+', '_', clean_text[:25]).lower()
+                
+                ts = int(time.time())
+                if save_all:
+                    prefix = f"chat_{slug}" if slug else "chat_all"
+                else:
+                    type_prefix = "code" if label == "code block" else "resp"
+                    prefix = f"{type_prefix}_{slug}" if slug else type_prefix
+                    
+                file_path = f"{prefix}_{ts}{ext_suggestion}"
+            elif "." not in os.path.basename(file_path):
+                # Add suggested extension if missing
+                file_path += ext_suggestion
+
+            if content_to_save:
+                # Check overwrite before saving. 
+                # NOTE: In Web context, we might want to just force or return content? 
+                # For now keeping CLI logic but adapting for return.
+                always_overwrite = self.args.force if self.args and hasattr(self.args, 'force') else False
+                should_write, final_path, _, _ = check_overwrite(file_path, always_overwrite=always_overwrite)
+                if should_write:
+                    try:
+                        with open(final_path, "w", encoding="utf-8") as f:
+                            f.write(content_to_save)
+                        response["message"] = f"💾 Exported {label} to: {final_path}"
+                    except Exception as e:
+                        response["error"] = f"Error saving file: {e}"
+                else:
+                    response["message"] = "Save cancelled (skipped)."
+            else:
+                 response["error"] = "No conversation content found to save."
+            
+            return response
+        
+        return response
 
     def chat_session(self):
         """Interactive Chat Loop."""
@@ -854,150 +1071,22 @@ a {{ color: #0066cc; text-decoration: underline; }}
                 if user_input.strip().lower() in ['exit', 'quit']:
                     break
                 
-                # Handle slash commands
-                if user_input.startswith("/read "):
-                    file_path = user_input[6:].strip()
-                    if os.path.exists(file_path):
-                        try:
-                            with open(file_path, "r", encoding="utf-8") as f:
-                                content = f.read()
-                            pending_context += f"\n\n[File Context: {file_path}]\n{content}\n"
-                            console.print(f"📄 [bold green]Added file context:[/bold green] {file_path}")
-                        except Exception as e:
-                            console.print(f"[bold red]❌ Error reading file:[/bold red] {e}")
+                # Check for slash commands first using shared logic
+                cmd_result = self.process_command(user_input, history)
+                if cmd_result["handled"]:
+                    if cmd_result["error"]:
+                        console.print(f"[bold red]❌ {cmd_result['error']}[/bold red]")
                     else:
-                        console.print(f"[bold red]❌ File not found:[/bold red] {file_path}")
-                    continue
-
-                is_search = False
-                for s_cmd in ["/search", "/online-search"]:
-                    if user_input.startswith(s_cmd + " ") or user_input.startswith(s_cmd + "|"):
-                        is_search = True
-                        break
-
-                if is_search:
-                    parts = user_input.split(' ', 1)
-                    cmd_part = parts[0]
-                    query = parts[1].strip() if len(parts) > 1 else ""
-                    
-                    iterations = 3
-                    if '|' in cmd_part:
-                        try:
-                            iter_str = cmd_part.split('|', 1)[1]
-                            if iter_str.isdigit():
-                                iterations = int(iter_str)
-                        except:
-                            pass
-                    
-                    if query:
-                        try:
-                            search_results = self.deep_research(query, iterations=iterations)
-                            if search_results:
-                                pending_context += f"\n\n[Online Search Context: '{query}']\n{search_results}\n"
-                                console.print(f"🌍 [bold green]Added search results for:[/bold green] '{query}'")
+                        if cmd_result["context"]:
+                            pending_context += cmd_result["context"]
+                        if cmd_result["message"]:
+                            # Style message based on type (search vs file)
+                            if "search" in cmd_result["message"].lower():
+                                console.print(f"[bold green]{cmd_result['message']}[/bold green]")
+                            elif "file" in cmd_result["message"].lower():
+                                console.print(f"[bold green]{cmd_result['message']}[/bold green]")
                             else:
-                                console.print(f"[bold yellow]⚠️ No results found for:[/bold yellow] '{query}'")
-                        except Exception as e:
-                            console.print(f"[bold red]❌ Search error:[/bold red] {e}")
-                    else:
-                        console.print("[bold red]❌ Please provide a search query.[/bold red]")
-                    continue
-
-                if user_input.startswith("/save"):
-                    # Handle /save|all syntax or regular /save
-                    parts = user_input.split(' ', 1)
-                    cmd_part = parts[0]
-                    file_path = parts[1].strip() if len(parts) > 1 else ""
-                    
-                    save_all = "|all" in cmd_part.lower()
-                    content_to_save = None
-                    label = "response"
-                    ext_suggestion = ".md"
-
-                    if save_all:
-                        # Format full history as markdown
-                        history_content = "# Chat Conversation History\n\n"
-                        for msg in history:
-                            role = "User" if msg["role"] == "user" else "Assistant"
-                            history_content += f"## {role}\n{msg['content']}\n\n"
-                        content_to_save = history_content
-                        label = "full conversation history"
-                        ext_suggestion = ".md"
-                    else:
-                        # 1. Try to find last code block
-                        for msg in reversed(history):
-                            if msg["role"] == "assistant":
-                                content = msg["content"]
-                                # Attempt to find code blocks and language
-                                matches = re.findall(r"```(.*?)\n(.*?)```", content, re.DOTALL)
-                                if matches:
-                                    lang, code = matches[-1]
-                                    content_to_save = code
-                                    label = "code block"
-                                    # Suggest extension based on language
-                                    lang_map = {"python": ".py", "bash": ".sh", "javascript": ".js", "html": ".html", "css": ".css", "markdown": ".md"}
-                                    ext_suggestion = lang_map.get(lang.strip().lower(), ".txt")
-                                    
-                                    # Heuristic: look for filename in the text before the block
-                                    if not file_path:
-                                        fn_match = re.search(r"(\w+[\.\w]+)", content[:content.find("```")].split("\n")[-1])
-                                        if fn_match and "." in fn_match.group(1):
-                                            suggested_fn = fn_match.group(1)
-                                            if os.path.splitext(suggested_fn)[1] in lang_map.values():
-                                                file_path = suggested_fn
-                                    break
-                                else:
-                                    # 2. Fallback to full last response
-                                    content_to_save = content
-                                    label = "last response"
-                                    ext_suggestion = ".md"
-                                    break
-
-                    if not file_path:
-                        # Try to get a descriptive name from context
-                        context_str = ""
-                        if save_all and history:
-                            for msg in history:
-                                if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
-                                    context_str = msg["content"]
-                                    break
-                        elif history:
-                            for msg in reversed(history):
-                                if msg["role"] == "user" and not msg["content"].strip().startswith("/"):
-                                    context_str = msg["content"]
-                                    break
-                        
-                        # Slugify: lowercase, alphanumeric and underscores only
-                        clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', context_str).strip()
-                        slug = re.sub(r'\s+', '_', clean_text[:25]).lower()
-                        
-                        ts = int(time.time())
-                        if save_all:
-                            prefix = f"chat_{slug}" if slug else "chat_all"
-                        else:
-                            type_prefix = "code" if label == "code block" else "resp"
-                            prefix = f"{type_prefix}_{slug}" if slug else type_prefix
-                            
-                        file_path = f"{prefix}_{ts}{ext_suggestion}"
-                    elif "." not in os.path.basename(file_path):
-                        # Add suggested extension if missing
-                        file_path += ext_suggestion
-
-                    if content_to_save:
-                        # Check overwrite before saving
-                        always_overwrite = self.args.force if self.args and hasattr(self.args, 'force') else False
-                        should_write, final_path, _, _ = check_overwrite(file_path, always_overwrite=always_overwrite)
-                        if should_write:
-                            try:
-                                with open(final_path, "w", encoding="utf-8") as f:
-                                    f.write(content_to_save)
-                                console.print(f"💾 [bold green]Exported {label} to:[/bold green] {final_path}")
-                            except Exception as e:
-                                console.print(f"[bold red]❌ Error saving file:[/bold red] {e}")
-                        else:
-                            console.print(f"\n[bold yellow]⏭️  Save cancelled (skipped).[/bold yellow]")
-                    else:
-                         console.print("[bold red]❌ No conversation content found to save.[/bold red]")
+                                console.print(f"[bold green]{cmd_result['message']}[/bold green]")
                     continue
 
                 # Construct prompt
@@ -1013,7 +1102,15 @@ a {{ color: #0066cc; text-decoration: underline; }}
                 
                 # Build prompt with dynamic system context (Time/Location)
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                system_prompt = f"You are a helpful assistant. Current date and time: {current_time}. User location: {user_location}."
+                # Use refined system prompt to prevent over-reasoning/hallucination
+                system_prompt = (
+                    "You are a helpful AI assistant. Provide direct, accurate, and concise answers. "
+                    f"Current date and time: {current_time}. User location: {user_location}. "
+                    "Use standard Markdown for all formatting (tables, lists, headers). "
+                    "For color requests, use ANSI escape codes (e.g., \\033[31m for red) - our terminal interface supports them. "
+                    "Avoid raw HTML unless specifically asked for a website design context. "
+                    "If the user says a simple greeting (like 'hi' or 'hello'), just greet them back warmly and briefly."
+                )
                 
                 prompt_messages = [{"role": "system", "content": system_prompt}] + history
                 
@@ -1022,37 +1119,37 @@ a {{ color: #0066cc; text-decoration: underline; }}
                 )
                 
                 with console.status("[yellow]Thinking...[/yellow]", spinner="dots"):
-                    outputs = self.pipeline(
-                        prompt, 
-                        max_new_tokens=512, 
-                        do_sample=True, 
-                        temperature=0.7,
-                        top_p=0.9,
-                    )
+                    with self._lock:  # Ensure thread-safe model access
+                        outputs = self.pipeline(
+                            prompt, 
+                            max_new_tokens=2048, # Reduced to prevent runaway generation
+                            do_sample=True, 
+                            temperature=0.7,
+                            top_p=0.9,
+                            return_full_text=False,
+                        )
                 
                 console.print("[bold green]Bot:[/bold green]")
                 
-                generated_text = outputs[0]['generated_text']
-                response = generated_text[len(prompt):].strip()
+                response_text = outputs[0]['generated_text'].strip()
                 
-                # Handle DeepSeek R1 reasoning
-                if '</think>' in response:
-                    parts = response.split('</think>', 1)
-                    reasoning = parts[0].replace('<think>', '').strip()
-                    final_answer = parts[1].strip() if len(parts) > 1 else ""
-                    
+                # Handle DeepSeek R1 reasoning using shared logic
+                parsed = self.extract_reasoning(response_text)
+                
+                if parsed["reasoning"]:
                     console.print("[dim italic]💭 Reasoning:[/dim italic]")
-                    console.print(f"[dim italic]{reasoning}[/dim italic]")
+                    console.print(f"[dim italic]{parsed['reasoning']}[/dim italic]")
                     console.print("")  # Spacer
-                    if final_answer:
+                    if parsed["content"]:
                         console.print("[bold]Answer:[/bold]")
-                        console.print(Markdown(final_answer))
+                        console.print(Markdown(parsed["content"]))
                 else:
-                    console.print(Markdown(response))
+                    console.print(Markdown(parsed["content"]))
                 console.print("")
                 
-                # Keep original response in history to maintain reasoning context
-                history.append({"role": "assistant", "content": response})
+                # Keep original response in history to maintain reasoning context for model
+                # But display has been handled
+                history.append({"role": "assistant", "content": response_text})
                 
             except KeyboardInterrupt:
                 console.print("\n")

@@ -13,6 +13,7 @@ performance.json
 .idea/
 
 # Any generated media from the script such as .jpg, .mp3, .mp4, etc.
+media-output/
 *.jpg
 *.gif
 *.png
@@ -40,3 +41,10 @@ performance.json
 # Ignore test outputs and pycache in testing dir
 ai_media/testing/data/outputs/
 ai_media/testing/__pycache__/
+
+# Configuration
+config.json
+
+# Web client build artifacts
+ai_media/web/node_modules/
+ai_media/web/dist/

@@ -1,0 +1,67 @@
+{
+  "name": "ai-media-desktop",
+  "version": "1.0.0",
+  "description": "AI-Media Desktop Application",
+  "main": "main.js",
+  "author": "AI-Media",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:mac:arm64": "electron-builder --mac --arm64",
+    "build:mac:x64": "electron-builder --mac --x64",
+    "build:mac:universal": "electron-builder --mac --universal",
+    "build:mac:all": "electron-builder --mac --arm64 && electron-builder --mac --x64",
+    "build:win:x64": "electron-builder --win --x64",
+    "build:win:arm64": "electron-builder --win --arm64",
+    "build:win:all": "electron-builder --win --x64 && electron-builder --win --arm64",
+    "build:linux:x64": "electron-builder --linux --x64",
+    "build:linux:arm64": "electron-builder --linux --arm64",
+    "build:linux:all": "electron-builder --linux --x64 && electron-builder --linux --arm64",
+    "build:all": "npm run build:mac:all && npm run build:win:all && npm run build:linux:all"
+  },
+  "devDependencies": {
+    "electron": "30.5.1",
+    "electron-builder": "^26.3.5"
+  },
+  "build": {
+    "appId": "com.aimedia.desktop",
+    "productName": "AI-Media",
+    "directories": {
+      "output": "../../../dist/desktop"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "config-loader.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "app",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "target": [
+        { "target": "AppImage", "arch": ["x64", "arm64"] },
+        { "target": "deb", "arch": ["x64", "arm64"] }
+      ]
+    }
+  }
+}
