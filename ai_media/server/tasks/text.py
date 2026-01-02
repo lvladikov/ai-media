@@ -242,14 +242,17 @@ def run_code_generation(
                       message="Generation failed", error="No files were generated")
                       
         # UNLOAD MODEL IMMEDIATELY to save resources as per user request
-        print("🔌 Code Generator disconnected - unloading text model...")
+        if hasattr(generator, 'stop'):
+            generator.stop()
+
+        # Explicitly call the aggressive unload method we just wrote
+        if hasattr(generator, '_unload_model'):
+            generator._unload_model()
+            
+        # Also clean up from cache system so it doesn't think it's still there
         model_cache.unload("text")
-        # Explicit VRAM cleanup
-        import torch
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
-        elif torch.cuda.is_available():
-            torch.cuda.empty_cache()
+
+        print("🔌 Code Generator disconnected - aggressive cleanup complete")
             
     except Exception as e:
         if not is_job_cancelled(job_id):

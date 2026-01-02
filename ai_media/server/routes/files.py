@@ -59,8 +59,14 @@ async def get_file(file_path: str, download: bool = Query(False, description="Fo
     else:
         full_path = os.path.join(CONFIG["paths"]["media_output"], file_path)
     
+    
     if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="File not found")
+        # Fallback: if path is absolute but leading slash was stripped (common in some API calls)
+        # try adding it back if the original didn't start with /
+        if not file_path.startswith("/") and os.path.exists("/" + file_path):
+            full_path = "/" + file_path
+        else:
+            raise HTTPException(status_code=404, detail="File not found")
     
     filename = os.path.basename(full_path)
     

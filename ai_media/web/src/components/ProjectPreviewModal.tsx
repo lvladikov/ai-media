@@ -5,7 +5,12 @@ import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import { API_BASE_URL } from '../config';
 
-// Ensure languages are loaded (reusing imports from PreviewModal implies they are globally available or we import again)
+// Load Core Dependencies
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-markup';
+import 'prismjs/components/prism-markup-templating';
+
+// Ensure languages are loaded
 // Import simplified set for this component or rely on global Prism if loaded elsewhere.
 // Better to be safe and import common ones.
 import 'prismjs/components/prism-javascript';
@@ -18,6 +23,20 @@ import 'prismjs/components/prism-go';
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-jsx';
 import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-csharp';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-xml-doc';
+import 'prismjs/components/prism-php';
+import 'prismjs/components/prism-ruby';
+import 'prismjs/components/prism-swift';
+import 'prismjs/components/prism-kotlin';
+import 'prismjs/components/prism-docker';
+import 'prismjs/components/prism-toml';
+import 'prismjs/components/prism-ini';
 
 interface ProjectPreviewModalProps {
   isOpen: boolean;
@@ -104,7 +123,20 @@ const getLanguage = (fileName: string) => {
     'py': 'python', 'md': 'markdown',
     'json': 'json', 'css': 'css',
     'html': 'html', 'go': 'go',
-    'sh': 'bash', 'rs': 'rust'
+    'sh': 'bash', 'rs': 'rust',
+    'java': 'java',
+    'c': 'c', 'h': 'c',
+    'cpp': 'cpp', 'hpp': 'cpp', 'cc': 'cpp',
+    'cs': 'csharp',
+    'yaml': 'yaml', 'yml': 'yaml',
+    'xml': 'xml',
+    'php': 'php',
+    'rb': 'ruby',
+    'swift': 'swift',
+    'kt': 'kotlin', 'kts': 'kotlin',
+    'toml': 'toml',
+    'ini': 'ini',
+    'dockerfile': 'docker'
   };
   return map[ext] || 'text';
 };
@@ -150,9 +182,19 @@ export function ProjectPreviewModal({
                 const tree = buildFileTree(files);
                 setFileTree(tree);
 
-                // Open root folders by default
+                // Open ALL folders by default (recursive)
                 const newExpanded = new Set<string>();
-                tree.filter(n => n.isDir).forEach(n => newExpanded.add(n.path));
+                const expandAll = (nodes: FileNode[]) => {
+                    nodes.forEach(node => {
+                        if (node.isDir) {
+                            newExpanded.add(node.path);
+                            if (node.children.length > 0) {
+                                expandAll(node.children);
+                            }
+                        }
+                    });
+                };
+                expandAll(tree);
                 setExpandedFolders(newExpanded);
 
                 // Auto select first file
@@ -377,7 +419,7 @@ export function ProjectPreviewModal({
                        </div>
                   ) : (
                       selectedFile ? (
-                        <pre className="!m-0 !p-6 !bg-transparent text-sm min-h-full font-mono !font-normal">
+                        <pre className="!m-0 !p-6 !bg-transparent text-sm min-h-full font-mono !font-normal !whitespace-pre !w-max min-w-full">
                             <code className={`language-${getLanguage(selectedFile)}`}>
                                 {fileContent}
                             </code>

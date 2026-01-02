@@ -136,7 +136,10 @@ export const useAppStore = create<AppState>((set) => ({
   // Jobs
   jobs: [],
   setJobs: (jobs) => set({ jobs }),
-  addJob: (job) => set((state) => ({ jobs: [job, ...state.jobs] })),
+  addJob: (job) => set((state) => {
+    if (state.jobs.some(j => j.job_id === job.job_id)) return state;
+    return { jobs: [job, ...state.jobs] };
+  }),
   updateJob: (jobId, updates) => set((state) => ({
     jobs: state.jobs.map((j) => j.job_id === jobId ? { ...j, ...updates } : j),
   })),

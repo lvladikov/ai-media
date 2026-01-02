@@ -113,7 +113,7 @@ export function useJobSocket() {
       socketRef.current = ws;
 
       ws.onopen = () => {
-        console.log("Job socket connected");
+        // console.log("Job socket connected");
       };
 
       ws.onmessage = (event) => {

@@ -4,7 +4,12 @@ import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import domToImage from 'dom-to-image';
 
-// Load extra languages
+// Load Core Dependencies
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-markup';
+import 'prismjs/components/prism-markup-templating';
+
+// Load languages
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-json';
@@ -17,6 +22,19 @@ import 'prismjs/components/prism-tsx';
 import 'prismjs/components/prism-sql';
 import 'prismjs/components/prism-go';
 import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-csharp';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-xml-doc'; // Using xml-doc or just xml/markup usually
+import 'prismjs/components/prism-php';
+import 'prismjs/components/prism-ruby';
+import 'prismjs/components/prism-swift';
+import 'prismjs/components/prism-kotlin';
+import 'prismjs/components/prism-docker';
+import 'prismjs/components/prism-toml';
+import 'prismjs/components/prism-ini';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -33,7 +51,7 @@ const getFileType = (fileName: string): FileType => {
   if (['mp4', 'webm', 'mov', 'mkv'].includes(ext)) return 'video';
   if (['mp3', 'wav', 'flac', 'm4a', 'aac'].includes(ext)) return 'audio';
   if (ext === 'pdf') return 'pdf';
-  if (['md', 'txt', 'json', 'html', 'css', 'js', 'py', 'ts', 'tsx', 'sql', 'go', 'rust', 'sh', 'bash'].includes(ext)) return 'text';
+  if (['md', 'txt', 'json', 'html', 'css', 'js', 'py', 'ts', 'tsx', 'sql', 'go', 'rs', 'rust', 'sh', 'bash', 'java', 'c', 'h', 'cpp', 'hpp', 'cc', 'cs', 'yaml', 'yml', 'xml', 'php', 'rb', 'swift', 'kt', 'kts', 'toml', 'ini', 'dockerfile'].includes(ext)) return 'text';
   return 'unsupported';
 };
 
@@ -54,6 +72,25 @@ const getLanguage = (fileName: string) => {
     'sql': 'sql',
     'go': 'go',
     'rust': 'rust',
+    'rs': 'rust',
+    'java': 'java',
+    'c': 'c',
+    'h': 'c',
+    'cpp': 'cpp',
+    'hpp': 'cpp',
+    'cc': 'cpp',
+    'cs': 'csharp',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'xml': 'xml',
+    'php': 'php',
+    'rb': 'ruby',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'kts': 'kotlin',
+    'toml': 'toml',
+    'ini': 'ini',
+    'dockerfile': 'docker',
   };
   return map[ext] || 'none';
 };
@@ -63,6 +100,13 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
   const [error, setError] = useState<string | null>(null);
   const fileUrl = `http://localhost:8000/api/files/${filePath}`;
   const fileType = getFileType(fileName);
+
+  // Handle loading state for static/unsupported types
+  useEffect(() => {
+    if (fileType === 'unsupported' || fileType === 'pdf') {
+        setLoading(false);
+    }
+  }, [fileType]);
 
   if (!isOpen) return null;
 
@@ -123,7 +167,6 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
       case 'text':
         return <TextPreview fileName={fileName} url={fileUrl} onLoad={() => setLoading(false)} onError={() => { setLoading(false); setError('Failed to load file'); }} />;
       default:
-        setLoading(false);
         return (
           <div className="text-center p-8 flex flex-col items-center justify-center h-full">
             <p className="text-lg mb-4">Cannot preview this file type</p>

@@ -109,6 +109,8 @@ class ArticleGenerator:
 
     def stop(self):
         """Signal the generator to stop current operation."""
+        if self.is_cancelled:
+            return
         self.is_cancelled = True
         print(f"🛑 Interruption requested for {self.model_name}")
 
@@ -171,7 +173,17 @@ class ArticleGenerator:
         """Fully unload the model and tokenizer to free all possible RAM/VRAM."""
         import gc
         
-        # Unload model if it exists
+        # 1. Break down pipeline
+        if hasattr(self, 'pipeline') and self.pipeline is not None:
+            # Manually break internal references if possible
+            if hasattr(self.pipeline, 'model'):
+                del self.pipeline.model
+            if hasattr(self.pipeline, 'tokenizer'):
+                del self.pipeline.tokenizer
+            del self.pipeline
+            self.pipeline = None
+
+        # 2. Delete direct model references
         if hasattr(self, 'model') and self.model is not None:
             del self.model
             self.model = None
@@ -179,17 +191,27 @@ class ArticleGenerator:
         if hasattr(self, 'tokenizer') and self.tokenizer is not None:
             del self.tokenizer
             self.tokenizer = None
-
-        if hasattr(self, 'pipeline') and self.pipeline is not None:
-            del self.pipeline
-            self.pipeline = None
             
-        gc.collect()
+        # 3. Clear any stopping criteria that might hold references
+        if hasattr(self, 'stopping_criteria'):
+            del self.stopping_criteria
+
+        # 4. Aggressive GC
+        # Run multiple times to clear reference cycles
+        for _ in range(3):
+            gc.collect()
         
+        # 5. Native Memory Release
         if self.torch.backends.mps.is_available():
             self.torch.mps.empty_cache()
+            # Try to force sync to ensure memory is actually freed
+            try:
+                self.torch.mps.synchronize() 
+            except:
+                pass
         elif self.torch.cuda.is_available():
             self.torch.cuda.empty_cache()
+            self.torch.cuda.ipc_collect()
 
     def _load_model(self):
         """Load the LLM pipeline."""
@@ -600,8 +622,10 @@ class ArticleGenerator:
             "e.g., '# filename: my_script.py' or '// filename: src/utils.js'. "
             "You can use folder paths like 'src/module/file.py'. "
             "If multiple files are needed, separate them with filename comments. "
-            "Do not include markdown backticks or explanations unless asked. "
-            "Make sure the filename extension matches the code language."
+            "Do NOT include markdown backticks. "
+            "CRITICAL: Do NOT write any conversational text, introductions, or conclusions outside of code comments. "
+            "Any explanation MUST be inside a comment block valid for the detected language "
+            "(e.g. // for Rust/C/JS, # for Python). Never output invalid syntax."
         )
         user_prompt = f"Request: {prompt}\n\nCode:"
         
@@ -641,15 +665,29 @@ class ArticleGenerator:
         self.last_reasoning = extracted["reasoning"]
         response = extracted["content"]
         
-        # Try to detect language from markdown fence before stripping
+        # Try to detect language from markdown fence
         detected_lang = None
         match = re.search(r"```(\w+)\s*\n", response)
         if match:
             detected_lang = match.group(1).lower()
+
+        # STRICT PARSING: Use variable-length fence matching to handle nested code blocks correctly.
+        # Matches: (3+ backticks) [optional lang] [newline?] (content) (SAME backticks)
+        code_blocks = re.findall(r"(`{3,})(?:\w+)?\n?(.*?)\1", response, re.DOTALL)
+        
+        if code_blocks:
+            # code_blocks is list of tuples [('```', 'content'), ...] -> extract second query
+            extracted_content = [block[1].strip() for block in code_blocks]
             
-        # Remove markdown code fences if present (strip ONLY the fences, keep content)
-        response = re.sub(r"```\w*\n?", "", response)  # This removes opening fence '```python'
-        response = response.replace("```", "")         # This removes closing fence '```'
+            print(f"   ✂️  Extracted {len(extracted_content)} code block(s) and discarded conversational text.")
+            if self.progress_callback:
+                self.progress_callback("generating", 85, "Cleaning conversational text...")
+            
+            # Join blocks with newlines
+            response = "\n\n".join(extracted_content)
+        else:
+            # Fallback: No fences found (raw output)
+            pass
         
         if self.progress_callback:
             self.progress_callback("generating", 80, "Parsing output...")
