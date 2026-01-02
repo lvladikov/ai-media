@@ -120,6 +120,7 @@ async def get_all_models():
                 "name": name,
                 "model_id": model_id,
                 "category": category,
+                "is_default": model_dict.get("default") == model_id,
             }
             # Add optional fields if present in requirements
             if "vram" in reqs:

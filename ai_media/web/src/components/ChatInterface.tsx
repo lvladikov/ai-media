@@ -58,6 +58,7 @@ interface ModelInfo {
   vram_required: number | null;
   ram_required: number | null;
   max_resolution: [number, number] | null;
+  is_default?: boolean;
 }
 
 // Display names matching CLI
@@ -433,7 +434,8 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
 
 export function ChatInterface() {
   const { chatSessionId, chatMessages, setChatSessionId, addChatMessage, clearChat } = useAppStore();
-  const [model, setModel] = useState('llama-3.1-8b');
+  const [model, setModel] = useState(''); // Initial value empty, set after fetch
+  const [defaultModelId, setDefaultModelId] = useState(''); // Store default model ID from backend
   const [input, setInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -468,10 +470,41 @@ export function ChatInterface() {
     fetchModels()
       .then((data) => {
         if (data.text) {
-          setAvailableModels(data.text);
+          const models = data.text;
+          setAvailableModels(models);
+          
+          // Find default model based on backend flag
+          let initialModel = '';
+          const defaultModel = models.find((m: ModelInfo) => m.is_default);
+          
+          if (defaultModel) {
+             initialModel = defaultModel.name;
+          } else if (models.length > 0) {
+             // Fallback if no default flag
+             initialModel = models[0].name;
+          }
+          
+          setModel(initialModel);
+          setDefaultModelId(initialModel);
         }
       })
       .catch((err) => console.error('Failed to fetch models:', err));
+
+    // Cleanup: Disconnect when component unmounts (navigating away)
+    return () => {
+      if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) {
+        // console.log('Navigating away: Auto-disconnecting chat...');
+        socketRef.current.close();
+      }
+      // Reset critical state
+      setChatSessionId('');
+      clearChat();
+      setModel(''); // Will wait for re-fetch on mount
+      setStatusMessage(null);
+      setIsProcessing(false);
+      setQueuedMessages([]);
+      setLoadError(null);
+    };
   }, []);
 
   useEffect(() => {
@@ -747,7 +780,7 @@ export function ChatInterface() {
     setIsModelReady(false);
     setLoadingLogs([]);
     clearChat();
-    setModel('llama-3.1-8b');
+    setModel(defaultModelId);
     setStatusMessage(null);
     setIsProcessing(false);
     setQueuedMessages([]);
