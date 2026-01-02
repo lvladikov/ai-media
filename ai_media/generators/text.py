@@ -390,7 +390,7 @@ class ArticleGenerator:
                     self.progress_callback("error", 0, err)
                 return False
 
-    def deep_research(self, query, iterations=3, include_images=True):
+    def deep_research(self, query, iterations=3, max_images=5):
         """Perform recursive web search and summarization."""
         if not self.ddgs:
             print("❌ Online search unavailable (duckduckgo_search not installed)")
@@ -420,7 +420,11 @@ class ArticleGenerator:
             pad_width = len(str(iterations))
             for i, res in enumerate(search_results, 1):
                 num_str = str(i).zfill(pad_width)
-                print(f"   Reading [{num_str}]: {res['title']}...")
+                msg = f"Reading [{num_str}]: {res['title']}..."
+                print(f"   {msg}")
+                if self.progress_callback:
+                   self.progress_callback("generating", 30 + int((i/iterations)*10), msg)
+                
                 content = res.get('body', '') or res.get('snippet', '')
                 
                 # Attempt deep scraping for better context
@@ -446,11 +450,17 @@ class ArticleGenerator:
         
         # 2. Image Search
         image_results = []
-        if include_images:
+        # Support both explicit include_images boolean (old API) or int count (new API)
+        should_search_images = max_images > 0
+        
+        if should_search_images:
             try:
                 image_query = f"{query} photos"
                 print(f"   🖼️  Searching for images...")
-                image_search = list(self.ddgs.images(image_query, max_results=5))
+                if self.progress_callback:
+                    self.progress_callback("generating", 45, "Searching for images...")
+
+                image_search = list(self.ddgs.images(image_query, max_results=max_images))
                 
                 for img in image_search:
                     img_url = img.get('image', '')
@@ -460,6 +470,8 @@ class ArticleGenerator:
                 
                 if image_results:
                     print(f"   ✅ Found {len(image_results)} images")
+                    if self.progress_callback:
+                        self.progress_callback("generating", 48, f"Found {len(image_results)} images")
             except Exception as e:
                 print(f"   ⚠️  Image search failed: {e}")
             
@@ -474,7 +486,7 @@ class ArticleGenerator:
         return research_context
 
     def generate_article(self, topic, output_file, format="md", online=False, 
-                        research_iter=3, length="quick"):
+                        research_iter=3, max_images=5, length="quick"):
         """Generate full article with optional research.
         
         Args:
@@ -483,6 +495,7 @@ class ArticleGenerator:
             format: Output format (md, html, pdf, docx, rtf, txt, json)
             online: Enable deep research mode
             research_iter: Number of search iterations
+            max_images: Maximum number of images to fetch
             length: 'quick' (512 tokens), 'standard' (2048), 'detailed' (4096)
         """
         from rich.console import Console
@@ -500,7 +513,7 @@ class ArticleGenerator:
         research_data = ""
         if online:
             with console.status(f"[bold green]Thinking... (Deep Research Iterations {research_iter})[/bold green]", spinner="dots"):
-                research_data = self.deep_research(topic, iterations=research_iter)
+                research_data = self.deep_research(topic, iterations=research_iter, max_images=max_images)
         
         self._load_model()
         if not self.pipeline:
@@ -515,7 +528,11 @@ class ArticleGenerator:
             system_prompt = (
                 f"You are an expert investigative journalist. Write a {style}, well-structured "
                 "article based on the following research context. Use Markdown formatting. "
-                "Cite sources where appropriate."
+                "Cite sources where appropriate. "
+                "CRITICAL: The context contains a list of 'Available Images'. If these images are "
+                "relevant to the content, please embed them using standard Markdown "
+                "syntax `![Alt Text](URL)` where they fit the narrative. Do not force the inclusion "
+                "of irrelevant images."
             )
             user_prompt = f"Topic: {topic}\n\nResearch Context:\n{research_data}\n\nArticle:"
         else:

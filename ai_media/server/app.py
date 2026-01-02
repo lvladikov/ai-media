@@ -35,12 +35,17 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     # Startup
     state.MAIN_LOOP = asyncio.get_running_loop()
-    print("🚀 AI-Media Server starting...")
+    print("✅ AI-Media Server Ready")
     
     yield
     
     # Shutdown
     print("🛑 AI-Media Server shutting down...")
+    
+    # Terminate all child processes first
+    from .process_manager import terminate_all_processes
+    terminate_all_processes()
+    
     force_cleanup()
 
 
@@ -105,6 +110,11 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
     def handle_shutdown(signum, frame):
         """Handle shutdown signal."""
         print("\n🛑 Shutdown signal received...")
+        
+        # Terminate all child processes first
+        from .process_manager import terminate_all_processes
+        terminate_all_processes()
+        
         force_cleanup()
         
         # Force exit after cleanup

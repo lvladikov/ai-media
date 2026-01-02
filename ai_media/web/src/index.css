@@ -42,7 +42,7 @@
 
 @layer components {
   .sidebar {
-    @apply w-64 bg-secondary border-r border-border flex flex-col self-stretch transition-colors duration-200;
+    @apply w-52 bg-secondary border-r border-border flex flex-col self-stretch transition-colors duration-200;
   }
   
   .main-content {

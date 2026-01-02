@@ -2,8 +2,7 @@
 
 import os
 from pathlib import Path
-
-from ..jobs import update_job, is_job_cancelled
+from multiprocessing import Queue
 
 
 def run_image_generation(
@@ -15,14 +14,20 @@ def run_image_generation(
     model: str,
     steps: int,
     guidance_scale: float,
+    progress_queue: Queue = None,
 ):
-    """Background task for image generation."""
+    """Background task for image generation. Runs in child process."""
+    
+    def send_update(**kwargs):
+        """Send progress update to parent via queue."""
+        if progress_queue:
+            try:
+                progress_queue.put({"job_id": job_id, **kwargs})
+            except Exception:
+                pass
+    
     try:
-        # Check for cancellation before starting
-        if is_job_cancelled(job_id):
-            return
-            
-        update_job(job_id, status="loading", phase="loading", progress=10, message="Loading model...")
+        send_update(status="loading", phase="loading", progress=10, message="Loading model...")
         
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -30,12 +35,7 @@ def run_image_generation(
         # Import and run the existing generator
         from ai_media.generators.image import generate_image as gen_image
         
-        # Check for cancellation before generation
-        if is_job_cancelled(job_id):
-            print(f"🛑 Image generation cancelled for job {job_id[:8]}...")
-            return
-        
-        update_job(job_id, status="generating", phase="generating", progress=30, message="Generating image...")
+        send_update(status="generating", phase="generating", progress=30, message="Generating image...")
         
         success = gen_image(
             prompt=prompt,
@@ -47,20 +47,8 @@ def run_image_generation(
             guidance_scale=guidance_scale,
         )
         
-        # Check for cancellation after generation (cleanup if cancelled mid-generation)
-        if is_job_cancelled(job_id):
-            print(f"🛑 Image generation cancelled for job {job_id[:8]}...")
-            # Clean up partial output if exists
-            try:
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-            except Exception:
-                pass
-            return
-        
         if success:
-            update_job(
-                job_id,
+            send_update(
                 status="complete",
                 phase="complete",
                 progress=100,
@@ -68,8 +56,7 @@ def run_image_generation(
                 result_path=output_path,
             )
         else:
-            update_job(
-                job_id,
+            send_update(
                 status="failed",
                 phase="failed",
                 progress=100,
@@ -77,15 +64,13 @@ def run_image_generation(
                 error="Image generation returned False",
             )
     except Exception as e:
-        if not is_job_cancelled(job_id):
-            update_job(
-                job_id,
-                status="failed",
-                phase="failed",
-                progress=100,
-                message=f"Error: {str(e)}",
-                error=str(e),
-            )
+        send_update(
+            status="failed",
+            phase="failed",
+            progress=100,
+            message=f"Error: {str(e)}",
+            error=str(e),
+        )
     finally:
         # Clear GPU memory
         try:
@@ -93,3 +78,4 @@ def run_image_generation(
             clear_gpu_memory()
         except Exception:
             pass
+

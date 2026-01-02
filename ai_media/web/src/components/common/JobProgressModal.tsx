@@ -161,7 +161,7 @@ export function JobProgressModal({ jobId, onClose }: JobProgressModalProps) {
           {!isComplete && !isFailed && (
             <div className="space-y-2">
               <div className="h-2 w-full bg-tertiary rounded-full overflow-hidden relative">
-                {job.type === 'code' && job.phase === 'generating' ? (
+                {(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (
                   <div className="h-full bg-brand-500 w-1/3 absolute rounded-full animate-progress-bounce" />
                 ) : (
                   <div 
@@ -173,7 +173,7 @@ export function JobProgressModal({ jobId, onClose }: JobProgressModalProps) {
                 )}
               </div>
               <div className="flex justify-between text-xs text-secondary">
-                 <span>{job.type === 'code' && job.phase === 'generating' ? 'Generating...' : `${percent}%`}</span>
+                 <span>{(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
                  {percent < 100 && <span>Please wait...</span>}
               </div>
             </div>

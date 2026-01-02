@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { generateCode, fetchModels } from '../hooks/useApi';
-import { Code, Loader2, AlertTriangle, Download, FolderArchive, X } from 'lucide-react';
+import { Code, Loader2, Download, FolderArchive, AlertTriangle } from 'lucide-react';
 import { RandomPrompt } from './common/RandomPrompt';
 import { Tooltip } from './common/Tooltip';
 import { ValidationTooltip } from './common/ValidationTooltip';
+import { ErrorAlert } from './common/ErrorAlert';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
 import { ProjectPreviewModal } from './ProjectPreviewModal';
@@ -13,23 +14,22 @@ import { API_BASE_URL } from '../config';
 
 interface ModelInfo {
   name: string;
+  is_default?: boolean;
 }
 
 // Display names matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
-  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 7B (Reasoning)', vram: '~7GB' },
-  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 14B (Reasoning)', vram: '~14GB' },
-  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 32B (Reasoning)', vram: '~24GB' },
-  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B', vram: '~8GB' },
-  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (High VRAM)', vram: '~40GB' },
+  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)', vram: '~7GB' },
+  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)', vram: '~14GB' },
+  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
+  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
+  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
-  'default': { label: 'Default (Llama 3.1 8B)', vram: '~8GB' },
 };
 
 const MODEL_ORDER = [
-  'default',
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
   'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b'
@@ -38,7 +38,7 @@ const MODEL_ORDER = [
 export function CodeGenerator() {
   const { addJob } = useAppStore();
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('default');
+  const [model, setModel] = useState('');
   const [outputName, setOutputName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -59,6 +59,18 @@ export function CodeGenerator() {
       .then((data) => {
         if (data.text) {
           setAvailableModels(data.text);
+          
+          // Find default model based on backend flag
+          let initialModel = '';
+          const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
+          
+          if (defaultModel) {
+             initialModel = defaultModel.name;
+          } else if (data.text.length > 0) {
+             initialModel = data.text[0].name;
+          }
+          
+          setModel(initialModel);
         }
       })
       .catch((err) => console.error('Failed to fetch models:', err));
@@ -143,10 +155,9 @@ export function CodeGenerator() {
             } else if (job.status === 'failed' || job.status === 'cancelled') {
                 setIsLoading(false);
                 
-                let msg = job.error || job.message || "Generation failed";
-                if (job.status === 'cancelled') {
-                   msg += " (Note: If model was downloading, it may finish before cleanup)";
-                }
+                const msg = job.status === 'cancelled' 
+                    ? "Job cancelled." 
+                    : (job.error || job.message || "Generation failed");
                 setError(msg);
                 
                 // Auto-dismiss after 6 seconds
@@ -167,9 +178,9 @@ export function CodeGenerator() {
     setIsLoading(false);
   };
 
-  // Sort models - exclude llama-3.1-8b since it's the same as 'default'
+  // Sort models based on fixed order, filtering valid ones from API
   const sortedModels = MODEL_ORDER.filter(name => 
-    (name === 'default' || availableModels.some(m => m.name === name)) && name !== 'llama-3.1-8b'
+    availableModels.some(m => m.name === name)
   );
 
   // Get display name for result
@@ -208,6 +219,7 @@ export function CodeGenerator() {
                <Tooltip content="LLM for coding. DeepSeek R1 models are recommended for best logic." />
             </label>
             <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
+               {!model && <option value="">Loading...</option>}
                {sortedModels.map((name) => {
                 const info = MODEL_DISPLAY_INFO[name];
                 return (
@@ -258,22 +270,7 @@ export function CodeGenerator() {
         </ValidationTooltip>
       </div>
 
-      {error && (
-        <div className="mt-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 flex items-start gap-2 relative group">
-           <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-           <div className="flex-1 pr-6">
-             <p className="font-semibold">Generation Failed</p>
-             <p className="text-sm opacity-90">{error}</p>
-           </div>
-           <button 
-             onClick={() => setError(null)}
-             className="absolute top-4 right-4 text-red-300 hover:text-white transition-colors p-1"
-             aria-label="Dismiss error"
-           >
-             <X size={16} />
-           </button>
-        </div>
-      )}
+      <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
       {result && (
         <div className="mt-6 card">

@@ -12,10 +12,9 @@ from ..utils.system import get_optimal_device_and_dtype
 
 
 def generate_edit(input_path, prompt, output_path, model_name="default", 
-                  guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False):
+                  guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False, progress_callback=None):
     """
     Edit an existing image based on instructions using InstructPix2Pix.
-    
     Args:
         input_path: Path to source image
         prompt: Edit instruction (e.g., "make it a watercolor painting")
@@ -29,6 +28,35 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
     Returns:
         True on success, False on failure
     """
+    import time
+
+    class GlobalProgressTracker:
+        def __init__(self, total_steps, start_time=None):
+            self.total_steps = total_steps
+            self.current_step = 0
+            self.start_time = start_time or time.time()
+            self.last_update_ts = 0
+            
+        def update(self, step_increment=1, model_desc=""):
+            self.current_step += step_increment
+            
+            # Throttle updates to ~2 times per second to avoid flooding logs
+            now = time.time()
+            if now - self.last_update_ts < 0.5 and self.current_step < self.total_steps:
+                return None
+            self.last_update_ts = now
+            
+            elapsed = now - self.start_time
+            if self.current_step > 0:
+                avg_time_per_step = elapsed / self.current_step
+                remaining_steps = self.total_steps - self.current_step
+                eta_seconds = int(remaining_steps * avg_time_per_step)
+                eta_str = f"{eta_seconds//60}m {eta_seconds%60}s" if eta_seconds > 60 else f"{eta_seconds}s"
+            else:
+                eta_str = "Calculating..."
+                
+            percent = min(99, int((self.current_step / self.total_steps) * 100))
+            return percent, f"{model_desc}: {percent}% | Step {self.current_step}/{self.total_steps} | ETA: {eta_str}"
     import torch
     from diffusers import StableDiffusionInstructPix2PixPipeline, StableDiffusionXLInstructPix2PixPipeline
     from diffusers.utils import load_image
@@ -61,9 +89,19 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
         image = PIL.ImageOps.exif_transpose(image)
         image = image.convert("RGB")
         
+        # Initialize progress tracker
+        global_tracker = GlobalProgressTracker(steps, start_time=time.time())
+
+        # Define callback for Diffusers
+        def diffusers_callback(step: int, timestep: int, latents: torch.FloatTensor):
+            progress_data = global_tracker.update(1, model_desc="Applying edits")
+            if progress_data and progress_callback:
+                pct, msg = progress_data
+                progress_callback(pct, msg)
+
         # Initialize Pipeline
         if "qwen-image-edit" in model_name.lower():
-            # Qwen-Image-Edit for professional editing
+            # ... (unchanged setup code) ...
             from diffusers import DiffusionPipeline
             
             # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa
@@ -78,6 +116,8 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
             
             print(f"   ℹ️  Loading Qwen-Image-Edit Pipeline...")
+            if progress_callback: progress_callback(0, "Loading Qwen-Image-Edit pipeline...")
+            
             pipe = DiffusionPipeline.from_pretrained(
                 model_id,
                 torch_dtype=qwen_dtype
@@ -90,13 +130,22 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 pipe = pipe.to(device)
             
             # Generate with Qwen-Image-Edit
-            print(f"✨ Applying edits with Qwen-Image-Edit... (Steps: {steps})")
+            qwen_steps = steps if steps != 50 else 20
+            # Re-init tracker with correct steps for Qwen default override
+            global_tracker = GlobalProgressTracker(qwen_steps, start_time=time.time())
+            
+            start_msg = f"✨ Applying edits with Qwen-Image-Edit... (Steps: {qwen_steps})"
+            print(start_msg)
+            if progress_callback: progress_callback(0, start_msg)
+            
             with torch.inference_mode():
                 output = pipe(
                     prompt=prompt,
                     image=image,
-                    num_inference_steps=steps if steps != 50 else 20,
+                    num_inference_steps=qwen_steps,
                     guidance_scale=guidance_scale if guidance_scale != 7.5 else 4.0,
+                    callback=diffusers_callback,
+                    callback_steps=1
                 )
             
             result = output.images[0]
@@ -106,6 +155,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             
         elif "sdxl" in model_id.lower():
             # SDXL InstructPix2Pix
+            if progress_callback: progress_callback(0, "Loading SDXL InstructPix2Pix pipeline...")
             pipe = StableDiffusionXLInstructPix2PixPipeline.from_pretrained(
                 model_id,
                 torch_dtype=dtype
@@ -122,6 +172,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             if unsafe:
                 kwargs["safety_checker"] = None
                 
+            if progress_callback: progress_callback(0, "Loading InstructPix2Pix pipeline...")
             pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                 model_id, 
                 torch_dtype=dtype,
@@ -133,14 +184,19 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             pipe.enable_attention_slicing()
         
         # Generate
-        print(f"✨ Applying edits... (Steps: {steps}, Text Guide: {guidance_scale}, Image Guide: {image_guidance_scale})")
+        start_msg = f"✨ Applying edits... (Steps: {steps}, Text Guide: {guidance_scale}, Image Guide: {image_guidance_scale})"
+        print(start_msg)
+        if progress_callback: progress_callback(0, start_msg)
+        
         with torch.inference_mode():
             output = pipe(
                 prompt,
                 image=image,
                 num_inference_steps=steps,
                 guidance_scale=guidance_scale,
-                image_guidance_scale=image_guidance_scale
+                image_guidance_scale=image_guidance_scale,
+                callback=diffusers_callback,
+                callback_steps=1
             )
             
         result = output.images[0]

@@ -2,6 +2,7 @@
 import { RandomPrompt } from './common/RandomPrompt';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
+import { ErrorAlert } from './common/ErrorAlert';
 
 interface ModelInfo {
   name: string;
@@ -105,9 +106,13 @@ export function AudioGenerator() {
             if (updatedJob.status === 'complete') {
                 setResult(updatedJob.result_path);
                 setIsLoading(false);
-            } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
+            } else if (updatedJob.status === 'failed') {
                 setIsLoading(false);
                 setError(updatedJob.error || updatedJob.message || "Generation failed");
+            } else if (updatedJob.status === 'cancelled') {
+                setIsLoading(false);
+                setError("Job cancelled.");
+                setTimeout(() => setError(null), 6000);
             }
         } else {
             // Job not found in store (removed on cancellation)
@@ -207,15 +212,7 @@ export function AudioGenerator() {
         </ValidationTooltip>
       </div>
 
-      {error && (
-        <div className="mt-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 flex items-start gap-2">
-           <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-           <div>
-             <p className="font-semibold">Generation Failed</p>
-             <p className="text-sm opacity-90">{error}</p>
-           </div>
-        </div>
-      )}
+      <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
       {result && (
         <div className="mt-6 card">

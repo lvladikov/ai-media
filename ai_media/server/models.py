@@ -100,6 +100,7 @@ class ArticleGenerateRequest(BaseModel):
     length: str = Field("standard", description="quick, standard, or detailed")
     online: bool = Field(False, description="Enable online research")
     research_iterations: int = Field(3, description="Number of research iterations (if online)")
+    max_images: int = Field(5, description="Maximum number of images to fetch (if online)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
 
 

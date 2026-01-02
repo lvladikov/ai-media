@@ -3,6 +3,11 @@ import { useAppStore } from '../store';
 import type { ResourceStats } from '../store';
 import { API_BASE_URL as API_BASE } from '../config';
 
+export interface ModelInfo {
+  name: string;
+  is_default?: boolean;
+}
+
 /**
  * Hook to connect to the SSE resource stream
  * Uses fast health check first, then establishes SSE
@@ -236,6 +241,9 @@ export async function generateArticle(params: {
   format?: string;
   online?: boolean; // For research mode
   length?: string;  // short, medium, long
+  research_iterations?: number;
+  max_images?: number;
+  output_filename?: string;
 }) {
   const response = await fetch(`${API_BASE}/api/generate/article`, {
     method: 'POST',

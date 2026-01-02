@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Download, Loader2, Copy, Check, Image } from 'lucide-react';
+import { X, Download, Loader2, Copy, Check, Image, Code, FileText } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import domToImage from 'dom-to-image';
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
 
 // Load Core Dependencies
 import 'prismjs/components/prism-clike';
@@ -27,7 +30,7 @@ import 'prismjs/components/prism-c';
 import 'prismjs/components/prism-cpp';
 import 'prismjs/components/prism-csharp';
 import 'prismjs/components/prism-yaml';
-import 'prismjs/components/prism-xml-doc'; // Using xml-doc or just xml/markup usually
+import 'prismjs/components/prism-xml-doc';
 import 'prismjs/components/prism-php';
 import 'prismjs/components/prism-ruby';
 import 'prismjs/components/prism-swift';
@@ -43,7 +46,7 @@ interface PreviewModalProps {
   fileName: string;
 }
 
-type FileType = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'unsupported';
+type FileType = 'image' | 'video' | 'audio' | 'pdf' | 'markdown' | 'html' | 'text' | 'unsupported';
 
 const getFileType = (fileName: string): FileType => {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -51,7 +54,9 @@ const getFileType = (fileName: string): FileType => {
   if (['mp4', 'webm', 'mov', 'mkv'].includes(ext)) return 'video';
   if (['mp3', 'wav', 'flac', 'm4a', 'aac'].includes(ext)) return 'audio';
   if (ext === 'pdf') return 'pdf';
-  if (['md', 'txt', 'json', 'html', 'css', 'js', 'py', 'ts', 'tsx', 'sql', 'go', 'rs', 'rust', 'sh', 'bash', 'java', 'c', 'h', 'cpp', 'hpp', 'cc', 'cs', 'yaml', 'yml', 'xml', 'php', 'rb', 'swift', 'kt', 'kts', 'toml', 'ini', 'dockerfile'].includes(ext)) return 'text';
+  if (['md', 'markdown'].includes(ext)) return 'markdown';
+  if (['html', 'htm', 'xhtml'].includes(ext)) return 'html';
+  if (['txt', 'json', 'css', 'js', 'py', 'ts', 'tsx', 'sql', 'go', 'rs', 'rust', 'sh', 'bash', 'java', 'c', 'h', 'cpp', 'hpp', 'cc', 'cs', 'yaml', 'yml', 'xml', 'php', 'rb', 'swift', 'kt', 'kts', 'toml', 'ini', 'dockerfile'].includes(ext)) return 'text';
   return 'unsupported';
 };
 
@@ -98,6 +103,8 @@ const getLanguage = (fileName: string) => {
 export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'render' | 'code'>('render');
+  
   const fileUrl = `http://localhost:8000/api/files/${filePath}`;
   const fileType = getFileType(fileName);
 
@@ -107,6 +114,11 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         setLoading(false);
     }
   }, [fileType]);
+
+  // Reset view mode when file changes
+  useEffect(() => {
+    setViewMode('render');
+  }, [filePath]);
 
   if (!isOpen) return null;
 
@@ -141,35 +153,55 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         );
       case 'audio':
         return (
-          <div className="flex flex-col items-center justify-center gap-4 p-8 h-full">
-            <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
-              <span className="text-4xl">🎵</span>
+            <div className="flex flex-col items-center justify-center gap-4 p-8 h-full">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
+                <span className="text-4xl">🎵</span>
+              </div>
+              <p className="text-lg font-medium">{fileName}</p>
+              <audio
+                src={fileUrl}
+                controls
+                className="w-full max-w-md"
+                onLoadedData={() => setLoading(false)}
+                onError={() => { setLoading(false); setError('Failed to load audio'); }}
+              />
             </div>
-            <p className="text-lg font-medium">{fileName}</p>
-            <audio
-              src={fileUrl}
-              controls
-              className="w-full max-w-md"
-              onLoadedData={() => setLoading(false)}
-              onError={() => { setLoading(false); setError('Failed to load audio'); }}
-            />
-          </div>
         );
       case 'pdf':
         return (
           <iframe
             src={fileUrl}
-            className="w-full h-full rounded-lg"
+            className="w-full h-full rounded-lg bg-white"
             onLoad={() => setLoading(false)}
             onError={() => { setLoading(false); setError('Failed to load PDF'); }}
           />
         );
+      case 'markdown':
+        if (viewMode === 'code') {
+           return <TextPreview fileName={fileName} url={fileUrl} onLoad={() => setLoading(false)} onError={() => { setLoading(false); setError('Failed to load file'); }} />;
+        }
+        return <MarkdownPreview url={fileUrl} onLoad={() => setLoading(false)} onError={() => { setLoading(false); setError('Failed to load markdown'); }} />;
+        
+      case 'html':
+         if (viewMode === 'code') {
+           return <TextPreview fileName={fileName} url={fileUrl} onLoad={() => setLoading(false)} onError={() => { setLoading(false); setError('Failed to load file'); }} />;
+        }
+        return (
+          <iframe
+            src={fileUrl} 
+            className="w-full h-full rounded-lg bg-white"
+            onLoad={() => setLoading(false)}
+            onError={() => { setLoading(false); setError('Failed to load HTML'); }}
+            sandbox="allow-same-origin allow-scripts"
+          />
+        );
+        
       case 'text':
         return <TextPreview fileName={fileName} url={fileUrl} onLoad={() => setLoading(false)} onError={() => { setLoading(false); setError('Failed to load file'); }} />;
       default:
         return (
           <div className="text-center p-8 flex flex-col items-center justify-center h-full">
-            <p className="text-lg mb-4">Cannot preview this file type</p>
+            <p className="text-lg mb-4">Cannot preview this file type in browser</p>
             <p className="text-slate-400 mb-6">{fileName}</p>
             <button className="btn-primary flex items-center gap-2 mx-auto" onClick={handleDownload}>
               <Download size={18} />
@@ -180,6 +212,8 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
     }
   };
 
+  const showViewToggle = fileType === 'markdown' || fileType === 'html';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div 
@@ -188,22 +222,61 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         style={{ maxWidth: '90vw', maxHeight: '90vh' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <h3 className="text-lg font-semibold truncate max-w-md">{fileName}</h3>
-          <div className="flex items-center gap-2">
-            <button className="btn-secondary p-2" onClick={handleDownload} title="Download">
-              <Download size={18} />
-            </button>
-            <button className="btn-secondary p-2" onClick={onClose} title="Close">
-              <X size={18} />
-            </button>
+        <div className="flex items-center justify-between mb-0 flex-shrink-0 px-4 pt-4">
+          <div className="flex items-center gap-3 pb-4">
+             <h3 className="text-lg font-semibold truncate max-w-md flex items-center gap-2">
+                {fileType === 'image' && <Image size={18} className="text-purple-400" />}
+                {fileType === 'video' && <span className="text-blue-400">🎥</span>}
+                {fileType === 'audio' && <span className="text-pink-400">🎵</span>}
+                {fileType === 'pdf' && <FileText className="text-red-400" size={18} />}
+                {fileType === 'markdown' && <FileText className="text-blue-400" size={18} />}
+                {fileType === 'html' && <Code className="text-orange-400" size={18} />}
+                {fileType === 'text' && <FileText className="text-slate-400" size={18} />}
+                {fileName}
+             </h3>
+          </div>
+          
+          <div className="flex items-end gap-4 h-full relative top-[1px]">
+            {showViewToggle && (
+               <div className="flex items-end">
+                  <button 
+                    onClick={() => setViewMode('render')}
+                    className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${
+                      viewMode === 'render' 
+                        ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
+                        : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
+                    }`}
+                  >
+                    <FileText size={14} /> Preview
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('code')}
+                    className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ml-[-1px] ${
+                      viewMode === 'code' 
+                        ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
+                        : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
+                    }`}
+                  >
+                    <Code size={14} /> Code
+                  </button>
+               </div>
+            )}
+          
+            <div className="flex items-center gap-2 pb-3 mb-1 pl-4 border-l border-slate-700/50">
+              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center" onClick={handleDownload} title="Download">
+                <Download size={16} />
+              </button>
+              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center hover:bg-red-500/20 hover:text-red-200 hover:border-red-500/50" onClick={onClose} title="Close">
+                <X size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="relative flex-1 min-h-0 overflow-auto scrollbar-themed">
+        <div className={`relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-[#1e1e1e] border border-slate-600 ${showViewToggle ? 'rounded-b-lg rounded-tr-lg' : 'rounded-lg mt-4'}`}>
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center z-10 bg-[#1e1e1e]">
               <Loader2 className="animate-spin" size={32} />
             </div>
           )}
@@ -214,6 +287,50 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MarkdownPreview({ url, onLoad, onError }: { url: string; onLoad: () => void; onError: () => void }) {
+  const [content, setContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(url)
+      .then((res) => res.text())
+      .then((text) => { 
+        setContent(text); 
+        onLoad();
+      })
+      .catch(() => onError());
+  }, [url]);
+
+  if (!content) return null;
+
+  return (
+    <div className="p-8 prose prose-invert prose-slate max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-slate-100 prose-code:text-primary-300 prose-code:bg-slate-800/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-700">
+      <ReactMarkdown 
+         remarkPlugins={[remarkGfm]} 
+         rehypePlugins={[rehypeRaw]}
+         components={{
+            code({node, inline, className, children, ...props}: any) {
+              const match = /language-(\w+)/.exec(className || '')
+              return !inline && match ? (
+                <div className="relative group">
+                   {/* We could add a copy button here but for now simple rendering is enough */}
+                   <code className={className} {...props}>
+                      {children}
+                   </code>
+                </div>
+              ) : (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              )
+            }
+         }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -256,11 +373,9 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
       const el = containerRef.current;
       const scale = 2;
       
-      // Get the full scroll dimensions (not just visible area)
       const fullWidth = el.scrollWidth;
       const fullHeight = el.scrollHeight;
       
-      // Temporarily adjust styles to capture full content
       const originalOverflow = el.style.overflow;
       const originalHeight = el.style.height;
       const originalMaxHeight = el.style.maxHeight;
@@ -281,7 +396,6 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
         },
       });
       
-      // Restore original styles
       el.style.overflow = originalOverflow;
       el.style.height = originalHeight;
       el.style.maxHeight = originalMaxHeight;
@@ -301,7 +415,7 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
   if (!content) return null;
 
   return (
-    <div className="relative group h-full flex flex-col">
+    <div className="relative group h-full flex flex-col bg-[#2d2d2d]">
       {/* Action buttons */}
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button 
@@ -321,11 +435,11 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
       </div>
       <div 
         ref={containerRef}
-        className="flex-1 rounded-lg border border-slate-700 bg-[#2d2d2d] overflow-auto scrollbar-themed"
+        className="flex-1 overflow-auto scrollbar-themed"
       >
          <pre 
            className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 !m-0 text-sm`}
-           style={{ minWidth: 'max-content' }}
+           style={{ minWidth: 'max-content', fontFamily: 'JetBrains Mono, monospace' }}
          >
           <code ref={codeRef} className={`language-${language}`}>
             {content}

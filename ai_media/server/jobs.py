@@ -132,32 +132,35 @@ async def cancel_job(job_id: str):
     update_job(job_id, status="cancelled", message="Job cancelled by user")
     print(f"🛑 Job {job_id[:8]}... cancelled")
     
-    # Force unload model to free resources immediately
-    from .cache import model_cache
+    # Terminate the child process if running (multiprocessing approach)
+    from .process_manager import terminate_job_process
+    terminated = terminate_job_process(job_id)
     
-    # Map job types to cache categories
-    type_map = {
-        "article": "text",
-        "code": "text",
-        "chat": "text",
-        "image": "image",
-        "audio": "audio",
-        "video": "video",
-        "transform": "transform",
-        "upscale": "upscale"
-    }
-    
-    category = type_map.get(job["type"])
-    if category:
-        # Attempt to stop the generator if it supports it
-        generator = model_cache.get(category, job.get("model"))
-        if generator and hasattr(generator, "stop"):
-            generator.stop()
-            
-        print(f"🧹 Unloading {category} model due to cancellation...")
-        model_cache.unload(category)
+    if terminated:
+        print(f"✅ Process terminated for job {job_id[:8]}")
     else:
-        # Default fallback: unload everything heavy
-        model_cache.unload_all()
+        # Fallback: try to unload model from cache (old threading approach)
+        from .cache import model_cache
+        
+        # Map job types to cache categories
+        type_map = {
+            "article": "text",
+            "code": "text", 
+            "chat": "text",
+            "image": "image",
+            "audio": "audio",
+            "video": "video",
+            "transform": "transform",
+            "upscale": "upscale"
+        }
+        
+        category = type_map.get(job["type"])
+        if category:
+            generator = model_cache.get(category, job.get("model"))
+            if generator and hasattr(generator, "stop"):
+                generator.stop()
+                
+            print(f"🧹 Unloading {category} model due to cancellation...")
+            model_cache.unload(category)
     
     return {"message": "Job cancelled"}

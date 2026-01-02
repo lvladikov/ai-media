@@ -2,17 +2,21 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
 
 from ..models import ConvertRequest
 from ..jobs import create_job
+from ..process_manager import spawn_job_process
 from ..tasks import convert as convert_tasks
+
+from ..config import CONFIG
+import os
 
 router = APIRouter(tags=["Convert"])
 
 
 @router.post("/api/convert")
-async def convert_media(request: ConvertRequest, background_tasks: BackgroundTasks):
+async def convert_media(request: ConvertRequest):
     """Start a media conversion job."""
     job = create_job(
         "convert",
@@ -23,14 +27,18 @@ async def convert_media(request: ConvertRequest, background_tasks: BackgroundTas
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = request.output_filename or f"converted_{timestamp}.{request.target_format}"
-    output_path = f"output/{filename}"
+    output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
-    background_tasks.add_task(
-        convert_tasks.run_convert,
+    spawn_job_process(
         job["job_id"],
-        request.input_path,
-        request.target_format,
-        output_path,
+        convert_tasks.run_convert,
+        (
+            job["job_id"],
+            request.input_path,
+            request.target_format,
+            output_path,
+        ),
     )
     
     return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}
+

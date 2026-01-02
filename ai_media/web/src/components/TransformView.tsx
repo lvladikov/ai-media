@@ -1,10 +1,34 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { Upload, Wand2, Loader2, Image as ImageIcon, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Upload, Wand2, Loader2, Image as ImageIcon, ArrowRight, BookOpen, X, Dices } from 'lucide-react';
 import { API_BASE_URL } from "../config";
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { JobProgressModal } from './common/JobProgressModal';
-import { PreviewModal } from './PreviewModal';
+import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
+import { ErrorAlert } from './common/ErrorAlert';
+import { Tooltip } from './common/Tooltip';
+
+// Preset transformation recipes
+const TRANSFORM_RECIPES = [
+  { name: "Black & White", instruction: "convert to black and white photograph" },
+  { name: "Oil Painting", instruction: "make it look like an oil painting with visible brush strokes" },
+  { name: "Watercolor", instruction: "turn into a soft watercolor painting" },
+  { name: "Van Gogh Style", instruction: "make it look like a Van Gogh painting with swirling brushstrokes" },
+  { name: "Anime Style", instruction: "convert to anime illustration style" },
+  { name: "Pencil Sketch", instruction: "turn into a detailed pencil sketch drawing" },
+  { name: "Pop Art", instruction: "convert to vibrant pop art style like Andy Warhol" },
+  { name: "Day to Night", instruction: "turn day into night with moonlight and stars" },
+  { name: "Night to Day", instruction: "turn night into bright daylight" },
+  { name: "Add Snow", instruction: "add snow falling and snow covering the ground" },
+  { name: "Add Rain", instruction: "add rain and wet reflections" },
+  { name: "Vintage Photo", instruction: "make it look like an old vintage photograph with sepia tones" },
+  { name: "Cyberpunk", instruction: "add neon lights and cyberpunk aesthetic" },
+  { name: "Make Younger", instruction: "make the person look 20 years younger" },
+  { name: "Make Older", instruction: "make the person look 30 years older with wrinkles and gray hair" },
+  { name: "Add Smile", instruction: "make the person smile naturally" },
+  { name: "Add Sunglasses", instruction: "add stylish sunglasses" },
+  { name: "Fantasy Scene", instruction: "transform into a magical fantasy scene with glowing elements" },
+];
 
 export function TransformView() {
   const { addJob } = useAppStore();
@@ -12,6 +36,7 @@ export function TransformView() {
   const [model, setModel] = useState('instruct-pix2pix');
   const [removeBg, setRemoveBg] = useState(false);
   const [guidanceScale, setGuidanceScale] = useState(1.5);
+  const [showRecipes, setShowRecipes] = useState(false);
   
   const [inputImage, setInputImage] = useState<string | null>(null);
   const [serverFilePath, setServerFilePath] = useState<string | null>(null);
@@ -23,10 +48,25 @@ export function TransformView() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recipeRef = useRef<HTMLDivElement>(null);
+
+  // Close recipe dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (recipeRef.current && !recipeRef.current.contains(e.target as Node)) {
+        setShowRecipes(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      setResult(null);
+      setError(null);
+      setCurrentJobId(null);
       
       // Local preview
       const reader = new FileReader();
@@ -109,6 +149,7 @@ export function TransformView() {
         type: 'transform',
         status: 'pending',
         progress: 0,
+        model: effectiveModel,
         phase: 'queued',
         message: 'Job queued',
         result_path: null,
@@ -126,23 +167,36 @@ export function TransformView() {
   };
 
   // Watch for job completion
-  useState(() => {
+  useEffect(() => {
+    if (!currentJobId) return;
+    
     const unsubscribe = useAppStore.subscribe((state) => {
-        if (!currentJobId) return;
         const job = state.jobs.find(j => j.job_id === currentJobId);
         if (job) {
             if (job.status === 'complete') {
                 setResult(job.result_path);
+                setIsSubmitting(false);
+            } else if (job.status === 'failed') {
+                setIsSubmitting(false);
+                setError(job.error || job.message || "Transformation failed");
+            } else if (job.status === 'cancelled') {
+                setIsSubmitting(false);
+                setError("Job cancelled.");
+                setTimeout(() => setError(null), 6000);
             }
+        } else {
+            // Job not found in store (removed on cancellation)
+            setIsSubmitting(false);
+            setCurrentJobId(null);
         }
     });
     return () => unsubscribe();
-  });
+  }, [currentJobId]);
 
   return (
     <div className="flex h-full bg-slate-900 text-slate-200">
       {/* Parameters Sidebar */}
-      <div className="w-80 border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto">
+      <div className="w-96 border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <Wand2 className="text-pink-400" /> Transform
@@ -208,7 +262,65 @@ export function TransformView() {
            {!removeBg && (
              <>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Instruction</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-slate-400">Instruction</label>
+                    {/* Recipe Book Button */}
+                    <div className="relative" ref={recipeRef}>
+                      <button
+                        onClick={() => setShowRecipes(!showRecipes)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showRecipes ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-700'}`}
+                        title="Recipe Book - Click for preset transformations"
+                      >
+                        <BookOpen size={14} />
+                        <span>Recipes</span>
+                      </button>
+                      
+                      {/* Recipe Dropdown */}
+                      {showRecipes && (
+                        <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto scrollbar-themed">
+                          <div className="sticky top-0 z-10 bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+                            <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                              <BookOpen size={12} /> Transform Recipes
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Tooltip content="Click here to use a random recipe" align="left">
+                                <button 
+                                  onClick={() => {
+                                    const randomRecipe = TRANSFORM_RECIPES[Math.floor(Math.random() * TRANSFORM_RECIPES.length)];
+                                    setInstruction(randomRecipe.instruction);
+                                    setShowRecipes(false);
+                                  }}
+                                  className="p-1 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded transition-colors"
+                                  title="Random Recipe"
+                                >
+                                  <Dices size={14} />
+                                </button>
+                              </Tooltip>
+                              <button onClick={() => setShowRecipes(false)} className="p-1 text-slate-500 hover:text-white transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-1">
+                            {TRANSFORM_RECIPES.map((recipe, idx) => (
+                              <Tooltip key={idx} content={recipe.instruction} align="left">
+                                <button
+                                  onClick={() => {
+                                    setInstruction(recipe.instruction);
+                                    setShowRecipes(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs rounded hover:bg-slate-700 transition-colors group"
+                                >
+                                  <span className="font-medium text-slate-200 group-hover:text-amber-400">{recipe.name}</span>
+                                  <p className="text-slate-500 mt-0.5 line-clamp-1">{recipe.instruction}</p>
+                                </button>
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <textarea
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
@@ -255,6 +367,8 @@ export function TransformView() {
         </div>
 
 
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
+
         <ValidationTooltip 
           error={!serverFilePath ? "Please upload an image first" : (!instruction && !removeBg ? "Please enter an instruction or select Remove BG" : null)} 
           className="w-full mt-auto"
@@ -262,7 +376,7 @@ export function TransformView() {
           <button
             onClick={handleTransform}
             disabled={!serverFilePath || (!instruction && !removeBg) || isSubmitting || isUploading}
-             className="w-full bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+             className="w-full bg-gradient-to-r from-primary-600 via-indigo-500 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
           >
             {isSubmitting ? (
                <><Loader2 className="animate-spin" size={18} /> Processing...</>
@@ -271,16 +385,6 @@ export function TransformView() {
             )}
           </button>
         </ValidationTooltip>
-
-        {error && (
-          <div className="mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 flex items-start gap-2">
-             <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-             <div>
-               <p className="font-semibold">Request Failed</p>
-               <p className="text-sm opacity-90">{error}</p>
-             </div>
-          </div>
-        )}
 
       </div>
 
@@ -334,12 +438,14 @@ export function TransformView() {
         />
       )}
 
-      {result && (
-        <PreviewModal 
+      {result && inputImage && (
+        <ComparisonPreviewModal 
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
-          filePath={result}
+          originalPath={inputImage}
+          resultPath={result}
           fileName={result.split('/').pop() || 'transformed.png'}
+          resultLabel="Transformed"
         />
       )}
     </div>

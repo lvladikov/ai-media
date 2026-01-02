@@ -1035,7 +1035,10 @@ def run_interactive(jump_point=None):
                 ("PDF (.pdf)", "pdf"),
                 ("Word Document (.docx)", "docx"),
                 ("HTML (.html)", "html"),
+                ("XHTML (.xhtml)", "xhtml"),
+                ("Rich Text Format (.rtf)", "rtf"),
                 ("Plain Text (.txt)", "txt"),
+                ("JSON (.json)", "json"),
             ]
             output_format = prompt_choice("Format", format_options)
             if output_format is None:

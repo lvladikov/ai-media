@@ -243,6 +243,27 @@ The server intelligently caches loaded AI models to avoid unnecessary reload cyc
 
 This significantly speeds up workflows that use the same model across different features (e.g., switching between chat and article generation with the same LLM).
 
+## Job Cancellation
+
+Jobs can be cancelled at any time by clicking the **Cancel Job** button in the progress modal or the job list. The cancellation behavior varies by task type:
+
+| Task Type | Cancellation Method | Behavior |
+|-----------|---------------------|----------|
+| **Image, Video, Audio** | ⚡ Process Kill | Immediate termination via SIGTERM. GPU memory freed instantly. |
+| **Article, Code** | ⚡ Process Kill | Immediate termination. Model loading/generation stops mid-way. |
+| **Transform, Upscale, Convert** | ⚡ Process Kill | Immediate termination. Partial output files are cleaned up. |
+| **Chat** | 🛑 Graceful Stop | Uses `generator.stop()` flag. Model stays cached for the session. |
+
+> [!NOTE]
+> **Image/Video/Audio/Article/Code/Transform/Upscale/Convert** tasks run in separate child processes which are killed immediately on cancellation. This frees GPU/RAM memory but means the model must reload on the next job (it is a quick process few seconds usually)
+
+> [!TIP]
+> **Chat** sessions keep the model cached between messages. Cancelling a chat response stops generation gracefully without unloading the model, making subsequent messages faster.
+
+### Server Shutdown
+
+Pressing `Ctrl+C` in the terminal terminates all running child processes before shutting down the server. Child processes are designed to ignore `SIGINT` directly, so only the parent server handles the shutdown signal.
+
 ## Technology Stack
 
 | Component | Technology |
@@ -254,4 +275,5 @@ This significantly speeds up workflows that use the same model across different 
 | Backend | FastAPI, Uvicorn |
 | Desktop | Electron 30.5.1 |
 | Build | electron-builder |
+
 

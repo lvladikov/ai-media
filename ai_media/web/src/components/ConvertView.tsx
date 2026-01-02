@@ -1,9 +1,11 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { Upload, RefreshCw, FileType, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Upload, RefreshCw, FileType, Loader2, ArrowRight } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
+import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
+import { ErrorAlert } from './common/ErrorAlert';
 
 export function ConvertView() {
   const { addJob } = useAppStore();
@@ -16,6 +18,7 @@ export function ConvertView() {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +58,15 @@ export function ConvertView() {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       setTargetFormat(''); // Reset format selection
+      
+      // Create local preview if it's an image
+      if (selectedFile.type.startsWith('image/')) {
+        if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+        setInputPreviewUrl(URL.createObjectURL(selectedFile));
+      } else {
+        if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+        setInputPreviewUrl(null);
+      }
       
       // Upload immediately
       setIsUploading(true);
@@ -125,18 +137,31 @@ export function ConvertView() {
   };
 
   // Watch for job completion
-  useState(() => {
+  useEffect(() => {
+    if (!currentJobId) return;
+    
     const unsubscribe = useAppStore.subscribe((state) => {
-        if (!currentJobId) return;
         const job = state.jobs.find(j => j.job_id === currentJobId);
         if (job) {
             if (job.status === 'complete') {
                 setResult(job.result_path);
+                setIsSubmitting(false);
+            } else if (job.status === 'failed') {
+                setIsSubmitting(false);
+                setError(job.error || job.message || "Conversion failed");
+            } else if (job.status === 'cancelled') {
+                setIsSubmitting(false);
+                setError("Job cancelled.");
+                setTimeout(() => setError(null), 6000);
             }
+        } else {
+            // Job not found in store (removed on cancellation)
+            setIsSubmitting(false);
+            setCurrentJobId(null);
         }
     });
     return () => unsubscribe();
-  });
+  }, [currentJobId]);
 
   return (
     <div className="flex h-full bg-slate-900 text-slate-200 items-center justify-center p-8">
@@ -229,15 +254,7 @@ export function ConvertView() {
                )}
             </button>
 
-             {error && (
-              <div className="mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 flex items-start gap-2">
-                 <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-                 <div>
-                   <p className="font-semibold">Request Failed</p>
-                   <p className="text-sm opacity-90">{error}</p>
-                 </div>
-              </div>
-            )}
+             <ErrorAlert error={error} onDismiss={() => setError(null)} />
             
             {result && (
               <div className="mt-6 p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between">
@@ -277,12 +294,23 @@ export function ConvertView() {
       )}
 
       {result && (isPreviewOpen || isSubmitting) && (
-        <PreviewModal 
-          isOpen={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          filePath={result}
-          fileName={result.split('/').pop() || 'converted-file'}
-        />
+        ['jpg', 'jpeg', 'png', 'webp'].includes(result.split('.').pop()?.toLowerCase() || '') && inputPreviewUrl ? (
+          <ComparisonPreviewModal
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            originalPath={inputPreviewUrl}
+            resultPath={result}
+            fileName={result.split('/').pop() || 'converted-file'}
+            resultLabel="Converted"
+          />
+        ) : (
+          <PreviewModal 
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            filePath={result}
+            fileName={result.split('/').pop() || 'converted-file'}
+          />
+        )
       )}
     </div>
   );

@@ -1,14 +1,14 @@
+
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { generateArticle, fetchModels } from '../hooks/useApi';
+import { generateArticle, fetchModels, type ModelInfo } from '../hooks/useApi';
 import { FileText, Loader2, Globe, AlertTriangle } from 'lucide-react';
 import { Tooltip } from './common/Tooltip';
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { RandomPrompt } from './common/RandomPrompt';
+import { NumberInput } from './common/NumberInput';
+import { ErrorAlert } from './common/ErrorAlert';
 
-interface ModelInfo {
-  name: string;
-}
 
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
@@ -16,19 +16,17 @@ import { formatDuration } from '../utils/formatTime';
 
 // Display names matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
-  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 7B (Reasoning)', vram: '~7GB' },
-  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 14B (Reasoning)', vram: '~14GB' },
-  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 32B (Reasoning)', vram: '~24GB' },
-  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B', vram: '~8GB' },
-  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (High VRAM)', vram: '~40GB' },
+  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)', vram: '~7GB' },
+  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)', vram: '~14GB' },
+  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
+  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
+  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
-  'default': { label: 'Default (Llama 3.1 8B)', vram: '~8GB' },
 };
 
 const MODEL_ORDER = [
-  'default',
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
   'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b'
@@ -37,10 +35,13 @@ const MODEL_ORDER = [
 export function ArticleGenerator() {
   const { addJob } = useAppStore();
   const [topic, setTopic] = useState('');
-  const [model, setModel] = useState('default');
+  const [model, setModel] = useState('');
   const [format, setFormat] = useState('md');
-  const [length, setLength] = useState('quick');
+  const [length, setLength] = useState("quick");
   const [online, setOnline] = useState(false);
+  const [researchIterations, setResearchIterations] = useState(3);
+  const [maxImages, setMaxImages] = useState(5);
+  const [filename, setFilename] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -56,6 +57,18 @@ export function ArticleGenerator() {
       .then((data) => {
         if (data.text) {
           setAvailableModels(data.text);
+          
+          // Find default model based on backend flag
+          let initialModel = '';
+          const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
+          
+          if (defaultModel) {
+             initialModel = defaultModel.name;
+          } else if (data.text.length > 0) {
+             initialModel = data.text[0].name;
+          }
+          
+          setModel(initialModel);
         }
       })
       .catch((err) => console.error('Failed to fetch models:', err));
@@ -72,10 +85,13 @@ export function ArticleGenerator() {
     try {
       const response = await generateArticle({ 
         topic, 
-        model, 
+        model: model || undefined, 
         format, 
         online, 
-        length
+        length,
+        research_iterations: researchIterations,
+        max_images: maxImages,
+        output_filename: filename || undefined
       });
       
       setCurrentJobId(response.job_id);
@@ -126,8 +142,14 @@ export function ArticleGenerator() {
                 
                 setReasoning(job.reasoning || null);
                 setIsLoading(false);
-            } else if (job.status === 'failed' || job.status === 'cancelled') {
+            } else if (job.status === 'failed') {
                 setIsLoading(false);
+            } else if (job.status === 'cancelled') {
+                setIsLoading(false);
+                setError("Job cancelled.");
+                
+                // Auto-dismiss after 6 seconds
+                setTimeout(() => setError(null), 6000);
             }
         } else {
             // Job not found in store (removed on cancellation)
@@ -144,9 +166,9 @@ export function ArticleGenerator() {
     setIsLoading(false);
   };
 
-  // Sort models
+  // Sort models based on fixed order, filtering valid ones from API
   const sortedModels = MODEL_ORDER.filter(name => 
-    name === 'default' || availableModels.some(m => m.name === name)
+    availableModels.some(m => m.name === name)
   );
 
   return (
@@ -175,6 +197,20 @@ export function ArticleGenerator() {
           />
         </div>
 
+        <div>
+           <label className="label flex items-center">
+              Filename (Optional)
+              <Tooltip content="Custom output filename. Leave empty for auto-generated name." />
+           </label>
+           <input
+             type="text"
+             className="input py-2"
+             placeholder="Auto-generated if empty (e.g. article_20260101.md)"
+             value={filename}
+             onChange={(e) => setFilename(e.target.value)}
+           />
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="label flex items-center">
@@ -182,6 +218,7 @@ export function ArticleGenerator() {
                <Tooltip content="LLM for generation. DeepSeek R1 for reasoning, Llama 3.1 for general speed." />
             </label>
             <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
+               {!model && <option value="">Loading...</option>}
                {sortedModels.map((name) => {
                 const info = MODEL_DISPLAY_INFO[name];
                 return (
@@ -207,8 +244,13 @@ export function ArticleGenerator() {
               </label>
               <select className="select" value={format} onChange={(e) => setFormat(e.target.value)}>
                 <option value="md">Markdown</option>
-                <option value="html">HTML</option>
+                <option value="html">HTML (.html)</option>
+                <option value="xhtml">XHTML (.xhtml)</option>
                 <option value="pdf">PDF</option>
+                <option value="docx">Word (DOCX)</option>
+                <option value="txt">Text (TXT)</option>
+                <option value="json">JSON</option>
+                <option value="rtf">Rich Text Format (.rtf)</option>
               </select>
             </div>
              <div>
@@ -225,20 +267,51 @@ export function ArticleGenerator() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <input 
-            type="checkbox" 
-            id="online" 
-            className="checkbox"
-            checked={online}
-            onChange={(e) => setOnline(e.target.checked)}
-          />
-          <label htmlFor="online" className="label cursor-pointer flex items-center gap-2">
-            <Globe size={16} className={online ? 'text-green-400' : 'text-slate-500'} />
-            Enable Online Research (DuckDuckGo Search)
-            <Tooltip content="If enabled, the model will search the web for real-time information to include in the article." />
-          </label>
-        </div>
+            <label className="flex items-center gap-2 cursor-pointer mt-8">
+               <input 
+                 type="checkbox" 
+                 className="checkbox checkbox-primary"
+                 checked={online}
+                 onChange={(e) => setOnline(e.target.checked)}
+               />
+               <span className="label-text font-medium flex items-center gap-2">
+                 <Globe size={16} className="text-success" />
+                 Enable Online Research (DuckDuckGo Search)
+                 <Tooltip content="Provides real-time information and images from the web. Increases generation time." />
+               </span>
+            </label>
+
+            {online && (
+              <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-base-200 rounded-lg border border-base-300">
+                <div>
+                  <label className="label flex items-center">
+                    Research Sources (Iterations)
+                    <Tooltip content="Number of search iterations/sources to analyze. warning: Higher values increase RAM usage significantly." />
+                  </label>
+                  <NumberInput
+                    value={researchIterations}
+                    onChange={setResearchIterations}
+                    min={1}
+                    max={10}
+                    className="input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="label flex items-center">
+                    Max Images
+                    <Tooltip content="Maximum number of images to fetch and consider for the article. warning: Processing more images increases RAM usage." />
+                  </label>
+                  <NumberInput
+                    value={maxImages}
+                    onChange={setMaxImages}
+                    min={0}
+                    max={20}
+                    className="input w-full"
+                  />
+                </div>
+              </div>
+            )}
+
 
 
         <ValidationTooltip error={!topic.trim() ? "Please enter a topic for the article" : null} className="w-full">
@@ -252,15 +325,7 @@ export function ArticleGenerator() {
         </ValidationTooltip>
       </div>
 
-      {error && (
-        <div className="mt-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 flex items-start gap-2">
-           <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-           <div>
-             <p className="font-semibold">Generation Failed</p>
-             <p className="text-sm opacity-90">{error}</p>
-           </div>
-        </div>
-      )}
+      <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
       {result && (
         <div className="mt-6 card">
@@ -269,7 +334,7 @@ export function ArticleGenerator() {
              {duration && <span className="text-xs text-secondary mb-1">Generated in {formatDuration(duration * 1000)}</span>}
           </div>
           <div className="p-4 bg-tertiary rounded-lg flex items-center justify-between border border-border">
-             <span className="truncate text-primary">{result.split('/').pop()}</span>
+             <span className="truncate text-primary">{result?.split('/').pop()}</span>
              <div className="flex gap-2">
                 <button 
                   className="btn-primary text-sm"
@@ -308,7 +373,7 @@ export function ArticleGenerator() {
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
           filePath={result}
-          fileName={result.split('/').pop() || 'article.md'}
+          fileName={result?.split('/').pop() || 'article.md'}
         />
       )}
     </div>

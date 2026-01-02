@@ -1,22 +1,22 @@
 """Article and code generation routes."""
 
-import asyncio
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from ..models import ArticleGenerateRequest, CodeGenerateRequest, TextExportRequest
 from ..config import CONFIG
 from ..jobs import create_job
+from ..process_manager import spawn_job_process
 from ..tasks import text as text_tasks
 
 router = APIRouter(tags=["Text Generation"])
 
 
 @router.post("/api/generate/article")
-async def generate_article(request: ArticleGenerateRequest, background_tasks: BackgroundTasks):
+async def generate_article(request: ArticleGenerateRequest):
     """Start an article generation job."""
     job = create_job(
         "article",
@@ -33,24 +33,27 @@ async def generate_article(request: ArticleGenerateRequest, background_tasks: Ba
     filename = request.output_filename or f"article_{timestamp}.{request.format}"
     output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
-    background_tasks.add_task(
-        text_tasks.run_article_generation,
+    spawn_job_process(
         job["job_id"],
-        request.topic,
-        output_path,
-        request.model,
-        request.format,
-        request.length,
-        request.online,
-        request.research_iterations,
-        asyncio.get_running_loop(),
+        text_tasks.run_article_generation,
+        (
+            job["job_id"],
+            request.topic,
+            output_path,
+            request.model,
+            request.format,
+            request.length,
+            request.online,
+            request.research_iterations,
+            request.max_images,
+        ),
     )
     
     return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}
 
 
 @router.post("/api/generate/code")
-async def generate_code(request: CodeGenerateRequest, background_tasks: BackgroundTasks):
+async def generate_code(request: CodeGenerateRequest):
     """Start a code generation job."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
@@ -67,13 +70,15 @@ async def generate_code(request: CodeGenerateRequest, background_tasks: Backgrou
         params={"output_name": output_name}
     )
     
-    background_tasks.add_task(
-        text_tasks.run_code_generation,
+    spawn_job_process(
         job["job_id"],
-        request.prompt,
-        output_path,
-        request.model,
-        asyncio.get_running_loop(),
+        text_tasks.run_code_generation,
+        (
+            job["job_id"],
+            request.prompt,
+            output_path,
+            request.model,
+        ),
     )
     
     return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}

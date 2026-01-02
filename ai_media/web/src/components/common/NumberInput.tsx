@@ -11,6 +11,7 @@ interface NumberInputProps {
   className?: string;
   placeholder?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  title?: string;
 }
 
 export function NumberInput({
@@ -23,7 +24,8 @@ export function NumberInput({
   disabled = false,
   className = "input",
   placeholder,
-  onKeyDown
+  onKeyDown,
+  title
 }: NumberInputProps) {
   const [inputValue, setInputValue] = useState(value.toString());
 
@@ -91,6 +93,7 @@ export function NumberInput({
       disabled={disabled}
       placeholder={placeholder}
       onKeyDown={onKeyDown}
+      title={title}
     />
   );
 }

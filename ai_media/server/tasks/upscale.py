@@ -2,8 +2,7 @@
 
 import os
 from pathlib import Path
-
-from ..jobs import update_job, is_job_cancelled
+from multiprocessing import Queue
 
 
 def run_upscale(
@@ -13,14 +12,20 @@ def run_upscale(
     factor: float,
     method: str,
     strength: float,
+    progress_queue: Queue = None,
 ):
-    """Background task for upscaling."""
+    """Background task for upscaling. Runs in child process."""
+    
+    def send_update(**kwargs):
+        """Send progress update to parent via queue."""
+        if progress_queue:
+            try:
+                progress_queue.put({"job_id": job_id, **kwargs})
+            except Exception:
+                pass
+    
     try:
-        # Check for cancellation before starting
-        if is_job_cancelled(job_id):
-            return
-            
-        update_job(job_id, status="loading", phase="loading", progress=10, message="Preparing upscale...")
+        send_update(status="loading", phase="loading", progress=10, message="Preparing upscale...")
         
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
@@ -32,12 +37,7 @@ def run_upscale(
             upscale_image_file, upscale_video_file
         )
         
-        # Check for cancellation before upscaling
-        if is_job_cancelled(job_id):
-            print(f"🛑 Upscale cancelled for job {job_id[:8]}...")
-            return
-        
-        update_job(job_id, status="generating", phase="generating", progress=30, message=f"Upscaling ({method} x{factor})...")
+        send_update(status="generating", phase="generating", progress=30, message=f"Upscaling ({method} x{factor})...")
         
         success = False
         
@@ -47,8 +47,7 @@ def run_upscale(
             elif method == 'fast':
                 success = upscale_video_fast(input_path, output_path, factor=factor)
             else:  # ai / creative
-                # AI video upscale is very slow, warn user
-                update_job(job_id, status="generating", phase="generating", progress=30, message="Upscaling video (AI Slow Mode)...")
+                send_update(status="generating", phase="generating", progress=30, message="Upscaling video (AI Slow Mode)...")
                 success = upscale_video_file(input_path, output_path, strength=strength, factor=factor)
         else:  # Image
             if method == 'simple':
@@ -56,31 +55,24 @@ def run_upscale(
             elif method == 'fast':
                 success = upscale_image_fast(input_path, output_path, factor=factor)
             else:  # ai / creative
-                success = upscale_image_file(input_path, output_path, strength=strength, factor=factor)
-
-        # Check for cancellation after upscaling
-        if is_job_cancelled(job_id):
-            print(f"🛑 Upscale cancelled for job {job_id[:8]}...")
-            try:
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-            except Exception:
-                pass
-            return
+                def on_progress(pct, msg):
+                    send_update(status="generating", phase="generating", progress=pct, message=msg)
+                    
+                success = upscale_image_file(input_path, output_path, strength=strength, factor=factor, progress_callback=on_progress)
 
         if success:
-            update_job(job_id, status="complete", phase="complete", progress=100,
-                      message="Upscale completed successfully", result_path=output_path)
+            send_update(status="complete", phase="complete", progress=100,
+                       message="Upscale completed successfully", result_path=output_path)
         else:
-            update_job(job_id, status="failed", phase="failed", progress=100,
-                      message="Upscale failed", error="Upscale returned False")
+            send_update(status="failed", phase="failed", progress=100,
+                       message="Upscale failed", error="Upscale returned False")
     except Exception as e:
-        if not is_job_cancelled(job_id):
-            update_job(job_id, status="failed", phase="failed", progress=100,
-                      message=f"Error: {str(e)}", error=str(e))
+        send_update(status="failed", phase="failed", progress=100,
+                   message=f"Error: {str(e)}", error=str(e))
     finally:
         try:
             from ai_media.utils.system import clear_gpu_memory
             clear_gpu_memory()
         except Exception:
             pass
+

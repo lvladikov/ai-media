@@ -571,7 +571,7 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
         return False
 
 
-def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
+def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progress_callback=None):
     """Upscale an image using smart multi-stage AI upscaling.
        
     Uses optimal combination of x4, x2 AI passes + final Lanczos resize.
@@ -585,6 +585,34 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
     if not model_id:
         model_id = "stabilityai/stable-diffusion-x4-upscaler"
     
+    class GlobalProgressTracker:
+        def __init__(self, total_steps, start_time=None):
+            self.total_steps = total_steps
+            self.current_step = 0
+            self.start_time = start_time or time.time()
+            self.last_update_ts = 0
+            
+        def update(self, step_increment=1, model_desc=""):
+            self.current_step += step_increment
+            
+            # Throttle updates to ~2 times per second to avoid flooding logs
+            now = time.time()
+            if now - self.last_update_ts < 0.5 and self.current_step < self.total_steps:
+                return None
+            self.last_update_ts = now
+            
+            elapsed = now - self.start_time
+            if self.current_step > 0:
+                avg_time_per_step = elapsed / self.current_step
+                remaining_steps = self.total_steps - self.current_step
+                eta_seconds = int(remaining_steps * avg_time_per_step)
+                eta_str = f"{eta_seconds//60}m {eta_seconds%60}s" if eta_seconds > 60 else f"{eta_seconds}s"
+            else:
+                eta_str = "Calculating..."
+                
+            percent = min(99, int((self.current_step / self.total_steps) * 100))
+            return percent, f"{model_desc}: {percent}% | Step {self.current_step}/{self.total_steps} | ETA: {eta_str}"
+
     try:
         start_time = time.time()
         device, dtype = get_optimal_device_and_dtype(prefer_bfloat16=True)
@@ -623,18 +651,31 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         # Calculate pass sequence
         passes = []
         remaining = factor
+        total_inference_steps = 0
         
         while remaining >= 2.0:
             if remaining >= 4.0:
-                passes.append(('x4', 4.0))
+                steps = 75
+                passes.append(('x4', 4.0, steps))
                 remaining /= 4.0
+                total_inference_steps += steps
             elif remaining >= 2.0:
-                passes.append(('x2', 2.0))
+                steps = 50
+                passes.append(('x2', 2.0, steps))
                 remaining /= 2.0
+                total_inference_steps += steps
         
+        if progress_callback:
+            plan_msg = "📋 Upscale Plan:"
+            for i, (model_type, scale, steps) in enumerate(passes, 1):
+                plan_msg += f"\n   Pass {i}: {model_type} AI ({scale}x) - {steps} steps"
+            if remaining > 1.0:
+                plan_msg += f"\n   Final: Lanczos resize ({remaining:.2f}x)"
+            progress_callback(0, plan_msg)
+
         print(f"\n   📋 Upscale Plan:")
-        for i, (model_type, scale) in enumerate(passes, 1):
-            print(f"      Pass {i}: {model_type} AI ({scale}x)")
+        for i, (model_type, scale, steps) in enumerate(passes, 1):
+            print(f"      Pass {i}: {model_type} AI ({scale}x) - {steps} steps")
         if remaining > 1.0:
             print(f"      Final: Lanczos resize ({remaining:.2f}x)")
         
@@ -648,9 +689,10 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
             if model_type == 'x2':
                 if pipe_x2 is None:
                     print(f"   🔗 Loading x2 Latent Upscaler...")
+                    if progress_callback: progress_callback(0, "Loading x2 Latent Upscaler...")
                     pipe_x2 = StableDiffusionLatentUpscalePipeline.from_pretrained(
                         IMAGE_MODELS.get('upscaler_x2', 'stabilityai/sd-x2-latent-upscaler'),
-                        dtype=dtype,
+                        torch_dtype=dtype,
                     )
 
                     if device.type == "cuda":
@@ -661,9 +703,10 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
             else:
                 if pipe_x4 is None:
                     print(f"   🔗 Loading x4 Upscaler...")
+                    if progress_callback: progress_callback(0, "Loading x4 Upscaler...")
                     pipe_x4 = StableDiffusionUpscalePipeline.from_pretrained(
                         IMAGE_MODELS.get('upscaler', 'stabilityai/stable-diffusion-x4-upscaler'),
-                        dtype=dtype,
+                        torch_dtype=dtype,
                     )
 
                     if device.type == "cuda":
@@ -677,26 +720,64 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0):
         
         current_image = image        
         
+        global_tracker = GlobalProgressTracker(total_inference_steps, start_time=time.time())
+        
+        # Define callback for Diffusers
+        def diffusers_callback(step: int, timestep: int, latents: torch.FloatTensor):
+            progress_data = global_tracker.update(1, model_desc="Upscaling")
+            if progress_data and progress_callback:
+                pct, msg = progress_data
+                progress_callback(pct, msg)
+        
         with ResourceMonitor() as monitor:
-            for pass_idx, (model_type, step_scale) in enumerate(passes, 1):
-                print(f"\n🎨 Pass {pass_idx}/{len(passes)}: {model_type} AI ({step_scale}x)")
+            for pass_idx, (model_type, step_scale, steps) in enumerate(passes, 1):
+                pass_msg = f"🎨 Pass {pass_idx}/{len(passes)}: {model_type} AI ({step_scale}x)"
+                print(f"\n{pass_msg}")
+                if progress_callback:
+                    # Get current percent from tracker
+                    pct = min(99, int((global_tracker.current_step / max(1, global_tracker.total_steps)) * 100))
+                    progress_callback(pct, pass_msg)
                 
                 pipe = get_pipeline(model_type)
                 
                 print(f"   ⏳ Rendering...")
                 if model_type == 'x2':
-                    result = pipe(prompt=upscale_prompt, image=current_image, num_inference_steps=50).images[0]
+                    # Ensure dimensions are multiples of 64 to avoid VAE/Latent tensor mismatch
+                    w, h = current_image.size
+                    if w % 64 != 0 or h % 64 != 0:
+                        new_w = w - (w % 64)
+                        new_h = h - (h % 64)
+                        warn_msg = f"⚠️  Cropping to acceptable dims: {w}x{h} -> {new_w}x{new_h}"
+                        print(f"   {warn_msg}")
+                        if progress_callback:
+                            pct = min(99, int((global_tracker.current_step / max(1, global_tracker.total_steps)) * 100))
+                            progress_callback(pct, warn_msg)
+                        current_image = current_image.crop((0, 0, new_w, new_h))
+                    
+                    result = pipe(
+                        prompt=upscale_prompt, 
+                        image=current_image, 
+                        num_inference_steps=steps,
+                        callback=diffusers_callback,
+                        callback_steps=1
+                    ).images[0]
                 else:
                     result = pipe(
                         prompt=upscale_prompt, 
                         image=current_image,
                         negative_prompt=negative_prompt,
                         noise_level=noise_level,
-                        num_inference_steps=75
+                        num_inference_steps=steps,
+                        callback=diffusers_callback,
+                        callback_steps=1
                     ).images[0]
                 
                 current_image = result
-                print(f"   ✓ Pass complete: {current_image.size[0]}x{current_image.size[1]}")
+                done_msg = f"✓ Pass complete: {current_image.size[0]}x{current_image.size[1]}"
+                print(f"   {done_msg}")
+                if progress_callback:
+                    pct = min(99, int((global_tracker.current_step / max(1, global_tracker.total_steps)) * 100))
+                    progress_callback(pct, done_msg)
         
         # Final Lanczos resize if needed
         target_w = int(orig_w * factor)
