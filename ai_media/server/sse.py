@@ -25,6 +25,13 @@ async def resource_stream():
     except Exception:
         process = None
 
+    # Cache for the currently monitored process to ensure accurate CPU stats
+    # cpu_percent requires the same object instance to calculate delta
+    monitor_cache = {
+        "pid": current_pid,
+        "process": process
+    }
+
     async def generate():
         while True:
             try:
@@ -76,35 +83,69 @@ async def resource_stream():
                     pass
                 
                 # --- Process Stats ---
-                # --- Process Stats ---
                 proc_cpu = 0.0
                 proc_ram_gb = 0.0
                 proc_vram_gb = 0.0
-                proc_pid = current_pid
                 
-                if process:
+                # Dynamic Process Selection: Monitor active job if any, else server
+                from .process_manager import job_processes
+                
+                target_pid = current_pid
+                
+                if job_processes:
+                    # Monitor the most recently added active job
                     try:
-                        proc_cpu = process.cpu_percent(interval=None)
-                        proc_mem = process.memory_info()
+                        latest_job_id = list(job_processes.keys())[-1]
+                        job_proc = job_processes[latest_job_id]
+                        if job_proc.is_alive():
+                            target_pid = job_proc.pid
+                    except Exception:
+                        pass
+                
+                # Update cache if target changed
+                if target_pid != monitor_cache["pid"]:
+                    try:
+                        new_proc = psutil.Process(target_pid)
+                        new_proc.cpu_percent(interval=None) # Reset counter
+                        monitor_cache["pid"] = target_pid
+                        monitor_cache["process"] = new_proc
+                    except Exception:
+                        # Fallback to server if target invalid
+                        monitor_cache["pid"] = current_pid
+                        monitor_cache["process"] = process
+                
+                # Get stats from cached process
+                proc_obj = monitor_cache["process"]
+                proc_pid = monitor_cache["pid"]
+                
+                if proc_obj:
+                    try:
+                        # Handle case where process died since cache update
+                        if proc_pid != current_pid and not proc_obj.is_running():
+                            raise psutil.NoSuchProcess(proc_pid)
+                            
+                        proc_cpu = proc_obj.cpu_percent(interval=None)
+                        proc_mem = proc_obj.memory_info()
                         proc_rss = proc_mem.rss
                         
                         try:
                             import torch
-                            # Mac/MPS: Unified Memory - Add Metal usage to System RAM
-                            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                                # MPS allocations are often not in RSS, so we sum them for a realistic app footprint.
-                                # This helps match Activity Monitor's "Memory" column.
+                            # Mac/MPS: Unified Memory - Add Metal usage to System RAM if monitoring self (server)
+                            # If monitoring child, we can't easily see its generic Metal usage via torch calls here
+                            # unless we rely on RSS. Child process usage is mostly RSS anyway.
+                            # But for consistency, if we are monitoring THIS process (server):
+                            if proc_pid == current_pid and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
                                 proc_rss += torch.mps.current_allocated_memory()
-                            
-                            # Windows/Linux: Discrete VRAM - Track separately
-                            elif torch.cuda.is_available():
-                                proc_vram_gb = round(torch.cuda.memory_allocated() / gb_divisor, 2)
                         except Exception:
                             pass
 
                         proc_ram_gb = round(proc_rss / gb_divisor, 2)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        # Process died or lost access, revert to server for next tick
+                        monitor_cache["pid"] = current_pid
+                        monitor_cache["process"] = process
                     except Exception:
-                        pass
+                        pass 
 
                 data = {
                     "global": {
