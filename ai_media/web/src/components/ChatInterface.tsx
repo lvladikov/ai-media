@@ -12,44 +12,44 @@ import { formatDuration } from '../utils/formatTime';
 
 // Clipboard CSS mapping for rich-text copy (inline styles for external apps)
 const TAILWIND_TO_CSS: Record<string, string> = {
-    'text-slate-600': 'color: #475569;',
-    'text-red-400': 'color: #f87171;',
-    'text-green-400': 'color: #4ade80;',
-    'text-yellow-400': 'color: #facc15;',
-    'text-blue-400': 'color: #60a5fa;',
-    'text-purple-400': 'color: #c084fc;',
-    'text-cyan-400': 'color: #22d3ee;',
-    'text-slate-200': 'color: #e2e8f0;',
-    'text-slate-400': 'color: #94a3b8;',
-    'text-red-300': 'color: #fca5a5;',
-    'text-green-300': 'color: #86efac;',
-    'text-yellow-300': 'color: #fde047;',
-    'text-blue-300': 'color: #93c5fd;',
-    'text-purple-300': 'color: #d8b4fe;',
-    'text-cyan-300': 'color: #67e8f9;',
-    'text-white': 'color: #ffffff;',
-    'font-bold': 'font-weight: bold;',
-    'italic': 'font-style: italic;',
-    'underline': 'text-decoration: underline;',
-    'bg-slate-800': 'background-color: #1e293b;',
-    'bg-red-500/20': 'background-color: rgba(239, 68, 68, 0.2);',
-    'bg-green-500/20': 'background-color: rgba(34, 197, 94, 0.2);',
-    'bg-yellow-500/20': 'background-color: rgba(234, 179, 8, 0.2);',
-    'bg-blue-500/20': 'background-color: rgba(59, 130, 246, 0.2);',
-    'bg-purple-500/20': 'background-color: rgba(168, 85, 247, 0.2);',
-    'bg-cyan-500/20': 'background-color: rgba(6, 182, 212, 0.2);',
-    'bg-slate-500/20': 'background-color: rgba(100, 116, 139, 0.2);',
-    'bg-slate-400/20': 'background-color: rgba(148, 163, 184, 0.2);',
-    'bg-red-300/20': 'background-color: rgba(252, 165, 165, 0.2);',
-    'bg-green-300/20': 'background-color: rgba(134, 239, 172, 0.2);',
-    'bg-yellow-300/20': 'background-color: rgba(253, 224, 71, 0.2);',
-    'bg-blue-300/20': 'background-color: rgba(147, 197, 253, 0.2);',
-    'bg-purple-300/20': 'background-color: rgba(216, 180, 254, 0.2);',
-    'bg-cyan-300/20': 'background-color: rgba(103, 232, 249, 0.2);',
-    'bg-slate-100/20': 'background-color: rgba(241, 245, 249, 0.2);',
-    'px-1': 'padding-left: 0.25rem; padding-right: 0.25rem;',
-    'rounded': 'border-radius: 0.25rem;',
-  };
+  'text-slate-600': 'color: #475569;',
+  'text-red-400': 'color: #f87171;',
+  'text-green-400': 'color: #4ade80;',
+  'text-yellow-400': 'color: #facc15;',
+  'text-blue-400': 'color: #60a5fa;',
+  'text-purple-400': 'color: #c084fc;',
+  'text-cyan-400': 'color: #22d3ee;',
+  'text-slate-200': 'color: #e2e8f0;',
+  'text-slate-400': 'color: #94a3b8;',
+  'text-red-300': 'color: #fca5a5;',
+  'text-green-300': 'color: #86efac;',
+  'text-yellow-300': 'color: #fde047;',
+  'text-blue-300': 'color: #93c5fd;',
+  'text-purple-300': 'color: #d8b4fe;',
+  'text-cyan-300': 'color: #67e8f9;',
+  'text-white': 'color: #ffffff;',
+  'font-bold': 'font-weight: bold;',
+  'italic': 'font-style: italic;',
+  'underline': 'text-decoration: underline;',
+  'bg-slate-800': 'background-color: #1e293b;',
+  'bg-red-500/20': 'background-color: rgba(239, 68, 68, 0.2);',
+  'bg-green-500/20': 'background-color: rgba(34, 197, 94, 0.2);',
+  'bg-yellow-500/20': 'background-color: rgba(234, 179, 8, 0.2);',
+  'bg-blue-500/20': 'background-color: rgba(59, 130, 246, 0.2);',
+  'bg-purple-500/20': 'background-color: rgba(168, 85, 247, 0.2);',
+  'bg-cyan-500/20': 'background-color: rgba(6, 182, 212, 0.2);',
+  'bg-slate-500/20': 'background-color: rgba(100, 116, 139, 0.2);',
+  'bg-slate-400/20': 'background-color: rgba(148, 163, 184, 0.2);',
+  'bg-red-300/20': 'background-color: rgba(252, 165, 165, 0.2);',
+  'bg-green-300/20': 'background-color: rgba(134, 239, 172, 0.2);',
+  'bg-yellow-300/20': 'background-color: rgba(253, 224, 71, 0.2);',
+  'bg-blue-300/20': 'background-color: rgba(147, 197, 253, 0.2);',
+  'bg-purple-300/20': 'background-color: rgba(216, 180, 254, 0.2);',
+  'bg-cyan-300/20': 'background-color: rgba(103, 232, 249, 0.2);',
+  'bg-slate-100/20': 'background-color: rgba(241, 245, 249, 0.2);',
+  'px-1': 'padding-left: 0.25rem; padding-right: 0.25rem;',
+  'rounded': 'border-radius: 0.25rem;',
+};
 
 
 
@@ -94,17 +94,17 @@ const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {
 
   return (
     <div className="border-l-2 border-slate-600/50 pl-3 my-1 bg-slate-800/10 py-1 pr-2 rounded-r">
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 font-semibold text-xs opacity-50 text-slate-300 mb-0.5 hover:opacity-100 transition-opacity w-full text-left"
       >
         {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>💭 Reasoning</span>
       </button>
-      
+
       {isOpen && (
         <div className="prose prose-invert max-w-none text-slate-400/90 leading-tight [&>p]:!text-xs [&>p]:italic [&>p]:my-0.5 [&>pre]:not-italic [&>pre]:my-1 mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
-           <MarkdownWithAnsiNoHtml>{reasoning}</MarkdownWithAnsiNoHtml>
+          <MarkdownWithAnsiNoHtml>{reasoning}</MarkdownWithAnsiNoHtml>
         </div>
       )}
     </div>
@@ -118,7 +118,7 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
 
   const copyRichText = async () => {
     if (!answerRef.current) return;
-    
+
     try {
       // Create a temporary container to clone and process the HTML
       const tempDiv = document.createElement('div');
@@ -172,11 +172,11 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
   };
   const copyAsImage = async () => {
     if (!answerRef.current) return;
-    
+
     try {
       // Capture the DOM as a PNG blob
       const scale = 2; // Render at 2x resolution
-      const blob = await domToImage.toBlob(answerRef.current, { 
+      const blob = await domToImage.toBlob(answerRef.current, {
         width: answerRef.current.clientWidth * scale,
         height: answerRef.current.clientHeight * scale,
         style: {
@@ -184,7 +184,7 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
           transformOrigin: "top left",
         },
       });
-      
+
       if (blob) {
         await navigator.clipboard.write([
           new ClipboardItem({ 'image/png': blob })
@@ -217,14 +217,14 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
           <div className="flex items-center justify-between mb-1">
             <div className="font-bold text-slate-100 italic">Answer:</div>
             <div className="flex gap-1">
-              <button 
+              <button
                 onClick={copyAsImage}
                 className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
                 title="Copy answer as image"
               >
                 {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
               </button>
-              <button 
+              <button
                 onClick={copyRichText}
                 className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
                 title="Copy answer with formatting"
@@ -238,15 +238,15 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       </div>
     );
   }
-  
+
   // Case 2: Embedded reasoning in content
   if (content.includes('</think>')) {
     const parts = content.split('</think>');
     const r = parts[0].replace('<think>', '').trim();
     const a = parts.slice(1).join('</think>').trim();
-    
+
     return (
-       <div className="font-sans font-normal whitespace-pre-wrap">
+      <div className="font-sans font-normal whitespace-pre-wrap">
         <ReasoningAccordion reasoning={r} />
         {thinkingTime && (
           <div className="mt-2 mb-2 text-xs text-slate-500 italic">
@@ -258,14 +258,14 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
             <div className="flex items-center justify-between mb-1">
               <div className="font-bold text-slate-100 italic">Answer:</div>
               <div className="flex gap-1">
-                <button 
+                <button
                   onClick={copyAsImage}
                   className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
                   title="Copy answer as image"
                 >
                   {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
                 </button>
-                <button 
+                <button
                   onClick={copyRichText}
                   className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
                   title="Copy answer with formatting"
@@ -280,20 +280,20 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       </div>
     );
   }
-  
+
   // Case 3: Standard content (Direct Answer)
 
-    return (
+  return (
     <div className="mt-2 group relative">
       <div className="absolute -top-3 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-        <button 
+        <button
           onClick={copyAsImage}
           className="p-1 bg-slate-800/80 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white border border-slate-700/50"
           title="Copy as image"
         >
           {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
         </button>
-        <button 
+        <button
           onClick={copyRichText}
           className="p-1 bg-slate-800/80 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white border border-slate-700/50"
           title="Copy formatted text"
@@ -319,18 +319,18 @@ const UserMessage = ({ content }: { content: string }) => {
     const parts = content.trim().split(' ');
     const command = parts[0];
     const args = parts.slice(1).join(' ');
-    
+
     return (
       <div className="prose prose-invert prose-sm max-w-none">
         <span className="text-yellow-400 font-mono italic font-bold">{command}</span>
         {' '}
         <span className="text-slate-300">
-           {args}
+          {args}
         </span>
       </div>
     );
   }
-  
+
   return (
     <div className="prose prose-invert prose-sm max-w-none">
       <MarkdownWithAnsi>{content}</MarkdownWithAnsi>
@@ -366,36 +366,36 @@ const SearchModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose: 
           <Globe className="text-brand-400" />
           Deep Research
         </h2>
-        
+
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-tertiary uppercase tracking-wider mb-1">Search Query</label>
-            <input 
+            <input
               ref={inputRef}
-              className="input w-full" 
+              className="input w-full"
               placeholder="What are we searching for?"
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
           </div>
-          
+
           <div>
             <label className="block text-xs font-semibold text-tertiary uppercase tracking-wider mb-1">Number of Sources</label>
-            <NumberInput 
-              min={1} 
-              max={10} 
+            <NumberInput
+              min={1}
+              max={10}
               className="input w-full"
               value={limit}
               onChange={setLimit}
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
           </div>
-          
+
           <div className="flex justify-end gap-2 mt-6">
             <button className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button 
-              className="btn-primary" 
+            <button
+              className="btn-primary"
               onClick={handleSubmit}
               disabled={!query.trim()}
             >
@@ -418,7 +418,7 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
           <FileText className="text-brand-400" />
           Read File
         </h2>
-        
+
         <div className="mb-4 shrink-0">
           <label className="block text-xs font-semibold text-tertiary uppercase tracking-wider mb-1">Filename</label>
           <div className="px-3 py-2 bg-primary rounded border border-border text-primary text-sm font-mono truncate">
@@ -432,7 +432,7 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
             {file.content}
           </div>
         </div>
-          
+
         <div className="flex justify-end gap-2 mt-6 shrink-0">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={onConfirm}>Add to Context</button>
@@ -475,25 +475,25 @@ export function ChatInterface() {
   // Fetch models on mount
   useEffect(() => {
     // Session is lost on refresh since backend generates new ID on connect
-    setChatSessionId(''); 
-    
+    setChatSessionId('');
+
     fetchModels()
       .then((data) => {
         if (data.text) {
           const models = data.text;
           setAvailableModels(models);
-          
+
           // Find default model based on backend flag
           let initialModel = '';
           const defaultModel = models.find((m: ModelInfo) => m.is_default);
-          
+
           if (defaultModel) {
-             initialModel = defaultModel.name;
+            initialModel = defaultModel.name;
           } else if (models.length > 0) {
-             // Fallback if no default flag
-             initialModel = models[0].name;
+            // Fallback if no default flag
+            initialModel = models[0].name;
           }
-          
+
           setModel(initialModel);
           setDefaultModelId(initialModel);
         }
@@ -527,18 +527,18 @@ export function ChatInterface() {
       setElapsedTime('');
       return;
     }
-    
+
     // Updated to use shared utility
     // No local formatElapsed needed
-    
+
     // Update immediately
     setElapsedTime(formatDuration(Date.now() - thinkingStartTime));
-    
+
     // Then update every second
     const interval = setInterval(() => {
       setElapsedTime(formatDuration(Date.now() - thinkingStartTime));
     }, 1000);
-    
+
     return () => clearInterval(interval);
   }, [thinkingStartTime]);
 
@@ -546,14 +546,14 @@ export function ChatInterface() {
     // Add user message immediately
     const userMsg = { role: 'user' as const, content: contentToSend };
     addChatMessage(userMsg);
-    
+
     // Set immediate thinking state
     setIsProcessing(true);
     setStatusMessage("Thinking...");
     const now = Date.now();
     setThinkingStartTime(now);  // Start elapsed time timer
     thinkingStartTimeRef.current = now;
-    
+
     // Send to server
     socketRef.current?.send(JSON.stringify({
       type: 'message',
@@ -561,7 +561,7 @@ export function ChatInterface() {
       model: model,
       session_id: chatSessionId
     }));
-    
+
     // Only clear input if we sent from the text area
     if (!isOverride) {
       setInput('');
@@ -571,7 +571,7 @@ export function ChatInterface() {
   const sendMessage = (overrideContent?: string) => {
     const contentToSend = overrideContent || input;
     if (!contentToSend.trim() || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN || !isModelReady) return;
-    
+
     // If already processing, add to queue instead of sending
     if (isProcessing) {
       setQueuedMessages(prev => [...prev, contentToSend]);
@@ -606,15 +606,15 @@ export function ChatInterface() {
     setIsConnecting(true);
     setIsModelReady(false);
     setLoadError(null);
-    
+
     socketRef.current = new WebSocket(`${API_BASE.replace('http', 'ws')}/ws/chat?model=${model}`); // Pass model param!
-    
+
     socketRef.current.onopen = () => {
       // Trigger model loading immediately
       socketRef.current?.send(JSON.stringify({ type: 'load', model }));
       // Don't set isConnecting(false) here - wait for model to be ready
     };
-    
+
     socketRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'session') {
@@ -631,13 +631,13 @@ export function ChatInterface() {
           const remainingMinutes = minutes % 60;
           return `${hours}h ${remainingMinutes}m`;
         };
-        
+
         // Get current thinkingStartTime from ref directly (closure safe)
         const startTime = thinkingStartTimeRef.current;
         const finalThinkingTime = startTime ? formatElapsed(Date.now() - startTime) : undefined;
-        
-        addChatMessage({ 
-          role: 'assistant', 
+
+        addChatMessage({
+          role: 'assistant',
           content: data.content,
           reasoning: data.reasoning, // Store reasoning from server
           thinkingTime: finalThinkingTime
@@ -646,14 +646,14 @@ export function ChatInterface() {
         thinkingStartTimeRef.current = null;
       } else if (data.type === 'command_response') {
         // Handle structural responses (like file added) without clearing isProcessing
-        addChatMessage({ 
-          role: 'system', 
-          content: data.content 
+        addChatMessage({
+          role: 'system',
+          content: data.content
         });
       } else if (data.type === 'status') {
         setIsProcessing(true);
         setStatusMessage(data.message || (data.status === 'loading' ? 'Loading model...' : 'Thinking...'));
-        
+
         // Mark connection as complete when model is ready
         if (data.status === 'ready') {
           setIsConnecting(false);
@@ -669,34 +669,34 @@ export function ChatInterface() {
       } else if (data.type === 'log') {
         const msg = data.message;
         setLoadingLogs(prev => {
-           // Handle TQDM-style concurrent progress bars
-           const cleanMsg = msg.replace(/\r/g, '').trim(); 
-           const isProgress = msg.includes('%') || msg.includes('it/s');
-           
-           // Match prefix: everything before the first colon or pipe
-           const barMatch = cleanMsg.match(/^([^:|]+)[:|]/);
+          // Handle TQDM-style concurrent progress bars
+          const cleanMsg = msg.replace(/\r/g, '').trim();
+          const isProgress = msg.includes('%') || msg.includes('it/s');
 
-           if (isProgress) {
-               if (barMatch) {
-                   const prefix = barMatch[1].trim();
-                   // Find existing line that contains this prefix near the start
-                   const existingIndex = prev.findIndex(line => line.trim().startsWith(prefix));
-                   
-                   if (existingIndex !== -1) {
-                       const updated = [...prev];
-                       updated[existingIndex] = cleanMsg; // Store cleaned version
-                       return updated;
-                   }
-                   return [...prev, cleanMsg];
-               } else {
-                   // Fallback for generic bars without prefix
-                   const lastLog = prev[prev.length - 1];
-                   if (lastLog && (lastLog.includes('%') || lastLog.includes('it/s'))) {
-                       return [...prev.slice(0, -1), cleanMsg];
-                   }
-               }
-           }
-           return [...prev, cleanMsg];
+          // Match prefix: everything before the first colon or pipe
+          const barMatch = cleanMsg.match(/^([^:|]+)[:|]/);
+
+          if (isProgress) {
+            if (barMatch) {
+              const prefix = barMatch[1].trim();
+              // Find existing line that contains this prefix near the start
+              const existingIndex = prev.findIndex(line => line.trim().startsWith(prefix));
+
+              if (existingIndex !== -1) {
+                const updated = [...prev];
+                updated[existingIndex] = cleanMsg; // Store cleaned version
+                return updated;
+              }
+              return [...prev, cleanMsg];
+            } else {
+              // Fallback for generic bars without prefix
+              const lastLog = prev[prev.length - 1];
+              if (lastLog && (lastLog.includes('%') || lastLog.includes('it/s'))) {
+                return [...prev.slice(0, -1), cleanMsg];
+              }
+            }
+          }
+          return [...prev, cleanMsg];
         });
       } else if (data.type === 'status_clear') {
         setIsProcessing(false);
@@ -707,15 +707,15 @@ export function ChatInterface() {
         setStatusMessage('');
       }
     };
-    
+
     socketRef.current.onerror = () => {
-        setIsConnecting(false);
-        setIsModelReady(false);
+      setIsConnecting(false);
+      setIsModelReady(false);
     }
     socketRef.current.onclose = () => {
-        setChatSessionId('');
-        setIsModelReady(false);
-        setLoadingLogs([]);
+      setChatSessionId('');
+      setIsModelReady(false);
+      setLoadingLogs([]);
     }
   };
 
@@ -734,14 +734,14 @@ export function ChatInterface() {
         e.preventDefault();
         return;
       }
-      
+
       if (historyIndex !== null) {
         let newIndex = historyIndex + (e.key === 'ArrowUp' ? -1 : 1);
-        
+
         // Wrap around
         if (newIndex < 0) newIndex = userMessages.length - 1;
         if (newIndex >= userMessages.length) newIndex = 0;
-        
+
         setHistoryIndex(newIndex);
         setInput(userMessages[newIndex].content);
         setHistoryGhost(true);
@@ -762,8 +762,8 @@ export function ChatInterface() {
 
     // Clear ghost on any other modification key
     if (historyGhost && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setHistoryGhost(false);
-        setHistoryIndex(null);
+      setHistoryGhost(false);
+      setHistoryIndex(null);
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -792,7 +792,7 @@ export function ChatInterface() {
   const cancelQueuedMessage = (index: number) => {
     setQueuedMessages(prev => prev.filter((_, i) => i !== index));
   };
-  
+
   // --- File Reader Logic ---
   const handleReadFileClick = () => {
     fileInputRef.current?.click();
@@ -801,7 +801,7 @@ export function ChatInterface() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     if (file.size > 1024 * 1024 * 5) {
       alert("File too large (>5MB). Please copy text manually.");
       e.target.value = '';
@@ -813,8 +813,8 @@ export function ChatInterface() {
       const text = ev.target?.result;
       if (typeof text === 'string') {
         if (text.slice(0, 1000).includes('\0')) {
-             alert("File appears to be binary. Cannot read as text.");
-             return;
+          alert("File appears to be binary. Cannot read as text.");
+          return;
         }
         setFileData({ name: file.name, content: text });
         setShowFileModal(true);
@@ -827,12 +827,12 @@ export function ChatInterface() {
 
   const confirmFileRead = () => {
     if (!fileData) return;
-    
+
     const formatted = `\n\`\`\`markdown\n[File Context: ${fileData.name}]\n\`\`\`\n${fileData.content}\n\`\`\`\n`;
-    
+
     // 1. Send file content to model
     sendMessage(formatted);
-    
+
     setShowFileModal(false);
     setFileData(null);
   };
@@ -889,7 +889,7 @@ export function ChatInterface() {
 
     const content = lastAssistantMsg.content;
     let suggestedFilename = `chat_export_${Date.now()}`;
-    
+
     // Detect code blocks
     const codeMatch = content.match(/```(.*?)\n([\s\S]*?)```/);
     if (codeMatch) {
@@ -906,9 +906,9 @@ export function ChatInterface() {
         'go': 'go', 'bash': 'sh', 'sh': 'sh',
         'sql': 'sql', 'json': 'json', 'yaml': 'yml', 'yml': 'yml'
       };
-      
+
       const ext = langMap[lang] || 'txt';
-      
+
       // Try to find a filename comment like # filename: script.py or // filename: script.js
       const filenameMatch = content.match(/(?:#|\/\/)\s*(?:filename:\s*)?([^\s]+\.\w+)/i);
       if (filenameMatch) {
@@ -916,24 +916,24 @@ export function ChatInterface() {
       } else {
         // Fallback to slugified user prompt leading to this message
         const lastUserMsg = chatMessages.find((m, idx) => {
-            const assistantIdx = chatMessages.indexOf(lastAssistantMsg);
-            return m.role === 'user' && idx < assistantIdx;
+          const assistantIdx = chatMessages.indexOf(lastAssistantMsg);
+          return m.role === 'user' && idx < assistantIdx;
         });
-        
+
         if (lastUserMsg) {
-            const cleanText = lastUserMsg.content.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-            const slug = cleanText.split(/\s+/).slice(0, 5).join('_').toLowerCase();
-            if (slug) suggestedFilename = `${slug}.${ext}`;
+          const cleanText = lastUserMsg.content.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+          const slug = cleanText.split(/\s+/).slice(0, 5).join('_').toLowerCase();
+          if (slug) suggestedFilename = `${slug}.${ext}`;
         }
       }
     } else {
-        // No code block, slugify user prompt
-        const lastUserMsg = [...chatMessages].reverse().find(m => m.role === 'user');
-        if (lastUserMsg) {
-            const cleanText = lastUserMsg.content.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-            const slug = cleanText.split(/\s+/).slice(0, 5).join('_').toLowerCase();
-            if (slug) suggestedFilename = `${slug}`;
-        }
+      // No code block, slugify user prompt
+      const lastUserMsg = [...chatMessages].reverse().find(m => m.role === 'user');
+      if (lastUserMsg) {
+        const cleanText = lastUserMsg.content.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+        const slug = cleanText.split(/\s+/).slice(0, 5).join('_').toLowerCase();
+        if (slug) suggestedFilename = `${slug}`;
+      }
     }
 
     return { content, suggestedFilename };
@@ -942,63 +942,141 @@ export function ChatInterface() {
 
 
   // Sort models
-  const sortedModels = MODEL_ORDER.filter(name => 
+  const sortedModels = MODEL_ORDER.filter(name =>
     name === 'default' || availableModels.some(m => m.name === name)
   );
 
 
   return (
-    <div className="h-full flex flex-col w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <MessageSquare className="text-primary-400" />
-          Chat
-        </h1>
-        <div className="flex items-center gap-2">
-          <select 
-            className="select w-96" 
-            value={model} 
-            onChange={(e) => setModel(e.target.value)}
-            disabled={!!chatSessionId} // Disable model switching during active session
-          >
-            {sortedModels.map((name) => {
-              const info = MODEL_DISPLAY_INFO[name];
-              return (
-                <option key={name} value={name}>
-                  {info ? `${info.label} ${info.vram}` : name}
-                </option>
-              );
-            })}
-          </select>
-          {(!chatSessionId || isConnecting) ? (
-            <button className="btn-primary" onClick={connect} disabled={isConnecting}>
-              {isConnecting ? 'Connecting...' : 'Connect'}
-            </button>
-          ) : (
-            <button className="btn-secondary flex items-center gap-2" onClick={handleClear} title="Disconnect">
-              <LogOut size={16} />
-              <span className="hidden sm:inline">Disconnect</span>
-            </button>
-          )}
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <MessageSquare className="text-brand-400" /> Chat
+          </h2>
+          <p className="text-xs text-slate-500">Chat with AI models locally</p>
         </div>
+
+        {/* Model Selector with Connect/Disconnect */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-400">Model</label>
+          <div className="flex gap-2">
+            <select
+              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={!!chatSessionId}
+            >
+              {sortedModels.map((name) => {
+                const info = MODEL_DISPLAY_INFO[name];
+                return (
+                  <option key={name} value={name}>
+                    {info ? `${info.label} ${info.vram}` : name}
+                  </option>
+                );
+              })}
+            </select>
+            {(!chatSessionId || isConnecting) ? (
+              <button
+                className="btn-primary px-4 flex items-center gap-2"
+                onClick={connect}
+                disabled={isConnecting}
+              >
+                {isConnecting ? (<><Loader2 className="animate-spin" size={16} /></>) : (<><MessageSquare size={16} /> Connect</>)}
+              </button>
+            ) : (
+              <button
+                className="btn-secondary flex items-center gap-2 px-4"
+                onClick={handleClear}
+                title="Disconnect"
+              >
+                <LogOut size={16} /> Disconnect
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Chat Input Area */}
+        <div className="space-y-2 mt-auto">
+          {/* Action Toolbar - directly above input */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            <button
+              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+              onClick={handleReadFileClick}
+              disabled={!isModelReady}
+              title={!isModelReady ? "Connect to chat model first" : "Read a file (all text/code types)"}
+            >
+              <FileText size={14} /> <span>Read File</span>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileChange}
+              accept=".txt,.md,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.scss,.xml,.yaml,.yml,.sh,.bat,.c,.cpp,.h,.java,.rs,.go,.php,.rb,.pl,.lua,.sql,.log,.ini,.conf,.env,.dockerfile,makefile,text/*"
+            />
+            <button
+              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+              onClick={() => setShowSearchModal(true)}
+              disabled={!isModelReady}
+              title={!isModelReady ? "Connect to chat model first" : "Deep Research (/search <query>)"}
+            >
+              <Globe size={14} /> <span>Search</span>
+            </button>
+            <button
+              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+              onClick={handleSaveDownload}
+              disabled={!isModelReady}
+              title={!isModelReady ? "Connect to chat model first" : "Save conversation as markdown"}
+            >
+              <Save size={14} /> <span>Save</span>
+            </button>
+          </div>
+          <textarea
+            ref={inputRef}
+            className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
+            placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Ctrl+Enter to send)"}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (historyGhost) {
+                setHistoryGhost(false);
+                setHistoryIndex(null);
+              }
+            }}
+            onKeyDown={handleKeyDown}
+            disabled={!isModelReady}
+          />
+        </div>
+
+        {/* Send Button */}
+        <button
+          className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+          onClick={() => sendMessage()}
+          disabled={!isModelReady || !input.trim()}
+        >
+          <Send size={18} /> Send
+        </button>
       </div>
 
-      <div className="card flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/30 min-h-[500px] lg:min-h-0">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {chatMessages.length === 0 && (
             <div className="text-center text-slate-500 mt-20 px-4">
-              
+
               {/* State 1: Loading / Connecting */}
               {((isConnecting || loadingLogs.length > 0) && !isModelReady && !loadError) && (
                 <>
                   <Loader2 className="w-12 h-12 mx-auto mb-2 text-yellow-500/80 animate-spin" />
                   <p className="text-lg font-semibold text-slate-300">Loading Model...</p>
                   <p className="text-sm mt-1 mb-6">Initializing {MODEL_DISPLAY_INFO[model]?.label || model}...</p>
-                  
+
                   <div className="flex items-center justify-between mb-2 w-full max-w-none">
                     <span className="text-xs font-mono text-slate-500 uppercase tracking-wider">Server Logs</span>
                     {loadingLogs.length > 0 && (
-                      <button 
+                      <button
                         onClick={() => setLoadingLogs([])}
                         className="text-xs flex items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors"
                         title="Clear logs"
@@ -1007,9 +1085,9 @@ export function ChatInterface() {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Embedded Logs */}
-                   <div className="mx-auto w-full max-w-none bg-slate-900/50 p-4 rounded-lg text-left font-mono text-xs text-slate-400 max-h-64 overflow-y-auto border border-slate-700/50 shadow-inner">
+                  <div className="mx-auto w-full max-w-none bg-slate-900/50 p-4 rounded-lg text-left font-mono text-xs text-slate-400 max-h-64 overflow-y-auto border border-slate-700/50 shadow-inner">
                     {loadingLogs.length === 0 && <span className="opacity-50 italic">Waiting for server...</span>}
                     {loadingLogs.map((log, i) => (
                       <div key={i} className="whitespace-pre-wrap">{log}</div>
@@ -1037,14 +1115,14 @@ export function ChatInterface() {
                     {loadError}
                   </div>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <button 
+                    <button
                       onClick={handleRetry}
                       className="btn-primary bg-red-600 hover:bg-red-500 border-red-500 flex items-center gap-2 px-8 py-3"
                     >
                       <RefreshCw size={18} className={isConnecting ? 'animate-spin' : ''} />
                       {isConnecting ? 'Retrying...' : 'Retry Loading'}
                     </button>
-                    <button 
+                    <button
                       onClick={handleClear}
                       className="btn-secondary text-slate-400 hover:text-white"
                     >
@@ -1056,16 +1134,16 @@ export function ChatInterface() {
 
               {/* State 4: Disconnected / Initial */}
               {(!isConnecting && !isModelReady && !loadError && loadingLogs.length === 0) && (
-                 <>
-                   <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                   <p className="text-lg font-medium">Connect to start chatting with AI</p>
-                   <p className="text-sm mt-2 opacity-70">Select a model above to get started</p>
-                 </>
+                <>
+                  <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-lg font-medium">Connect to start chatting with AI</p>
+                  <p className="text-sm mt-2 opacity-70">Select a model above to get started</p>
+                </>
               )}
             </div>
           )}
-               
-           {/* (Removed old localized loading logs block) */}
+
+          {/* (Removed old localized loading logs block) */}
 
           {chatMessages.map((msg, i) => (
             <React.Fragment key={i}>
@@ -1078,7 +1156,7 @@ export function ChatInterface() {
                     </span>
                   </div>
                 )}
-                
+
                 {/* Content */}
                 <div className={`pl-0 ${msg.role === 'system' ? 'text-slate-500 italic bg-slate-800/30 p-2 rounded border-l-2 border-slate-700' : 'text-slate-300'}`}>
                   {msg.role === 'assistant' ? (
@@ -1087,7 +1165,7 @@ export function ChatInterface() {
                     <UserMessage content={msg.content} />
                   ) : (
                     <div className="text-sm font-sans flex items-center gap-2">
-                       {msg.content}
+                      {msg.content}
                     </div>
                   )}
                 </div>
@@ -1098,7 +1176,7 @@ export function ChatInterface() {
           {/* Render thinking indicator AFTER the last user message in history */}
           {(() => {
             if (!isProcessing) return null;
-            
+
             // Find the index of the most recent user message that should have a thinking indicator
             // We look from the end of the array backwards
             let lastUserIndex = -1;
@@ -1132,7 +1210,7 @@ export function ChatInterface() {
                   <span className="font-bold text-blue-400/70">You:</span>
                   <span className="bg-slate-700/50 text-[10px] uppercase px-1.5 py-0.5 rounded text-slate-400 tracking-wider font-bold border border-slate-600/30">Pending</span>
                 </div>
-                <button 
+                <button
                   onClick={() => cancelQueuedMessage(i)}
                   className="p-1 hover:bg-red-500/20 hover:text-red-400 text-slate-500 rounded transition-all"
                   title="Remove from queue"
@@ -1148,81 +1226,17 @@ export function ChatInterface() {
 
           <div ref={messagesEndRef} />
         </div>
-
-        <div className="border-t border-slate-700 p-4">
-          {/* Command Toolbar */}
-          <div className="flex gap-2 mb-2">
-            <button 
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={handleReadFileClick}
-              disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Read a file (all text/code types)"}
-            >
-              <FileText size={14} /> <span>Read File</span>
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              onChange={handleFileChange}
-              accept=".txt,.md,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.scss,.xml,.yaml,.yml,.sh,.bat,.c,.cpp,.h,.java,.rs,.go,.php,.rb,.pl,.lua,.sql,.log,.ini,.conf,.env,.dockerfile,makefile,text/*" 
-            />
-            <button 
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={() => setShowSearchModal(true)}
-              disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Deep Research (/search <query>)"}
-            >
-              <Globe size={14} /> <span>Search</span>
-            </button>
-            <button 
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={handleSaveDownload}
-              disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Save conversation as markdown"}
-            >
-              <Save size={14} /> <span>Save</span>
-            </button>
-          </div>
-
-          <div className="flex gap-2">
-            <textarea
-            ref={inputRef}
-            className={`input resize-none h-[42px] py-2.5 overflow-hidden ${historyGhost ? 'opacity-60' : ''}`}
-            placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line)"}
-            value={input}
-            onChange={(e) => {
-                setInput(e.target.value);
-                if (historyGhost) {
-                    setHistoryGhost(false);
-                    setHistoryIndex(null);
-                }
-            }}
-            onKeyDown={handleKeyDown}
-            disabled={isConnecting || (!chatSessionId && model !== 'llama-3.1-8b')} // Disable during load/connect
-            rows={1}
-            style={{ minHeight: '42px' }}
-          />
-          <button
-              className="btn-primary px-4"
-              onClick={() => sendMessage()}
-              disabled={!isModelReady || !input.trim()}
-            >
-              <Send size={18} />
-            </button>
-          </div>
-        </div>
       </div>
 
-      <SearchModal 
-        isOpen={showSearchModal} 
-        onClose={() => setShowSearchModal(false)} 
-        onSearch={(query, limit) => sendMessage(`/search|${limit} ${query}`)} 
+      <SearchModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onSearch={(query, limit) => sendMessage(`/search|${limit} ${query}`)}
       />
 
-      <FilePreviewModal 
-        isOpen={showFileModal} 
-        onClose={() => setShowFileModal(false)} 
+      <FilePreviewModal
+        isOpen={showFileModal}
+        onClose={() => setShowFileModal(false)}
         file={fileData}
         onConfirm={confirmFileRead}
       />
