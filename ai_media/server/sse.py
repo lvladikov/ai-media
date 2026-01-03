@@ -3,6 +3,9 @@
 import asyncio
 import platform
 import os
+import json
+import time
+import subprocess
 from datetime import datetime
 
 import psutil
@@ -10,6 +13,41 @@ from fastapi import APIRouter
 from starlette.responses import StreamingResponse
 
 router = APIRouter(tags=["Monitoring"])
+
+# Global cache for Windows GPU metrics to avoid overhead
+win_gpu_cache = {
+    "data": None,
+    "last_updated": 0
+}
+
+def get_windows_gpu_metrics():
+    global win_gpu_cache
+    now = time.time()
+    # Cache for 1.5 seconds
+    if win_gpu_cache["data"] is not None and (now - win_gpu_cache["last_updated"] < 1.5):
+        return win_gpu_cache["data"]
+    
+    try:
+        # Query 3D Engine utilization (matches Task Manager GPU column)
+        # This is the most accurate representation of AI/Rendering activity on Windows
+        script = "Get-Counter '\\GPU Engine(*3d*)\\Utilization Percentage' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object InstanceName, CookedValue | ConvertTo-Json"
+        res = subprocess.run(["powershell", "-Command", script], capture_output=True, text=True, timeout=2.0)
+        
+        gpu_data = []
+        if res.stdout.strip():
+            try:
+                gpu_data = json.loads(res.stdout)
+                if not isinstance(gpu_data, list):
+                    gpu_data = [gpu_data]
+            except Exception:
+                pass
+        
+        win_gpu_cache["data"] = gpu_data
+        win_gpu_cache["last_updated"] = now
+        return gpu_data
+    except Exception:
+        return []
+
 
 
 @router.get("/sse/resources")
@@ -62,17 +100,31 @@ async def resource_stream():
                     if torch.cuda.is_available():
                         # Global VRAM via nvidia-smi is more representative of system state
                         try:
-                            import subprocess
                             result = subprocess.run(
-                                ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"],
+                                ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu,utilization.memory", "--format=csv,noheader,nounits"],
                                 capture_output=True, text=True, timeout=1
                             )
                             if result.returncode == 0:
                                 parts = result.stdout.strip().split("\n")[0].split(",")
-                                if len(parts) >= 3:
+                                if len(parts) >= 4:
                                     vram_used_gb = round(float(parts[0]) / 1024, 2)
                                     vram_total_gb = round(float(parts[1]) / 1024, 2)
-                                    gpu_percent = float(parts[2])
+                                    # Fallback/Primary choice for Windows: PowerShell 3D Engine utilization
+                                    if platform.system() == "Windows":
+                                        win_metrics = get_windows_gpu_metrics()
+                                        if win_metrics:
+                                            # Sum across all engines/PIDs to get total system load
+                                            # (Win counters return per instance, we want the highest single value or sum depending on context)
+                                            # To match Task Manager's global total, we use the sum of 3D engine usage across engines
+                                            # but capped at 100% per GPU.
+                                            total_load = sum(float(m.get('CookedValue', 0)) for m in win_metrics if 'phys_0' in m.get('InstanceName', ''))
+                                            gpu_percent = min(100.0, total_load)
+                                        else:
+                                            # nvidia-smi fallback
+                                            gpu_percent = max(float(parts[2]), float(parts[3]))
+                                    else:
+                                        # Linux/typical: Use max of GPU core and memory utilization
+                                        gpu_percent = max(float(parts[2]), float(parts[3]))
                         except Exception:
                              # Fallback to torch for if nvidia-smi fails
                              vram_used_gb = round(torch.cuda.memory_allocated() / gb_divisor, 2)
@@ -207,18 +259,34 @@ async def resource_stream():
                                         proc_vram_gb = round(found_vram / 1024, 2)
                                         proc_gpu_percent = gpu_percent  # Attribute GPU load to this process
                                     elif proc_pid == current_pid:
-                                        # This is the server process - check if we have a model cached
+                                        # This is the server process - check if we have a model allocated via torch
                                         try:
-                                            from .cache import model_cache
-                                            if model_cache.is_loaded("text") or model_cache.is_loaded("image") or model_cache.is_loaded("video") or model_cache.is_loaded("audio"):
-                                                # Model is cached in this process, get VRAM from torch
-                                                allocated = torch.cuda.memory_allocated()
-                                                reserved = torch.cuda.memory_reserved()
-                                                # Use reserved (actual VRAM footprint) as it includes caching overhead
-                                                proc_vram_gb = round(max(allocated, reserved) / gb_divisor, 2)
-                                                # If we have significant VRAM usage, attribute global GPU load
-                                                if proc_vram_gb > 0.1:
+                                            # Get accurate VRAM from torch inside the server process
+                                            allocated = torch.cuda.memory_allocated()
+                                            reserved = torch.cuda.memory_reserved()
+                                            
+                                            # Use reserved (actual VRAM footprint) as it includes caching overhead
+                                            # This matches Task Manager's "Dedicated GPU memory"
+                                            proc_vram_gb = round(max(allocated, reserved) / gb_divisor, 2)
+                                            
+                                            # On Windows, try to get more specific process load from counters
+                                            if platform.system() == "Windows" and proc_vram_gb > 0.1:
+                                                win_metrics = get_windows_gpu_metrics()
+                                                proc_load = 0.0
+                                                # Look for our specific PID in the counters
+                                                pid_str = f"pid_{proc_pid}_"
+                                                for m in win_metrics:
+                                                    if pid_str in m.get('InstanceName', ''):
+                                                        proc_load += float(m.get('CookedValue', 0))
+                                                
+                                                if proc_load > 0:
+                                                    proc_gpu_percent = min(100.0, proc_load)
+                                                else:
+                                                    # Fallback to global load if we have VRAM but no specific engine load found
                                                     proc_gpu_percent = gpu_percent
+                                            elif proc_vram_gb > 0.1:
+                                                # Fallback for Linux/other
+                                                proc_gpu_percent = gpu_percent
                                         except Exception:
                                             pass
                                 except Exception:
