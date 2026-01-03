@@ -66,13 +66,22 @@ def update_job(job_id: str, event_loop: asyncio.AbstractEventLoop = None, **kwar
             return
 
         # Append message to logs if provided
-        if "message" in kwargs and kwargs["message"]:
+        # Append message or log_line to logs
+        log_entry = kwargs.get("log_line") or kwargs.get("message")
+        
+        # Only add message to logs if it's not just a status update
+        # If log_line is present, it's explicitly a log
+        if log_entry:
             if "logs" not in jobs[job_id]:
                 jobs[job_id]["logs"] = []
-            jobs[job_id]["logs"].append(kwargs["message"])
-            # Keep last 50 lines to avoid memory bloat
-            if len(jobs[job_id]["logs"]) > 50:
-                jobs[job_id]["logs"] = jobs[job_id]["logs"][-50:]
+            
+            # Avoid duplicate last line if possible
+            if not jobs[job_id]["logs"] or jobs[job_id]["logs"][-1] != log_entry:
+                jobs[job_id]["logs"].append(log_entry)
+            
+            # Keep last 100 lines
+            if len(jobs[job_id]["logs"]) > 100:
+                jobs[job_id]["logs"] = jobs[job_id]["logs"][-100:]
         
         jobs[job_id].update(kwargs)
         jobs[job_id]["updated_at"] = datetime.now().isoformat()

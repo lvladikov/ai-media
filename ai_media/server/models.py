@@ -70,6 +70,7 @@ class ImageGenerateRequest(BaseModel):
     steps: int = Field(30, description="Number of inference steps")
     guidance_scale: float = Field(7.5, description="Guidance scale for generation")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    force: bool = Field(False, description="Force execution, skipping confirmations")
 
 
 class VideoGenerateRequest(BaseModel):

@@ -93,6 +93,122 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
                 return caption
 
         # ----------------------------------------------------------------
+        # MODEL: Qwen3-VL (Vision-Language)
+        # ----------------------------------------------------------------
+        elif model_type == "qwen-vl" or model_type.startswith("qwen3-vl"):
+            from transformers import AutoModelForImageTextToText, AutoProcessor
+            import torch
+            from PIL import Image
+            import cv2
+            import numpy as np
+            from ..utils.system import is_bfloat16_supported
+            from ..models import CAPTION_MODELS
+            
+            # Get the correct model based on selection
+            caption_model_id = CAPTION_MODELS.get(model_type, CAPTION_MODELS.get("qwen-vl", "Qwen/Qwen3-VL-8B-Instruct"))
+            if not quiet:
+                print(f"   Loading Caption Model: {caption_model_id}...")
+            
+            # Determine dtype
+            if device.type == "cuda":
+                dtype = torch.bfloat16 if is_bfloat16_supported() else torch.float16
+            else:
+                dtype = torch.float32
+            
+            # Qwen3-VL uses ImageTextToText class (AutoModelForVision2Seq is deprecated)
+            model = AutoModelForImageTextToText.from_pretrained(
+                caption_model_id,
+                dtype=dtype,
+                device_map="auto",
+                trust_remote_code=True
+            )
+            processor = AutoProcessor.from_pretrained(caption_model_id)
+            
+            if not quiet:
+                dtype_name = str(dtype).replace("torch.", "")
+                print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
+            
+            # Check if video
+            ext = input_path.lower().split('.')[-1]
+            is_video = ext in ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'gif']
+            
+            if is_video:
+                # For video, extract frames and describe
+                cap = cv2.VideoCapture(input_path)
+                if not cap.isOpened():
+                    return "Unknown video content"
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                num_samples = 5  # Fewer samples for VL model (slower)
+                indices = np.linspace(0, total_frames - 1, num_samples, dtype=int)
+                
+                captions = []
+                for i, idx in enumerate(indices):
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ret, frame = cap.read()
+                    if not ret:
+                        continue
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_image = Image.fromarray(rgb_frame)
+                    
+                    # Qwen3-VL requires chat template for vision tokens
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "image": pil_image},
+                                {"type": "text", "text": "Describe this image in detail."},
+                            ],
+                        }
+                    ]
+                    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                    inputs = processor(
+                        text=[text],
+                        images=[pil_image],
+                        return_tensors="pt"
+                    ).to(device)
+                    
+                    generated_ids = model.generate(**inputs, max_new_tokens=256)
+                    output_text = processor.batch_decode(
+                        generated_ids[:, inputs.input_ids.shape[1]:], 
+                        skip_special_tokens=True
+                    )[0]
+                    captions.append(output_text)
+                    
+                cap.release()
+                return " | ".join(captions)
+            else:
+                # Image
+                raw_image = Image.open(input_path).convert('RGB')
+                
+                # Qwen3-VL requires chat template for vision tokens
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "image": raw_image},
+                            {"type": "text", "text": "Describe this image in detail."},
+                        ],
+                    }
+                ]
+                text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                inputs = processor(
+                    text=[text],
+                    images=[raw_image],
+                    return_tensors="pt"
+                ).to(device)
+                
+                generated_ids = model.generate(**inputs, max_new_tokens=512)
+                caption = processor.batch_decode(
+                    generated_ids[:, inputs.input_ids.shape[1]:], 
+                    skip_special_tokens=True
+                )[0]
+                
+                if not quiet:
+                    print(f"   Detected: '{caption}'")
+                return caption
+
+        # ----------------------------------------------------------------
         # MODEL: Florence-2 (Default/SOTA)
         # ----------------------------------------------------------------
         else:

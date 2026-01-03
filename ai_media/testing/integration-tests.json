@@ -177,15 +177,15 @@
       "description": "Generate image using Qwen-Image 4-bit model (CUDA only, best text rendering)"
     },
     {
-      "name": "Image - Qwen-Image-MPS (Mac)",
+      "name": "Image - Qwen-Image-2512 (Mac)",
       "timeout": 3600,
       "runOn": "mps",
-      "command": "-i -p \"A sign that says Hello World\" -o ai_media/testing/data/outputs/img_qwen_mps.jpg -s 64x64 --image-model qwen-image-mps --force --unsafe",
+      "command": "-i -p \"A sign that says Hello World\" -o ai_media/testing/data/outputs/img_qwen_2512.jpg -s 64x64 --image-model qwen-image-2512 --force --unsafe",
       "expectedInputItems": [],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/img_qwen_mps.jpg"
+        "ai_media/testing/data/outputs/img_qwen_2512.jpg"
       ],
-      "description": "Generate image using Qwen-Image Full model (MPS, float32)"
+      "description": "Generate image using Qwen-Image 2512 model (MPS, float32)"
     },
     {
       "name": "Image - Square Orientation",
@@ -652,6 +652,42 @@
       "description": "Generate caption with explicit Florence model"
     },
     {
+      "name": "Caption - Qwen3 VL 8B",
+      "timeout": 600,
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-8b -o ai_media/testing/data/outputs/caption_qwen_vl_8b.txt --force",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/caption_qwen_vl_8b.txt"
+      ],
+      "description": "Generate caption using Qwen3-VL 8B Vision-Language model"
+    },
+    {
+      "name": "Caption - Qwen3 VL 4B",
+      "timeout": 600,
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-4b -o ai_media/testing/data/outputs/caption_qwen_vl_4b.txt --force",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/caption_qwen_vl_4b.txt"
+      ],
+      "description": "Generate caption using Qwen3-VL 4B (balanced size)"
+    },
+    {
+      "name": "Caption - Qwen3 VL 2B",
+      "timeout": 600,
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-2b -o ai_media/testing/data/outputs/caption_qwen_vl_2b.txt --force",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/caption_qwen_vl_2b.txt"
+      ],
+      "description": "Generate caption using Qwen3-VL 2B (lightweight)"
+    },
+    {
       "name": "Transform - Anonymous Chain",
       "command": "-i -p \"A cat\" -o ai_media/testing/data/outputs/cat_chain.jpg -s 64x64 -ti -tp \"Make it anime\" --force --unsafe",
       "expectedInputItems": [],
@@ -697,14 +733,26 @@
     {
       "name": "Transform - Edit (Qwen MPS)",
       "runOn": "mps",
-      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Change text to Hello\" -o ai_media/testing/data/outputs/qwen_edit_mps.png -em qwen-image-edit-mps --force --unsafe",
+      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Change text to Hello\" -o ai_media/testing/data/outputs/qwen_edit_mps.png -em qwen-image-edit --force --unsafe",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
         "ai_media/testing/data/outputs/qwen_edit_mps.png"
       ],
-      "description": "Transform image using Qwen-Image-Edit (MPS) with -em alias"
+      "description": "Transform image using Qwen-Image-Edit (MPS) - Auto switch to MPS friendly model or Base 2511"
+    },
+    {
+      "name": "Transform - Edit (Qwen Lightning)",
+      "timeout": 600,
+      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Change the background to a beach\" -o ai_media/testing/data/outputs/qwen_edit_lightning.png -em qwen-image-edit-lightning --force --unsafe",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/qwen_edit_lightning.png"
+      ],
+      "description": "Transform image using Qwen-Image-Edit-Lightning (4-step LoRA model)"
     },
     {
       "name": "Transform - Edit + Remove BG",
@@ -1607,6 +1655,64 @@
         "saved to"
       ],
       "description": "Generate Python code file"
+    },
+    {
+      "name": "Code - Qwen Coder 32B",
+      "timeout": 900,
+      "runOn": "cuda",
+      "command": "-gc \"Write a python function to calculate fibonacci\" -o ai_media/testing/data/outputs/fib_qwen32.py --code-model qwen-coder-32b --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/fib_qwen32.py"
+      ],
+      "expectedStdoutItems": [
+        "Code",
+        "saved to"
+      ],
+      "description": "Generate Python code using Qwen2.5 Coder 32B (SOTA, CUDA only due to size)"
+    },
+    {
+      "name": "Code - Qwen Coder 14B",
+      "timeout": 600,
+      "command": "-gc \"Write a python function to reverse a string\" -o ai_media/testing/data/outputs/reverse_qwen14.py --code-model qwen-coder-14b --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/reverse_qwen14.py"
+      ],
+      "expectedStdoutItems": [
+        "Code",
+        "saved to"
+      ],
+      "description": "Generate Python code using Qwen2.5 Coder 14B"
+    },
+    {
+      "name": "Code - Qwen Coder 7B",
+      "timeout": 600,
+      "command": "-gc \"Write a python function to check if a number is prime\" -o ai_media/testing/data/outputs/prime_qwen7.py --code-model qwen-coder-7b --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/prime_qwen7.py"
+      ],
+      "expectedStdoutItems": [
+        "Code",
+        "saved to"
+      ],
+      "description": "Generate Python code using Qwen2.5 Coder 7B (Lightweight)"
+    },
+    {
+      "name": "Code - Qwen3 Coder 30B",
+      "runOn": "cuda",
+      "timeout": 600,
+      "command": "-gc \"Write a python function to check if a number is prime\" -o ai_media/testing/data/outputs/prime_qwen3_30b.py --code-model qwen3-coder-30b --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/prime_qwen3_30b.py"
+      ],
+      "expectedStdoutItems": [
+        "Code",
+        "saved to"
+      ],
+      "description": "Generate Python code using Qwen3 Coder 30B (MoE, 3.3B active) (CUDA-only due to size)"
     },
     {
       "name": "Interactive - Jump to article",

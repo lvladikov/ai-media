@@ -242,7 +242,7 @@ class TestConstants(unittest.TestCase):
         self.assertIn("sd3.5-large", ai_media.IMAGE_MODELS)
         self.assertIn("sd3.5-turbo", ai_media.IMAGE_MODELS)
         self.assertIn("qwen-image", ai_media.IMAGE_MODELS)
-        self.assertIn("qwen-image-mps", ai_media.IMAGE_MODELS)
+        self.assertIn("qwen-image-2512", ai_media.IMAGE_MODELS)
         self.assertIn("flux", ai_media.IMAGE_MODELS)
         self.assertIn("flux-dev", ai_media.IMAGE_MODELS)
         self.assertIn("upscaler", ai_media.IMAGE_MODELS)
@@ -270,7 +270,7 @@ class TestConstants(unittest.TestCase):
         self.assertIn("default", ai_media.EDIT_MODELS)
         self.assertIn("instruct-pix2pix", ai_media.EDIT_MODELS)
         self.assertIn("qwen-image-edit", ai_media.EDIT_MODELS)
-        self.assertIn("qwen-image-edit-mps", ai_media.EDIT_MODELS)
+        self.assertIn("qwen-image-edit-lightning", ai_media.EDIT_MODELS)
         self.assertIn("remove-bg", ai_media.EDIT_MODELS)
     
     def test_resolutions_exist(self):

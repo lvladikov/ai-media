@@ -100,8 +100,75 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 progress_callback(pct, msg)
 
         # Initialize Pipeline
-        if "qwen-image-edit" in model_name.lower():
-            # ... (unchanged setup code) ...
+        if "qwen-image-edit-lightning" in model_name.lower():
+            # ----------------------------------------------------------------
+            # Qwen-Image-Edit-2512-Lightning (LoRA-based 4-step model)
+            # This is a distilled LoRA model that loads on top of base 2511
+            # Requires: pip install peft
+            # ----------------------------------------------------------------
+            from diffusers import DiffusionPipeline
+            
+            # Base model is the official 2511
+            base_model_id = "Qwen/Qwen-Image-Edit-2511"
+            lora_repo_id = model_id  # lightx2v/Qwen-Image-Edit-2512-Lightning
+            
+            qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
+            
+            print(f"   ℹ️  Loading Qwen-Image-Edit Lightning (4-step LoRA)...")
+            if progress_callback: progress_callback(0, "Loading Qwen-Image-Edit Lightning...")
+            
+            # Load base model first
+            pipe = DiffusionPipeline.from_pretrained(
+                base_model_id,
+                torch_dtype=qwen_dtype
+            )
+            
+            # Load LoRA weights from the Lightning repo
+            lora_loaded = False
+            try:
+                pipe.load_lora_weights(lora_repo_id)
+                print(f"   ✅ Loaded LoRA weights from {lora_repo_id}")
+                lora_loaded = True
+            except ImportError:
+                print(f"   ⚠️  PEFT not installed. Run: pip install peft")
+                print(f"   ℹ️  Falling back to base Qwen-Image-Edit model (20 steps)")
+            except Exception as e:
+                print(f"   ⚠️  Could not load LoRA weights: {e}")
+                print(f"   ℹ️  Falling back to base Qwen-Image-Edit model (20 steps)")
+            
+            # Enable CPU offload
+            if device.type == "cuda" or device.type == "mps":
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe = pipe.to(device)
+            
+            # Lightning model is optimized for 4 steps, base uses 20
+            lightning_steps = 4 if lora_loaded else 20
+            global_tracker = GlobalProgressTracker(lightning_steps, start_time=time.time())
+            
+            model_label = "Qwen-Edit-Lightning" if lora_loaded else "Qwen-Image-Edit (fallback)"
+            start_msg = f"✨ Applying edits with {model_label}... (Steps: {lightning_steps})"
+            print(start_msg)
+            if progress_callback: progress_callback(0, start_msg)
+            
+            # Note: QwenImageEditPlusPipeline doesn't support callback parameter
+            with torch.inference_mode():
+                output = pipe(
+                    prompt=prompt,
+                    image=image,
+                    num_inference_steps=lightning_steps,
+                    guidance_scale=guidance_scale if guidance_scale != 7.5 else (2.0 if lora_loaded else 4.0),
+                )
+            
+            result = output.images[0]
+            result.save(output_path)
+            print(f"✅ Edited image saved to {output_path}")
+            return True
+            
+        elif "qwen-image-edit" in model_name.lower():
+            # ----------------------------------------------------------------
+            # Standard Qwen-Image-Edit (2511 base model)
+            # ----------------------------------------------------------------
             from diffusers import DiffusionPipeline
             
             # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa

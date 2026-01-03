@@ -72,12 +72,21 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
+  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
+  'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
+  'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B', vram: '~12GB' },
+  'qwen-coder-7b': { label: 'Qwen 2.5 Coder 7B', vram: '~6GB' },
+  'qwen-vl': { label: 'Qwen3-VL 8B (Vision)', vram: '~16GB' },
+  'qwen3-vl-4b': { label: 'Qwen3-VL 4B (Vision)', vram: '~8GB' },
+  'qwen3-vl-2b': { label: 'Qwen3-VL 2B (Vision)', vram: '~4GB' },
 };
 
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
-  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b'
+  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b',
+  'qwen3-coder-30b', 'qwen-coder-32b', 'qwen-coder-14b', 'qwen-coder-7b',
+  'qwen-vl', 'qwen3-vl-4b', 'qwen3-vl-2b'
 ];
 
 const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {

@@ -10,6 +10,37 @@ import os
 from typing import Dict, Callable, Any, Tuple
 from multiprocessing import Queue
 import threading
+import sys
+import io
+
+
+class StreamLogger(io.StringIO):
+    """Redirects stdout/stderr to both original stream and progress queue."""
+    def __init__(self, stream, queue, job_id, pipe_name="stdout"):
+        super().__init__()
+        self.stream = stream
+        self.queue = queue
+        self.job_id = job_id
+        self.pipe_name = pipe_name
+
+    def write(self, message):
+        # Write to original stream (terminal)
+        self.stream.write(message)
+        self.stream.flush()  # Ensure immediate terminal output
+        
+        # Send to queue if it's a non-empty line
+        if message and message.strip():
+            try:
+                # Send as special "log_line" type
+                self.queue.put({
+                    "job_id": self.job_id,
+                    "log_line": message.rstrip()
+                })
+            except Exception:
+                pass
+
+    def flush(self):
+        self.stream.flush()
 
 
 # Global registry of active job processes
@@ -28,6 +59,12 @@ def _child_wrapper(target: Callable, args: Tuple, progress_queue: Queue, job_id:
     """Wrapper that runs in child process with signal handling."""
     _init_child()
     
+    
+    # Redirect stdout/stderr to capture logs
+    if progress_queue:
+        sys.stdout = StreamLogger(sys.stdout, progress_queue, job_id, "stdout")
+        sys.stderr = StreamLogger(sys.stderr, progress_queue, job_id, "stderr")
+
     # Inject progress_queue into args if the target expects it
     # The target functions will check for this queue and use it for updates
     try:

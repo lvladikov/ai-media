@@ -153,9 +153,9 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa
             original_model_name = model_name
             if device.type == "mps" and "-mps" not in model_name.lower():
-                print(f"   ℹ️  Switching to qwen-image-mps (4-bit quantization not supported on MPS)")
-                model_id = IMAGE_MODELS["qwen-image-mps"]
-                model_name = "qwen-image-mps"
+                print(f"   ℹ️  Switching to qwen-image-2512 (4-bit quantization not supported on MPS)")
+                model_id = IMAGE_MODELS["qwen-image-2512"]
+                model_name = "qwen-image-2512"
             elif device.type == "cuda" and "-mps" in model_name.lower():
                 print(f"   ℹ️  Switching to qwen-image (using optimized CUDA 4-bit variant)")
                 model_id = IMAGE_MODELS["qwen-image"]

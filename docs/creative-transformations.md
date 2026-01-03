@@ -21,7 +21,7 @@ Instantly extract subjects from their background.
 | `-ti`, `--transform-image` | Path to the image file to transform. |
 | `-p`, `--prompt` | Edit instruction (works for standalone transformations). |
 | `-tp`, `--transform-prompt` | Edit instruction for chaining with generation (e.g., `-i -p "..." -ti file -tp "..."`). |
-| `-em`, `--edit-model` | Model for editing: `instruct-pix2pix`, `qwen-image-edit`, `qwen-image-edit-mps`, etc. |
+| `-em`, `--edit-model` | Model for editing: `instruct-pix2pix`, `qwen-image-edit` (2511), `qwen-image-edit-lightning` (2512), etc. |
 | `--remove-background`, `-rb` | Remove background (outputs transparent PNG). |
 | `--silhouette` | Create a black silhouette (requires `--remove-background`). |
 | `--image-guidance` | Image guidance scale (default: `1.5`). Higher = closer to original structure. |
@@ -36,16 +36,17 @@ See [Creative Transformation Examples](#examples) and [Models](#models).
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **InstructPix2Pix** | `instruct-pix2pix` | ~4GB | ~8GB (High Precision) | Instructional image editing (e.g., "Make it anime"). |
-| **Qwen-Image-Edit** | `qwen-image-edit` | ~20GB | ~20GB | **Best for:** text editing, precision, object removal. 🔒 **CUDA only**. |
-| **Qwen-Image-Edit (MPS)** | `qwen-image-edit-mps` | ~40GB | ~40GB | Same as above on Mac. Float32. |
+| **Qwen-Image-Edit (2511)** | `qwen-image-edit` | ~20GB | ~40GB | **Best for:** text editing, precision. 40 steps. |
+| **Qwen-Edit-Lightning (2512)** | `qwen-image-edit-lightning` | ~16GB | ~32GB | **4-step** distilled LoRA. ⚠️ Slow on MPS, fast on CUDA! |
 | **RMBG-1.4** | `remove-bg` | ~0.2GB | ~2GB | Background removal and silhouette creation. |
 
 > [!IMPORTANT]
-> **Qwen-Image-Edit Platform Variants:** Uses 4-bit quantization (`bitsandbytes`) which only works on CUDA.
-> - **CUDA:** Uses `qwen-image-edit` (4-bit, 20GB VRAM)
-> - **MPS (Mac):** Uses `qwen-image-edit-mps` (float32)
+> **Qwen-Image-Edit Platform Notes:**
+> - **Base (2511):** `qwen-image-edit` (Standard 40-step model, works on CUDA/MPS)
+> - **Lightning (2512):** `qwen-image-edit-lightning` (4-step LoRA, **requires CUDA for speed**, very slow on MPS)
 >
-> The script **automatically switches** to the correct variant. If you select `qwen-image-edit` on Mac, it switches to `qwen-image-edit-mps`.
+>
+> The script **automatically determines precision (float32/bfloat16)** based on your hardware.
 
 ## Transformation Recipe Book 🪄
 

@@ -19,7 +19,7 @@ Summarize the content of a video file.
 | Option | Description |
 | :--- | :--- |
 | `-gd, --generate-description` | Generate caption/description for input image/video. For videos, 10 evenly-spaced frames are sampled and described. |
-| `-cm, --caption-model` | Model: `florence` (default), `blip`. See [Models](#models). |
+| `-cm, --caption-model` | Model: `florence` (default), `blip`, `qwen-vl`. See [Models](#models). |
 | `-ii, --input-image` | Path to the image or video file to describe. |
 | `-o, --output` | Output text filename (optional). |
 
@@ -30,6 +30,9 @@ See [Description Generation Examples](#examples) and [Models](#models).
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **Florence-2 Large** | `florence` | ~1.5GB | ~3GB | **(Default)** SOTA details, rich descriptions, "seeing" the scene. |
+| **Qwen3-VL 8B** | `qwen-vl` | ~10GB | ~16GB | Vision-Language. Can describe and chat about images (VQA). |
+| **Qwen3-VL 4B** | `qwen3-vl-4b` | ~6GB | ~8GB | Balanced speed and quality. |
+| **Qwen3-VL 2B** | `qwen3-vl-2b` | ~3GB | ~4GB | Lightweight. Fast on lower VRAM. |
 | **BLIP Large** | `blip` | ~1GB | ~2GB | Simple, concise captions. Faster but less detailed. |
 
 ## Examples

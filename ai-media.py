@@ -431,62 +431,70 @@ Examples:
 
 Supported Models (Code : Download Size | Description):
   Images:
-    - sd3.5-turbo (default)     : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
-    - sdxl                      : ~8GB  | Fast, high quality.
-    - sd-1.5                    : ~4GB  | Lightweight, lower VRAM.
-    - sd3.5-medium              : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
-    - sd3.5-large               : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
-    - qwen-image               : ~20GB | Best text rendering. (CUDA 4-bit, auto-switches on MPS)
-    - qwen-image-mps           : ~40GB | ⚠️ HIGH RAM! Qwen-Image for Mac. Float32, slower.
-    - flux                     : ~24GB | High quality (🔒 Gated - Free Login Required)
-    - flux-dev                 : ~24GB | Professional creative work (🔒 Gated - Free Login Required)
-    - flux2                    : ~18GB | FLUX.2 4-bit. SOTA (2025). (🔒 Gated - NVIDIA RTX 3090+ only)
-    - flux2-full               : ~65GB | FLUX.2 full. (🔒 Gated - Mac: 128GB+ RAM required)
+    - sd3.5-turbo (default)      : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
+    - sdxl                       : ~8GB  | Fast, high quality.
+    - sd-1.5                     : ~4GB  | Lightweight, lower VRAM.
+    - sd3.5-medium               : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
+    - sd3.5-large                : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
+    - qwen-image                 : ~20GB | Best text rendering. (CUDA 4-bit, auto-switches on MPS)
+    - qwen-image-2512            : ~40GB | Qwen-Image 2512 (Latest). (MPS/Full, float32)
+    - flux                       : ~24GB | High quality (🔒 Gated - Free Login Required)
+    - flux-dev                   : ~24GB | Professional creative work (🔒 Gated - Free Login Required)
+    - flux2                      : ~18GB | FLUX.2 4-bit. SOTA (2025). (🔒 Gated - NVIDIA RTX 3090+ only)
+    - flux2-full                 : ~65GB | FLUX.2 full. (🔒 Gated - Mac: 128GB+ RAM required)
   
   Video:
-    - zeroscope (default)      : ~4GB  | Fast, no watermarks. Auto-upscales with XL.
-    - ms-1.7b                  : ~10GB | General purpose (has watermark issues).
-    - cogvideox                : ~15GB | High fidelity.
-    - svd                      : ~4GB  | I2V Only.
-    - wan2.2                   : ~30GB | SOTA (2025). Excellent quality.
-    - ltx-video                : ~12GB | Balanced speed/quality. Good motion.
-    - mochi-1                  : ~19GB | High motion fidelity.
-    - hunyuan                  : ~25GB | Massive scale.
+    - zeroscope (default)        : ~4GB  | Fast, no watermarks. Auto-upscales with XL.
+    - ms-1.7b                    : ~10GB | General purpose (has watermark issues).
+    - cogvideox                  : ~15GB | High fidelity.
+    - svd                        : ~4GB  | I2V Only.
+    - wan2.2                     : ~30GB | SOTA (2025). Excellent quality.
+    - ltx-video                  : ~12GB | Balanced speed/quality. Good motion.
+    - mochi-1                    : ~19GB | High motion fidelity.
+    - hunyuan                    : ~25GB | Massive scale.
     
   Audio:
-    - musicgen-small           : ~2GB  | Fast, lightweight. Good for quick sketches.
-    - musicgen-medium (default): ~6GB  | Balanced quality/speed.
-    - musicgen-large           : ~10GB | High fidelity. Slower.
-    - audioldm2                : ~4GB  | Specialized in Sound Effects (SFX), foley, environmental.
-    - stable-audio             : ~10GB | Variable-length, high-quality music/SFX (🔒 Gated - Free Login Required)
-    - bark                     : ~4GB  | Realistic speech, music, and sound effects.
+    - musicgen-small             : ~2GB  | Fast, lightweight. Good for quick sketches.
+    - musicgen-medium (default)  : ~6GB  | Balanced quality/speed.
+    - musicgen-large             : ~10GB | High fidelity. Slower.
+    - audioldm2                  : ~4GB  | Specialized in Sound Effects (SFX), foley, environmental.
+    - stable-audio               : ~10GB | Variable-length, high-quality music/SFX (🔒 Gated - Free Login Required)
+    - bark                       : ~4GB  | Realistic speech, music, and sound effects.
     
   Text (Articles, Research, Chat, Code):
-    - deepseek-r1-qwen-7b      : ~7GB  | R1 distilled to Qwen-7B. Step-by-step reasoning.
-    - deepseek-r1-qwen-14b     : ~14GB | R1 distilled to Qwen-14B. Better reasoning.
-    - deepseek-r1-qwen-32b     : ~24GB | ⚠️ HIGH RAM! R1 distilled to Qwen-32B.
-    - deepseek-r1-llama-8b     : ~8GB  | R1 distilled to Llama-8B. Reasoning-focused.
-    - deepseek-r1-llama-70b    : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B.
-    - llama-3.1-8b (default)   : ~16GB | Writing, chat, and reasoning (🔒 Gated - Free Login Required)
-    - mistral-nemo-12b         : ~24GB | Powerful 12B model. Large context and reasoning.
-    - qwen3-8b                 : ~16GB | Latest Qwen model. Strong instruction-following.
-    - qwen-2.5-14b             : ~28GB | Larger Qwen model. Great at detailed formatting.
+    - deepseek-r1-qwen-7b        : ~7GB  | R1 distilled to Qwen-7B. Step-by-step reasoning.
+    - deepseek-r1-qwen-14b       : ~14GB | R1 distilled to Qwen-14B. Better reasoning.
+    - deepseek-r1-qwen-32b       : ~24GB | ⚠️ HIGH RAM! R1 distilled to Qwen-32B.
+    - deepseek-r1-llama-8b       : ~8GB  | R1 distilled to Llama-8B. Reasoning-focused.
+    - deepseek-r1-llama-70b      : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B.
+    - llama-3.1-8b (default)     : ~16GB | Writing, chat, and reasoning (🔒 Gated - Free Login Required)
+    - mistral-nemo-12b           : ~24GB | Powerful 12B model. Large context and reasoning.
+    - qwen3-8b                   : ~16GB | Latest Qwen model. Strong instruction-following.
+    - qwen-2.5-14b               : ~28GB | Larger Qwen model. Great at detailed formatting.
+    - qwen-coder-32b             : ~24GB | Qwen 2.5 SOTA Code Gen. (⚠️ 120GB+ RAM!)
+    - qwen-coder-14b             : ~12GB | Qwen 2.5 Fast & Capable Code Gen.
+    - qwen-coder-7b              : ~6GB  | Qwen 2.5 Lightweight Code Gen.
+    - qwen3-coder-30b            : ~10GB | MoE (3.3B active). Efficient SOTA.
 
   Description Generation:
-    - florence (default)       : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene.
-    - blip                     : ~1GB   | Simple, concise captions. Faster but less detailed.
+    - florence (default)         : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene.
+    - blip                       : ~1GB   | Simple, concise captions. Faster but less detailed.
+    - qwen-vl                    : ~16GB  | Qwen3-VL 8B. Vision-Language captioning.
+    - qwen3-vl-8b                : ~16GB  | Qwen3-VL 8B (explicit).
+    - qwen3-vl-4b                : ~8GB   | Qwen3-VL 4B. Balanced.
+    - qwen3-vl-2b                : ~4GB   | Qwen3-VL 2B. Lightweight.
 
   Creative Image Transformation:
-    - instruct-pix2pix         : ~4GB  | Instructional image editing (e.g., "Make it anime").
-    - instruct-pix2pix-sdxl    : ~8GB  | High quality, slow.
-    - qwen-image-edit          : ~20GB | Best for text editing, precision. (CUDA, auto-switches on MPS)
-    - qwen-image-edit-mps      : ~40GB | ⚠️ HIGH RAM! Qwen-Image-Edit for Mac. Float32.
-    - remove-bg                : ~1GB  | Background removal and silhouette creation.
+    - instruct-pix2pix           : ~4GB  | Instructional image editing (e.g., "Make it anime").
+    - instruct-pix2pix-sdxl      : ~8GB  | High quality, slow.
+    - qwen-image-edit            : ~20GB | Best for text editing, precision. (Official Base 2511)
+    - qwen-image-edit-lightning  : ~16GB | 4-step LoRA. Fast on CUDA. (⚠️ Slow on MPS!)
+    - remove-bg                  : ~1GB  | Background removal and silhouette creation.
 
   Upscaling:
-    - x2 (≤2x factor)          : ~4GB  | Fast, preserves original style.
-    - x4 (>2x factor)          : ~8GB  | High detail, sharpens textures.
-    - Real-ESRGAN x4plus       : ~0.3GB| Fast, faithful upscaling, better temporal consistency.
+    - x2 (≤2x factor)            : ~4GB  | Fast, preserves original style.
+    - x4 (>2x factor)            : ~8GB  | High detail, sharpens textures.
+    - Real-ESRGAN x4plus         : ~0.3GB| Fast, faithful upscaling, better temporal consistency.
         """
     )
     
@@ -558,7 +566,7 @@ Supported Models (Code : Download Size | Description):
 
     # Description Generation Options
     caption_group = parser.add_argument_group("Description Generation Options")
-    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip"], help="Model for description generation: 'florence' (default, SOTA) or 'blip'.")
+    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip", "qwen-vl", "qwen3-vl-8b", "qwen3-vl-4b", "qwen3-vl-2b"], help="Model for description generation: 'florence' (default), 'blip', 'qwen-vl' (Qwen3-VL-8B), or 'qwen3-vl-2b/4b/8b'.")
     
     # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
@@ -620,8 +628,36 @@ Supported Models (Code : Download Size | Description):
     server_group.add_argument("--reload", action="store_true", help="Enable auto-reload for development (On by default for Client modes)")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
+    parser.add_argument("--list-models", action="store_true", help="List all available models and exit.")
+
     # --- Parse Arguments ---
     args = parser.parse_args()
+    
+    # List Models
+    if args.list_models:
+        print("🤖 Available AI Models:")
+        print("="*60)
+        
+        def print_category(name, models_dict):
+            print(f"\n[{name}]")
+            # Filter aliases to avoid clutter
+            hidden_aliases = [
+                "qwen-image-edit-mps",
+                "wan2.2", # Alias for wan-2.2
+            ]
+            for short_code, hf_id in models_dict.items():
+                if short_code in hidden_aliases:
+                    continue
+                desc = " (Default)" if short_code == "default" else ""
+                print(f"  • {short_code:<25}: {hf_id}{desc}")
+                
+        print_category("Image Generation", IMAGE_MODELS)
+        print_category("Video Generation", VIDEO_MODELS)
+        print_category("Audio Generation", AUDIO_MODELS)
+        print_category("Text / Reasoning", TEXT_MODELS)
+        print_category("Captioning", CAPTION_MODELS)
+        print_category("Image Editing", EDIT_MODELS)
+        sys.exit(0)
     
     # Interactive Mode Trigger - handled BEFORE heavy module loading for instant startup
     if args.interactive or len(sys.argv) == 1:

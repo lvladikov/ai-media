@@ -415,7 +415,7 @@ def run_interactive(jump_point=None):
             if is_cuda:
                 model_options.append(("Qwen-Image (Best Text, CUDA 4-bit) ~20GB", "qwen-image"))
             elif is_mac:
-                model_options.append(("Qwen-Image (Best Text, Mac Full) ~40GB", "qwen-image-mps"))
+                model_options.append(("Qwen-Image 2512 (Latest, Mac/Full) ~40GB", "qwen-image-2512"))
             
             # Flux base models with Mac-specific notes
             if is_mac:
@@ -742,11 +742,10 @@ def run_interactive(jump_point=None):
                 ("InstructPix2Pix (Default, Fast) ~4GB", "instruct-pix2pix"),
             ]
             
-            # Add Qwen-Image-Edit based on platform
-            if is_cuda:
-                edit_model_options.append(("Qwen-Image-Edit (Best for Text/Precision, CUDA) ~20GB", "qwen-image-edit"))
-            elif is_mps:
-                edit_model_options.append(("Qwen-Image-Edit (Best for Text/Precision, Mac) ~40GB", "qwen-image-edit-mps"))
+            
+            # Add Qwen-Image-Edit
+            edit_model_options.append(("Qwen-Image-Edit (Base 2511, Precise) ~20GB", "qwen-image-edit"))
+            edit_model_options.append(("Qwen-Edit-Lightning (Fast 2512) ~16GB", "qwen-image-edit-lightning"))
             
             edit_model = prompt_choice("Edit Model", edit_model_options)
             if edit_model is None:
@@ -968,6 +967,9 @@ def run_interactive(jump_point=None):
             print("\n📦 Select Caption Model:\n")
             model_options = [
                 ("Florence-2 (Default, SOTA)", "florence"),
+                ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
+                ("Qwen3-VL 4B (Balanced)", "qwen3-vl-4b"),
+                ("Qwen3-VL 2B (Lightweight)", "qwen3-vl-2b"),
                 ("BLIP", "blip"),
             ]
             model = prompt_choice("Model", model_options)
@@ -1022,6 +1024,8 @@ def run_interactive(jump_point=None):
                 ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
                 ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
                 ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
+                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
                 ("Mistral Nemo-12B", "mistral-nemo-12b"),
             ]
             model = prompt_choice("Model", model_options)
@@ -1112,6 +1116,10 @@ def run_interactive(jump_point=None):
             print("\n📦 Select Code Model:\n")
             model_options = [
                 ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
+                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
+                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
+                ("Qwen 2.5 Coder 14B", "qwen-coder-14b"),
+                ("Qwen 2.5 Coder 7B", "qwen-coder-7b"),
                 ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
                 ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
                 ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
@@ -1159,6 +1167,9 @@ def run_interactive(jump_point=None):
                 ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
                 ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
                 ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
+                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
+                ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
                 ("Mistral Nemo-12B", "mistral-nemo-12b"),
             ]
             model = prompt_choice("Model", model_options)

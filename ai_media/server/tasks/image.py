@@ -14,6 +14,7 @@ def run_image_generation(
     model: str,
     steps: int,
     guidance_scale: float,
+    force: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for image generation. Runs in child process."""
@@ -45,6 +46,7 @@ def run_image_generation(
             model_name=model,
             steps=steps,
             guidance_scale=guidance_scale,
+            force=force,
         )
         
         if success:

@@ -338,7 +338,8 @@ export function TransformView() {
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-primary-500"
                   >
                     <option value="instruct-pix2pix">InstructPix2Pix (Creative)</option>
-                    <option value="qwen-image-edit">Qwen-Image-Edit (Precise)</option>
+                    <option value="qwen-image-edit">Qwen-Image-Edit (Base 2511, Precise)</option>
+                    <option value="qwen-image-edit-lightning">Qwen-Edit-Lightning (Fast 2512)</option>
                     <option value="magic-mix">MagicMix</option>
                   </select>
                 </div>

@@ -17,7 +17,7 @@ IMAGE_MODELS = {
     "sd3.5-large": "stabilityai/stable-diffusion-3.5-large",       # SD 3.5 Large (best quality)
     "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps) (DEFAULT)
     "qwen-image": "ovedrive/qwen-image-4bit",                      # Qwen-Image 4-bit (CUDA, 20GB)
-    "qwen-image-mps": "Qwen/Qwen-Image",                           # Qwen-Image Full (MPS, float32, ~40GB RAM)
+    "qwen-image-2512": "Qwen/Qwen-Image",                          # Qwen-Image 2512 (Latest) (MPS, ~40GB RAM)
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler",  # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",      # 2x Latent Upscaling
     "default": "stabilityai/stable-diffusion-3.5-large-turbo"
@@ -29,6 +29,8 @@ EDIT_MODELS = {
     "instruct-pix2pix-sdxl": "diffusers/sdxl-instructpix2pix-768",
     "qwen-image-edit": "Qwen/Qwen-Image-Edit-2511",         # Qwen-Image-Edit (CUDA, 4-bit)
     "qwen-image-edit-mps": "Qwen/Qwen-Image-Edit-2511",     # Qwen-Image-Edit (MPS, float32)
+    # The 'Lightning' 2512 model is hosted by lightx2v and uses LoRA/distillation
+    "qwen-image-edit-lightning": "lightx2v/Qwen-Image-Edit-2512-Lightning", 
     "remove-bg": "briaai/RMBG-1.4",
     "default": "timbrooks/instruct-pix2pix"
 }
@@ -71,6 +73,11 @@ TEXT_MODELS = {
     # General-purpose (Newer knowledge cutoffs)
     "qwen3-8b": "Qwen/Qwen3-8B",  # Note: May have MPS issues on Apple Silicon
     "qwen-2.5-14b": "Qwen/Qwen2.5-14B-Instruct",
+    # Coding-specific models
+    "qwen-coder-32b": "Qwen/Qwen2.5-Coder-32B-Instruct",    # Qwen 2.5 SOTA Code Gen (~24GB VRAM, 120GB RAM)
+    "qwen-coder-14b": "Qwen/Qwen2.5-Coder-14B-Instruct",    # Qwen 2.5 Fast & Capable (~12GB VRAM)
+    "qwen-coder-7b": "Qwen/Qwen2.5-Coder-7B-Instruct",      # Qwen 2.5 Lightweight (~6GB VRAM)
+    "qwen3-coder-30b": "Qwen/Qwen3-Coder-30B-A3B-Instruct", # MoE (3.3B active, ~10GB VRAM)
     # Established models
     "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
     "mistral-nemo-12b": "mistralai/Mistral-Nemo-Instruct-2407",
@@ -81,6 +88,11 @@ TEXT_MODELS = {
 # --- Caption/Description Models ---
 CAPTION_MODELS = {
     "florence": "microsoft/Florence-2-large",
+    # Qwen3-VL series (latest, better compatibility)
+    "qwen3-vl-8b": "Qwen/Qwen3-VL-8B-Instruct",     # 8B, best quality
+    "qwen3-vl-4b": "Qwen/Qwen3-VL-4B-Instruct",     # 4B, balanced
+    "qwen3-vl-2b": "Qwen/Qwen3-VL-2B-Instruct",     # 2B, lightweight
+    "qwen-vl": "Qwen/Qwen3-VL-8B-Instruct",         # Alias (now points to Qwen3)
     "blip": "Salesforce/blip-image-captioning-large",
     "default": "microsoft/Florence-2-large"
 }
@@ -101,7 +113,8 @@ MODEL_REQUIREMENTS = {
     "stabilityai/stable-diffusion-3.5-large": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
     "stabilityai/stable-diffusion-3.5-large-turbo": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
     "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
-    "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)},
+    "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
+    "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)}, # Covers qwen-image-2512 too
     
     # Audio Models (max_duration in seconds, based on model architecture limits)
     "facebook/musicgen-small": {"vram": 4, "ram": 8, "max_duration": 30},
@@ -132,12 +145,21 @@ MODEL_REQUIREMENTS = {
     "timbrooks/instruct-pix2pix": {"vram": 8, "ram": 12, "max_resolution": (1024, 1024)},
     "diffusers/sdxl-instructpix2pix-768": {"vram": 10, "ram": 16, "max_resolution": (1024, 1024)},
     "Qwen/Qwen-Image-Edit-2511": {"vram": 20, "ram": 40, "max_resolution": (1664, 1664)},
+    "lightx2v/Qwen-Image-Edit-2512-Lightning": {"vram": 16, "ram": 32, "max_resolution": (1664, 1664)},
     "briaai/RMBG-1.4": {"vram": 4, "ram": 8, "max_resolution": (2048, 2048)},
     
     # Text Models
     "meta-llama/Meta-Llama-3.1-8B-Instruct": {"vram": 16, "ram": 24, "max_resolution": None},
     "mistralai/Mistral-Nemo-Instruct-2407": {"vram": 24, "ram": 32, "max_resolution": None},
     "Qwen/Qwen2.5-14B-Instruct": {"vram": 28, "ram": 48, "max_resolution": None},
+    "Qwen/Qwen2.5-Coder-32B-Instruct": {"vram": 24, "ram": 120, "max_resolution": None},  # CUDA only, needs 120GB+ RAM on MPS
+    "Qwen/Qwen2.5-Coder-14B-Instruct": {"vram": 12, "ram": 30, "max_resolution": None},
+    "Qwen/Qwen2.5-Coder-7B-Instruct": {"vram": 6, "ram": 16, "max_resolution": None},
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct": {"vram": 10, "ram": 20, "max_resolution": None},  # MoE, 3.3B active
+    # Vision-Language Models
+    "Qwen/Qwen3-VL-8B-Instruct": {"vram": 16, "ram": 28, "max_resolution": None},
+    "Qwen/Qwen3-VL-4B-Instruct": {"vram": 8, "ram": 16, "max_resolution": None},
+    "Qwen/Qwen3-VL-2B-Instruct": {"vram": 4, "ram": 8, "max_resolution": None},
 }
 
 

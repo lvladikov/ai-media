@@ -233,15 +233,21 @@ class ArticleGenerator:
             if self.device.type == "cuda":
                 dtype = self.torch.bfloat16 if is_bfloat16_supported() else self.torch.float16
             elif self.device.type == "mps":
-                dtype = self.torch.float32  # MPS uses float32 for stability
+                # Use float16 for large models (>14B) to fit in RAM, even if less stable
+                if any(size in self.model_name.lower() for size in ["30b", "32b", "70b"]):
+                    dtype = self.torch.float16
+                else:
+                    dtype = self.torch.float32  # MPS uses float32 for stability on smaller models
             else:
                 dtype = self.torch.float32
             
-            # Workaround: Qwen3/Llama have numerical instability on MPS float16
+            # Workaround: Qwen3/Llama have numerical instability on MPS float16 (but we must use it for huge models)
             if self.device.type == "mps" and any(m in self.model_name.lower() for m in ["qwen3", "llama"]):
-                print(f"   ⚠️  {self.model_name} detected on MPS - using fp32 for stability...")
-                dtype = self.torch.float32
-                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+                if dtype == self.torch.float32:
+                    print(f"   ⚠️  {self.model_name} detected on MPS - using fp32 for stability...")
+                    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+                else:
+                    print(f"   ⚠️  {self.model_name} detected on MPS - using fp16 to conserve memory (may be unstable)...")
             
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             

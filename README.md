@@ -67,7 +67,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **markdown**, **python-docx**, **xhtml2pdf**: Document format conversion
     - **rich**: Beautiful terminal formatting, syntax highlighting, and progress spinners
     - **prompt_toolkit**: Interactive command line features (history, arrow keys, tab autocomplete)
-    - **psutil**: System resource monitoring (RAM/CPU tracking)
+    - **peft**: Parameter-Efficient Fine-Tuning for LoRA model loading
     - **psutil**: System resource monitoring (RAM/CPU tracking)
     - **beautifulsoup4**: Web scraping for Deep Research
     - **Web Server**: `fastapi`, `uvicorn`, `python-multipart`, `sse-starlette`, `websockets` for the Web UI & API
@@ -277,7 +277,7 @@ For detailed options, models, and examples for each feature, see the dedicated d
 
 
 ## Dependencies
-
+ 
 This project uses the following open-source libraries:
 
 | Dependency | Purpose | GitHub |
@@ -312,6 +312,7 @@ This project uses the following open-source libraries:
 | [python-multipart](https://github.com/Kludex/python-multipart) | Multipart/form-data support for file uploads | [Kludex/python-multipart](https://github.com/Kludex/python-multipart) |
 | [sse-starlette](https://github.com/sysid/sse-starlette) | Server-Sent Events (SSE) for real-time monitoring | [sysid/sse-starlette](https://github.com/sysid/sse-starlette) |
 | [websockets](https://github.com/python-websockets/websockets) | WebSocket protocol implementation for Chat | [python-websockets/websockets](https://github.com/python-websockets/websockets) |
+| [peft](https://github.com/huggingface/peft) | Parameter-Efficient Fine-Tuning for LoRA loading | [huggingface/peft](https://github.com/huggingface/peft) |
 
 **AI Models used:**
 
@@ -322,8 +323,11 @@ This project uses the following open-source libraries:
 - **Stable Diffusion 3.5 Medium** by Stability AI - [stabilityai/stable-diffusion-3.5-medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
 - **Stable Diffusion 3.5 Large** by Stability AI - [stabilityai/stable-diffusion-3.5-large](https://huggingface.co/stabilityai/stable-diffusion-3.5-large)
 - **Stable Diffusion 3.5 Large Turbo** by Stability AI - [stabilityai/stable-diffusion-3.5-large-turbo](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo)
-- **Qwen-Image** (Text-to-Image, best text rendering) - [Qwen/Qwen-Image](https://huggingface.co/Qwen/Qwen-Image)
+- **Qwen-Image** (Text-to-Image, best text rendering) - [Qwen/Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) (v2512)
 - **Qwen-Image-Edit** (Image editing) - [Qwen/Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)
+- **Qwen-Image-Edit-Lightning** (Fast 2512 Edit) - [lightx2v/Qwen-Image-Edit-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2512-Lightning)
+- **Qwen-Coder** (Code Generation) - [Qwen/Qwen2.5-Coder-32B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct)
+- **Qwen3-VL** (Vision Language) - [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct)
 - **MusicGen** by Meta AI - [facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
 - **AudioLDM 2** by Haohe Liu etc. - [haoheliu/AudioLDM2](https://github.com/haoheliu/AudioLDM2)
 - **Stable Audio Open** by Stability AI - [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0)

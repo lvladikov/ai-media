@@ -16,7 +16,7 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-mps`. See [Models](#models) below. |
+| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-2512`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
@@ -67,8 +67,8 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
 | **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | **Default**. Fast (4 steps) and Good Quality. 🔒 **Gated**. |
-| **Qwen-Image** | `qwen-image` | ~20GB | ~20GB | Best text rendering. 🔒 **CUDA only** (4-bit). |
-| **Qwen-Image (MPS)** | `qwen-image-mps` | ~40GB | ~40GB | Text rendering on Mac. Float32. |
+| **Qwen-Image** | `qwen-image` | ~20GB | ~20GB | Best text rendering. 🔒 **CUDA only** (4-bit). (v2512) |
+| **Qwen-Image-2512** | `qwen-image-2512` | ~40GB | ~40GB | Text rendering on Mac. Full Model (v2512). Float32. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
 | **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
@@ -101,9 +101,9 @@ Both models share the same **8.1B parameter** architecture but differ in speed a
 > [!IMPORTANT]
 > **Platform-Specific Variants:** Qwen-Image uses 4-bit quantization (`bitsandbytes`) which only works on CUDA/NVIDIA GPUs.
 > - **CUDA:** Uses `qwen-image` (4-bit, 20GB VRAM, 8 steps)
-> - **MPS (Mac):** Uses `qwen-image-mps` (Full, float32, 15 steps)
+> - **MPS (Mac):** Uses `qwen-image-2512` (Full, float32, 15 steps)
 >
-> The script **automatically switches** to the correct variant for your hardware. If you select `qwen-image` on Mac, it will switch to `qwen-image-mps` and display an info message.
+> The script **automatically switches** to the correct variant for your hardware. If you select `qwen-image` on Mac, it will switch to `qwen-image-2512` and display an info message.
 
 | Feature | Qwen-Image |
 |---------|-----------|

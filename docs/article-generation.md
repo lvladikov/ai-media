@@ -99,6 +99,10 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 | **Qwen 2.5 14B** | `qwen-2.5-14b` | ~9GB | ~28GB | Larger Qwen. Great at detailed formatting. |
 | **Llama 3.1 8B** | `llama-3.1-8b` | ~5GB | ~16GB | 🔒 **Gated**. Open SOTA 8B. General writing, chat, reasoning. |
 | **Mistral Nemo 12B** | `mistral-nemo-12b` | ~7GB | ~24GB | Powerful 12B. Large context window, strong reasoning. |
+| **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | SOTA Code Gen. ⚠️ 120GB+ RAM on MPS! |
+| **Qwen 2.5 Coder 14B** | `qwen-coder-14b` | ~10GB | ~12GB | Fast & Capable Code Gen. |
+| **Qwen 2.5 Coder 7B** | `qwen-coder-7b` | ~5GB | ~6GB | Lightweight Code Gen. |
+| **Qwen3 Coder 30B** | `qwen3-coder-30b` | ~8GB | ~10GB | **MoE** (3.3B active). Efficient SOTA. |
 
 - All models are quantized (4-bit) on CUDA where possible to fit in consumer GPU memory.
 

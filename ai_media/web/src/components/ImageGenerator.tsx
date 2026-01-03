@@ -8,6 +8,7 @@ import { ResolutionSelector } from './common/ResolutionSelector';
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { RandomPrompt } from './common/RandomPrompt';
 import { JobProgressModal } from './common/JobProgressModal';
+import { ResourceWarningModal } from './common/ResourceWarningModal';
 import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 
@@ -34,8 +35,8 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: s
   'sd-1.5': { label: 'SD 1.5 (Lightweight)', vram: '~4GB' },
   'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, 🔒 Gated)', vram: '~10GB' },
   'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, 🔒 Gated)', vram: '~19GB' },
-  'qwen-image': { label: 'Qwen-Image (CUDA, 4-bit)', vram: '~20GB' },
-  'qwen-image-mps': { label: 'Qwen-Image (Best Text, Mac Full)', vram: '~40GB' },
+  'qwen-image': { label: 'Qwen-Image (CUDA, 4-bit, v2512)', vram: '~20GB' },
+  'qwen-image-2512': { label: 'Qwen-Image 2512 (MPS/Full)', vram: '~40GB' },
   'flux': { label: 'Flux Schnell (High Quality, Slow on Mac)', vram: '~12GB' },
   'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac)', vram: '~16GB' },
   'flux2': { label: 'FLUX.2 (4-bit quantized)', vram: '~12GB' },
@@ -44,7 +45,7 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: s
 
 const MODEL_ORDER = [
   'sd3.5-turbo', 'sdxl', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
-  'qwen-image', 'qwen-image-mps', 'flux', 'flux-dev', 'flux2', 'flux2-full'
+  'qwen-image', 'qwen-image-2512', 'flux', 'flux-dev', 'flux2', 'flux2-full'
 ];
 
 export function ImageGenerator() {
@@ -61,6 +62,15 @@ export function ImageGenerator() {
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [pendingGeneration, setPendingGeneration] = useState<boolean>(false);
+  
+  // High resource text for the model that triggered the warning
+  const [warningDetails, setWarningDetails] = useState<{
+    message: string;
+    details?: any;
+    critical?: boolean;
+  } | null>(null);
 
   // ... (keep useEffects for fetchModels and defaults)
 
@@ -101,12 +111,13 @@ export function ImageGenerator() {
     }
   }, [model]);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
-
+  // Actual execution logic, moved from handleGenerate
+  const executeGeneration = async (force: boolean = false) => {
     setIsLoading(true);
     setResult(null);
     setError(null);
+    setShowWarning(false);
+    setPendingGeneration(false);
 
     try {
       const response = await generateImage({ 
@@ -116,6 +127,7 @@ export function ImageGenerator() {
         height, 
         steps,
         guidance_scale: guidanceScale,
+        force, // Pass force flag to API
       });
       
       setCurrentJobId(response.job_id);
@@ -132,14 +144,55 @@ export function ImageGenerator() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-
-      // No longer polling manually - monitoring via WebSocket in App root
     } catch (err) {
       console.error('Generation failed:', err);
       setIsLoading(false);
       setCurrentJobId(null);
       setError("Failed to start generation job");
     }
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return;
+
+    // Check for High Resource models that block the CLI
+    // "qwen-image", "qwen-image-2512", "flux2-full", "flux-dev" often trigger high-RAM/VRAM warnings
+    const highResourceModels = ['qwen-image', 'qwen-image-2512', 'flux2-full'];
+    
+    // Qwen2512 is notably heavy (40GB) and almost always warns on consumer hardware
+    // Flux2 Full is 128GB+
+    
+    if (highResourceModels.includes(model)) {
+        let warningMsg = "";
+        let critical = false;
+        
+        if (model === 'flux2-full') {
+            warningMsg = "This model (FLUX.2 Full) requires over 128GB of RAM. It will almost certainly crash or freeze average consumer hardware (laptops/desktops) unless you have a workstation class machine. Proceed only if sure.";
+            critical = true;
+        } else if (model.includes('qwen-image')) {
+            warningMsg = "Qwen-Image models are very resource intensive (~40GB RAM for 2512). This may cause system slowdowns or swapping. The process normally asks for confirmation in CLI - clicking Proceed here will auto-confirm it.";
+            critical = false;
+        }
+
+        setWarningDetails({
+            message: warningMsg,
+            critical: critical,
+            details: {
+                target_resolution: `${width}x${height}`,
+                megapixels: Math.round((width * height) / 10000) / 100,
+                // Rough estimates
+                estimated_ram_gb: model === 'flux2-full' ? 128 : 40, 
+                available_ram_gb: useAppStore.getState().systemInfo?.ram_total_gb || 0
+            }
+        });
+        
+        setShowWarning(true);
+        setPendingGeneration(true);
+        return;
+    }
+
+    // Standard path
+    executeGeneration(false);
   };
   
   // Effect to watch the current job for completion/failure using store data
@@ -281,7 +334,7 @@ export function ImageGenerator() {
           <button 
             className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
             onClick={handleGenerate} 
-            disabled={isLoading || !prompt.trim()}
+            disabled={isLoading || !prompt.trim() || pendingGeneration}
           >
             {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><Sparkles size={18} />Generate Image</>)}
           </button>
@@ -289,6 +342,19 @@ export function ImageGenerator() {
       </div>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
+      
+      {/* Resource Warning for High-Mem models */}
+      <ResourceWarningModal 
+        isOpen={showWarning}
+        warning={warningDetails?.message || "High resource usage warning"}
+        type={warningDetails?.critical ? 'critical' : 'warning'}
+        details={warningDetails?.details}
+        onConfirm={() => executeGeneration(true)} // Force execution
+        onCancel={() => {
+            setShowWarning(false);
+            setPendingGeneration(false);
+        }}
+      />
       
       {/* Job Progress Modal */}
       {currentJobId && (
