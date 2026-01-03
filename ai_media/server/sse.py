@@ -200,11 +200,27 @@ async def resource_stream():
                                         except Exception:
                                             pass
                                     
-                                    # SPECIAL CASE: Persistent Chat Model often shows as the main process PID
-                                    # or one of its immediate children. If we found NO VRAM but the process is definitely
-                                    # holding onto a model, we might be hitting a timing or PID resolution issue.
+                                    # SPECIAL CASE: nvidia-smi returns [N/A] for processes with allocated VRAM but not actively computing
+                                    # If we found no VRAM from nvidia-smi but the process is the server with a cached model,
+                                    # use torch.cuda.memory_allocated() which accurately tracks PyTorch allocations
                                     if found_vram > 0:
                                         proc_vram_gb = round(found_vram / 1024, 2)
+                                        proc_gpu_percent = gpu_percent  # Attribute GPU load to this process
+                                    elif proc_pid == current_pid:
+                                        # This is the server process - check if we have a model cached
+                                        try:
+                                            from .cache import model_cache
+                                            if model_cache.is_loaded("text") or model_cache.is_loaded("image") or model_cache.is_loaded("video") or model_cache.is_loaded("audio"):
+                                                # Model is cached in this process, get VRAM from torch
+                                                allocated = torch.cuda.memory_allocated()
+                                                reserved = torch.cuda.memory_reserved()
+                                                # Use reserved (actual VRAM footprint) as it includes caching overhead
+                                                proc_vram_gb = round(max(allocated, reserved) / gb_divisor, 2)
+                                                # If we have significant VRAM usage, attribute global GPU load
+                                                if proc_vram_gb > 0.1:
+                                                    proc_gpu_percent = gpu_percent
+                                        except Exception:
+                                            pass
                                 except Exception:
                                     pass
                         except Exception:

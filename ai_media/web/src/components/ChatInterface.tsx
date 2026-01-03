@@ -111,6 +111,33 @@ const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {
   );
 };
 
+const FileContextAccordion = ({ filename, content }: { filename: string; content: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const lines = content.split('\n');
+  const previewLines = lines.slice(0, 5).join('\n');
+  const hasMore = lines.length > 5;
+
+  return (
+    <div className="border-l-2 border-blue-600/50 pl-3 my-1 bg-slate-800/10 py-1 pr-2 rounded-r">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 font-semibold text-xs opacity-70 text-slate-300 mb-0.5 hover:opacity-100 transition-opacity w-full text-left"
+      >
+        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span>📄 File: {filename}</span>
+        {hasMore && !isOpen && <span className="text-slate-500 ml-1">({lines.length} lines)</span>}
+      </button>
+
+      <div className={`prose prose-invert max-w-none text-slate-400/90 leading-tight text-xs font-mono mt-2 ${isOpen ? '' : 'max-h-[120px] overflow-hidden'}`}>
+        <pre className="!bg-transparent !p-0 !m-0 whitespace-pre-wrap">
+          {isOpen ? content : previewLines}
+          {!isOpen && hasMore && <span className="text-slate-500 italic">...</span>}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
 const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { content: string, reasoning?: string, thinkingTime?: string }) => {
   const [copied, setCopied] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
@@ -153,21 +180,59 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       const html = tempDiv.innerHTML;
       const text = answerRef.current.innerText;
 
-      const htmlBlob = new Blob([html], { type: 'text/html' });
-      const textBlob = new Blob([text], { type: 'text/plain' });
+      // Detect OS - Windows needs execCommand, Mac works with ClipboardItem
+      const isWindows = navigator.platform.toLowerCase().includes('win') ||
+        navigator.userAgent.toLowerCase().includes('windows');
 
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': htmlBlob,
-          'text/plain': textBlob,
-        })
-      ]);
+      if (!isWindows && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        // Mac/Linux: Use modern clipboard API
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        const textBlob = new Blob([text], { type: 'text/plain' });
 
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': htmlBlob,
+            'text/plain': textBlob,
+          })
+        ]);
+
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // Windows: Use execCommand with selection (preserves HTML formatting)
+        const selection = window.getSelection();
+        const range = document.createRange();
+
+        // Create temporary element with the styled HTML
+        const clipboardDiv = document.createElement('div');
+        clipboardDiv.innerHTML = html;
+        clipboardDiv.style.position = 'fixed';
+        clipboardDiv.style.left = '-9999px';
+        clipboardDiv.style.whiteSpace = 'pre-wrap';
+        document.body.appendChild(clipboardDiv);
+
+        range.selectNodeContents(clipboardDiv);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+
+        const success = document.execCommand('copy');
+
+        document.body.removeChild(clipboardDiv);
+        selection?.removeAllRanges();
+
+        if (success) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } else {
+          throw new Error('execCommand copy failed');
+        }
+      }
     } catch (err) {
       console.error('Failed to copy rich text:', err);
+      // Final fallback: plain text
       navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
   const copyAsImage = async () => {
@@ -314,6 +379,20 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
 
 
 const UserMessage = ({ content }: { content: string }) => {
+  // Check if message contains file context (added via Read File button)
+  const fileContextMatch = content.match(/\[File Context: ([^\]]+)\]/);
+  if (fileContextMatch) {
+    const filename = fileContextMatch[1];
+    // Extract file content (everything after the header line, stripping markdown code fences)
+    let fileContent = content.replace(/```markdown\n?\[File Context:[^\]]+\]\n?```\n?/, '').replace(/```\n?/g, '').trim();
+
+    return (
+      <div className="prose prose-invert prose-sm max-w-none">
+        <FileContextAccordion filename={filename} content={fileContent} />
+      </div>
+    );
+  }
+
   // Check if message is a slash command
   if (content.trim().startsWith('/')) {
     const parts = content.trim().split(' ');
@@ -413,7 +492,7 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl p-6 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-secondary border border-border rounded-xl shadow-2xl w-[90vw] max-w-[90vw] p-6 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-bold text-primary mb-4 flex items-center gap-2 shrink-0">
           <FileText className="text-brand-400" />
           Read File
@@ -523,7 +602,7 @@ export function ChatInterface() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, loadingLogs, queuedMessages]); // Added loadingLogs and queuedMessages to dependencies
+  }, [chatMessages, loadingLogs, queuedMessages, isProcessing]); // Scroll when any of these change
 
   // Elapsed time timer for "Thinking..." indicator
   useEffect(() => {
@@ -551,9 +630,11 @@ export function ChatInterface() {
     const userMsg = { role: 'user' as const, content: contentToSend };
     addChatMessage(userMsg);
 
-    // Set immediate thinking state
+    // Set immediate processing state with appropriate message
     setIsProcessing(true);
-    setStatusMessage("Thinking...");
+    const isSearch = contentToSend.startsWith('/search') || contentToSend.startsWith('/online-search');
+    const isRead = contentToSend.startsWith('/read ') || contentToSend.includes('[File Context:');
+    setStatusMessage(isSearch ? "Searching..." : isRead ? "Reading..." : "Thinking...");
     const now = Date.now();
     setThinkingStartTime(now);  // Start elapsed time timer
     thinkingStartTimeRef.current = now;
@@ -649,11 +730,16 @@ export function ChatInterface() {
         setIsProcessing(false);
         thinkingStartTimeRef.current = null;
       } else if (data.type === 'command_response') {
-        // Handle structural responses (like file added) without clearing isProcessing
+        // Handle command responses (like search, file read) - stop processing since no AI response follows
         addChatMessage({
           role: 'system',
           content: data.content
         });
+        // Clear processing state since command is complete and no AI response is coming
+        setIsProcessing(false);
+        setStatusMessage(null);
+        thinkingStartTimeRef.current = null;
+        setThinkingStartTime(null);
       } else if (data.type === 'status') {
         setIsProcessing(true);
         setStatusMessage(data.message || (data.status === 'loading' ? 'Loading model...' : 'Thinking...'));
@@ -975,8 +1061,8 @@ export function ChatInterface() {
                   }
                 }}
                 className={`p-2 rounded-lg transition-all text-slate-400 hover:text-white -mr-2 ${showCollapseHint
-                    ? 'animate-pulse bg-slate-700/30 hover:bg-slate-700/50'
-                    : 'hover:bg-slate-700/50'
+                  ? 'animate-pulse bg-slate-700/30 hover:bg-slate-700/50'
+                  : 'hover:bg-slate-700/50'
                   }`}
                 title={showCollapseHint ? "Collapse sidebar (Ctrl+Click to stop animation)" : "Collapse sidebar"}
               >
