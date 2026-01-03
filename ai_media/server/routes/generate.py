@@ -1,10 +1,12 @@
 """Image, video, and audio generation routes."""
 
 from datetime import datetime
+import os
 
 from fastapi import APIRouter
 
 from ..models import ImageGenerateRequest, VideoGenerateRequest, AudioGenerateRequest
+from ..config import CONFIG
 from ..jobs import create_job
 from ..process_manager import spawn_job_process
 from ..tasks import image as image_tasks
@@ -31,7 +33,7 @@ async def generate_image(request: ImageGenerateRequest):
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = request.output_filename or f"image_{timestamp}.png"
-    output_path = f"output/{filename}"
+    output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
         job["job_id"],
@@ -69,7 +71,7 @@ async def generate_video(request: VideoGenerateRequest):
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = request.output_filename or f"video_{timestamp}.mp4"
-    output_path = f"output/{filename}"
+    output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
         job["job_id"],
@@ -102,7 +104,7 @@ async def generate_audio(request: AudioGenerateRequest):
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = request.output_filename or f"audio_{timestamp}.wav"
-    output_path = f"output/{filename}"
+    output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
         job["job_id"],

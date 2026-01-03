@@ -30,7 +30,7 @@ Automatically synchronize video generation with audio. You provide an Audio Prom
 | `-ii, --input-image` | Source image path for **Image-to-Video** generation (SVD, CogVideoX I2V). |
 | `-ap, --audio-prompt` | **Text prompt** for generating background audio (e.g., "Techno beat"). Automatically muxes with video. Use `-am` to select audio model. |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. Default: mp4. |
+| `-o, --output` | Output filename/path. Default: mp4. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 
 See [Video Generation Examples](#examples) and [Models](#models).
 

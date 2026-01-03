@@ -869,6 +869,11 @@ class ArticleGenerator:
             mode = "wb" if fmt in ["pdf", "docx"] else "w"
             encoding = None if fmt in ["pdf", "docx"] else "utf-8"
             
+            # Ensure directory exists
+            output_dir = os.path.dirname(filename)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
             with open(filename, mode, encoding=encoding) as f:
                 if mode == "wb":
                     f.write(content_bytes)

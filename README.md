@@ -182,12 +182,32 @@ source venv/bin/activate
 # 4. Install dependencies
 pip install -r requirements.txt
 
-# 5. [Optional] Login to Hugging Face (Free); See Gated Models (Optional) section above.
+# 5. Create config.json in the root directory of the project
+    #5.1.  **Create the file**: Copy `config.sample.json` to `config.json` in the project root.
+        - **macOS/Linux**: `cp config.sample.json config.json`
+        - **Windows**: `copy config.sample.json config.json`
+
+    #5.2.  **Configure paths**: Open `config.json` and adjust the following values:
+        - `paths.hf_home`: Absolute path to your HuggingFace model cache (e.g., `~/.cache/huggingface`).
+        - `paths.python_venv`: Path to your Python virtual environment (e.g., `./venv`).
+        - `paths.ai_media`: Absolute path to the AI-Media project directory. (e.g. whatever `./` resolves to as absolute path.
+        - `paths.ffmpeg`: Path to the `ffmpeg` executable.
+        - `paths.media_output`: Directory where generated files will be saved (both from CLI and Web UI).
+    #5.3 How to Find Paths
+        - If you are unsure where to find these paths, use these commands in your terminal:
+            - **FFmpeg Path**:
+                - **macOS / Linux**: Run `which ffmpeg`.
+                - **Windows**: Run `where ffmpeg` in Command Prompt.
+            - **Default HuggingFace Cache**:
+                - **macOS / Linux**: `~/.cache/huggingface`
+    - **Windows**: `C:\Users\<username>\.cache\huggingface`
+
+# 6. [Optional] Login to Hugging Face (Free); See Gated Models (Optional) section above.
 # Only required if you want to use Gated models like Flux.
 hf auth login
 # (Paste your Access Token when prompted. It is invisible.)
 
-# 6. [Optional] Install Web UI & Electron dependencies (only needed for --serve flags or Web UI/Electron builds)
+# 7. [Optional] Install Web UI & Electron dependencies (only needed for --serve flags or Web UI/Electron builds)
 cd ai_media/web && npm install && cd ../..
 cd ai_media/web/packages/electron && npm install && cd ../../../..
 ```
@@ -228,7 +248,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | Option | Description |
 | :--- | :--- |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
+| `-o, --output` | Output filename/path. **Optional**: auto-generated if omitted (the folder where files are generated is configured in `config.json` under `paths.media_output`). |
 | `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
 | `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |

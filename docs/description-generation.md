@@ -21,7 +21,7 @@ Summarize the content of a video file.
 | `-gd, --generate-description` | Generate caption/description for input image/video. For videos, 10 evenly-spaced frames are sampled and described. |
 | `-cm, --caption-model` | Model: `florence` (default), `blip`, `qwen-vl`. See [Models](#models). |
 | `-ii, --input-image` | Path to the image or video file to describe. |
-| `-o, --output` | Output text filename (optional). |
+| `-o, --output` | Output text filename (optional). The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 
 See [Description Generation Examples](#examples) and [Models](#models).
 

@@ -20,7 +20,7 @@ This tool provides a unified interface for multiple generations of image models,
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. |
+| `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 | `-f, --format` | File format: jpg, png (default: jpg). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", "1536" (square), `{w:1280, h:720}`. Default: 720p. |
 

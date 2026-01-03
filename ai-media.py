@@ -263,8 +263,14 @@ import re
 import argparse
 import time
 from datetime import datetime
+from datetime import datetime
 import shutil
 import subprocess
+try:
+    from ai_media.server.config import CONFIG
+except ImportError:
+    CONFIG = {"paths": {"media_output": "output"}}  # Fallback
+
 try:
     import psutil  # For resource checking
 except ImportError:
@@ -775,7 +781,12 @@ Supported Models (Code : Download Size | Description):
             print("❌ Error: Code generation code requires a prompt (e.g. -gc 'Write a script...' or -gc -p '...')")
             sys.exit(1)
             
-        gen.generate_code(prompt, output_file=args.output)
+        # Default to media output dir if no output specified
+        code_output = args.output
+        if not code_output:
+            code_output = CONFIG["paths"]["media_output"]
+            
+        gen.generate_code(prompt, output_file=code_output)
         sys.exit(0)
 
     elif args.generate_article or args.generate_research:
@@ -800,6 +811,10 @@ Supported Models (Code : Download Size | Description):
             slug = re.sub(r'[^\w\s-]', '', args.prompt.lower())
             slug = re.sub(r'[-\s]+', '_', slug).strip('_')[:50]  # Limit to 50 chars
             outfile = f"{slug}.{output_format}" if slug else f"article_{int(time.time())}.{output_format}"
+            
+            # Use configured output directory
+            if not os.path.dirname(outfile):
+                 outfile = os.path.join(CONFIG["paths"]["media_output"], outfile)
         
         # Ensure extension matches format
         base, _ = os.path.splitext(outfile)
@@ -851,6 +866,10 @@ Supported Models (Code : Download Size | Description):
                 print(f"ℹ️  No output specified. Using transform basename: {args.output}")
             else:
                 args.output = f"output_{int(time.time())}"
+        
+        # Prepend configured output directory
+        if not os.path.dirname(args.output):
+             args.output = os.path.join(CONFIG["paths"]["media_output"], args.output)
 
         # Smart Extension Handling
         if args.format:
@@ -1005,15 +1024,25 @@ Supported Models (Code : Download Size | Description):
             print(f"📝 Description: {desc}")
             # Save to output file if specified
             if args.output:
-                with open(args.output, 'w') as f:
+                outfile = args.output
+                if not os.path.dirname(outfile):
+                    outfile = os.path.join(CONFIG["paths"]["media_output"], outfile)
+                
+                pkg_system.ensure_paths(outfile)
+                
+                with open(outfile, 'w') as f:
                     f.write(desc)
-                print(f"✅ Caption saved to {args.output}")
+                print(f"✅ Caption saved to {outfile}")
             
     elif args.upscale_image:
         outfile = args.upscaled_output_file or args.output
         if not outfile:
              base, ext = os.path.splitext(args.upscale_image)
              outfile = f"{base}_upscaled{ext}"
+        
+        # Enforce relative path to config dir
+        if not os.path.dirname(outfile):
+             outfile = os.path.join(CONFIG["paths"]["media_output"], outfile)
              
         if args.simple_upscale:
              pkg_simple_upscale_image(args.upscale_image, outfile, factor=args.upscale_factor, force=args.force)
@@ -1031,6 +1060,10 @@ Supported Models (Code : Download Size | Description):
              base, ext = os.path.splitext(args.upscale_video)
              outfile = f"{base}_upscaled{ext}"
              
+         # Enforce relative path to config dir
+         if not os.path.dirname(outfile):
+             outfile = os.path.join(CONFIG["paths"]["media_output"], outfile)
+
          if args.simple_upscale:
              pkg_simple_upscale_video(args.upscale_video, outfile, factor=args.upscale_factor, force=args.force)
          else:
@@ -1043,6 +1076,10 @@ Supported Models (Code : Download Size | Description):
 
     elif args.transform_image:
         output_file = args.output
+        # Enforce relative path to config dir if not set by auto-logic (which already does it) or if explicit relative
+        if not os.path.dirname(output_file):
+             output_file = os.path.join(CONFIG["paths"]["media_output"], output_file)
+
         if args.remove_background:
              pkg_remove_background(args.transform_image, output_file, silhouette=args.silhouette)
         else:

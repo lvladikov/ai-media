@@ -134,11 +134,11 @@ The application uses a centralized `config.json` file to manage paths, server se
     - **Windows**: `copy config.sample.json config.json`
 
 2.  **Configure paths**: Open `config.json` and adjust the following values:
-    - `paths.hf_home`: Absolute path to your HuggingFace model cache (e.g., `/Users/name/.cache/huggingface`).
+    - `paths.hf_home`: Absolute path to your HuggingFace model cache (e.g., `~/.cache/huggingface`).
     - `paths.python_venv`: Path to your Python virtual environment (e.g., `./venv`).
-    - `paths.ai_media`: Absolute path to the AI-Media project directory.
+    - `paths.ai_media`: Absolute path to the AI-Media project directory. (e.g. whatever `./` resolves to as absolute path.
     - `paths.ffmpeg`: Path to the `ffmpeg` executable.
-    - `paths.media_output`: Directory where generated files will be saved.
+    - `paths.media_output`: Directory where generated files will be saved (both from CLI and Web UI).
 
 3.  **Configure server/client**:
     - `server.host` / `server.port`: The backend API server address (default: `127.0.0.1:8000`).

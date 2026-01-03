@@ -35,7 +35,7 @@ Automatically generate a soundtrack for an image or video.
 | `-r, --bit-rate` | Target bitrate (e.g. `128k`, `320kbps`). |
 | `--voice-preset` | Bark voice preset (e.g. `v2/en_speaker_6`, `v2/fr_speaker_1`). Default: v2/en_speaker_6. |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. Default: mp3. |
+| `-o, --output` | Output filename/path. Default: mp3. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 
 See [Audio Generation Examples](#examples) and [Models](#models).
 

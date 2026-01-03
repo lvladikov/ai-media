@@ -1,6 +1,6 @@
 {
   "paths": {
-    "hf_home": "",
+    "hf_home": "~/.cache/huggingface",
     "python_venv": "./venv",
     "ai_media": "./",
     "ffmpeg": "/opt/homebrew/bin/ffmpeg",

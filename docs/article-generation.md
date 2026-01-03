@@ -43,7 +43,7 @@ This module is your all-in-one text intelligence hub. It uses local Large Langua
 | `-ri, --research-iter` | Deep Research iterations (number of sources to read). Default: `3`. |
 | `-al, --article-length` | Article length: `quick` (~500 words, fast, default), `standard` (~1500), `detailed` (~3000). |
 | `-p, --prompt` | Text description/topic for article generation. |
-| `-o, --output` | Output filename/path. |
+| `-o, --output` | Output filename/path. **Optional**: auto-generated if omitted (the folder where files are generated is configured in `config.json` under `paths.media_output`). |
 
 See [Article & Chat Examples](#examples) and [Models](#text-models).
 
@@ -53,7 +53,7 @@ See [Article & Chat Examples](#examples) and [Models](#text-models).
 | :--- | :--- |
 | `-gc, --generate-code` | Generate code based on a text prompt. |
 | `-cdm, --code-model` | Model for code generation. Default: `llama-3.1-8b`. |
-| `-o, --output` | **Optional** Output path. **Empty**: Uses filenames/paths from your prompt (Recommended). **Dir**: Saves all files inside this folder. **File**: Overrides filename (single-file output only). |
+| `-o, --output` | **Optional** Output path. **Empty**: Uses filenames/paths from your prompt (Recommended). **Dir**: Saves all files inside this folder. **File**: Overrides filename (single-file output only). The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 
 ### Code Output Folder vs File interpretation
 
