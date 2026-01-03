@@ -1036,7 +1036,7 @@ export function ChatInterface() {
           <textarea
             ref={inputRef}
             className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
-            placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Ctrl+Enter to send)"}
+            placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Enter to send)"}
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
