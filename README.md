@@ -210,7 +210,9 @@ hf auth login
 # 7. [Optional] Install Web Server and Client + Electron standalone apps dependencies
 # If you only want to use the ai-media.py CLI, you can skip this step. 
 # Though the Web interface is highly recommended for ease of use.
-cd ai_media/web && npm install && cd ../..
+cd ai_media/web
+npm install
+cd ../..
 ```
 
 ## Usage
