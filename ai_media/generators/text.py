@@ -105,6 +105,7 @@ class ArticleGenerator:
         self._first_message_sent = False  # Track if full system prompt was sent
         self._lock = threading.Lock()
         self.last_reasoning = None  # Store reasoning from last generation
+        self.last_error = None      # Store last critical error message
         self.is_cancelled = False
 
     def stop(self):
@@ -354,12 +355,14 @@ class ArticleGenerator:
             if "Invalid buffer size" in error_msg or "out of memory" in error_msg.lower():
                 size_match = re.search(r'(\d+\.?\d*)\s*(GiB|GB|MiB|MB)', error_msg)
                 full_error = f"❌ Model too large for this system.\nAllocation failed when trying to reserve {size_match.group(0) if size_match else 'memory'}.\nThe model '{self.model_name}' cannot fit in available memory."
+                self.last_error = full_error
                 print(full_error)
                 if self.progress_callback:
                     self.progress_callback("error", 0, full_error)
                 return False
             else:
                 err = f"❌ Failed to load model: {e}"
+                self.last_error = err
                 print(err)
                 if self.progress_callback:
                     self.progress_callback("error", 0, err)
@@ -369,6 +372,7 @@ class ArticleGenerator:
             error_msg = str(e)
             if "not a valid model identifier" in error_msg or "Repository Not Found" in error_msg:
                 full_error = f"❌ Model not found: '{self.model_name}'\nThis model doesn't exist on HuggingFace."
+                self.last_error = full_error
                 print(full_error)
                 if self.progress_callback:
                     self.progress_callback("error", 0, full_error)
@@ -391,6 +395,7 @@ class ArticleGenerator:
                 return False
             else:
                 err = f"❌ Failed to load model: {e}"
+                self.last_error = err
                 print(err)
                 if self.progress_callback:
                     self.progress_callback("error", 0, err)
@@ -629,7 +634,7 @@ class ArticleGenerator:
         """Generate Code from Prompt (supports multi-file output)."""
         self._load_model()
         if not self.pipeline:
-            return
+            return False
         
         from rich.console import Console
         console = Console()
@@ -781,6 +786,8 @@ class ArticleGenerator:
                 print(f"✅ Code saved to: {final_path}")
             except Exception as e:
                 print(f"❌ Error saving {filepath}: {e}")
+                
+        return True
                 
     def _infer_extension(self, code_content, prompt=None, language=None):
         """Infer file extension from code content, detected language, and optional prompt."""

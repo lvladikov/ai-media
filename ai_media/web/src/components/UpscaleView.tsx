@@ -191,9 +191,9 @@ export function UpscaleView() {
   }, [currentJobId]);
 
   return (
-    <div className="flex h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
        {/* Sidebar Params */}
-       <div className="w-80 border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto">
+       <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
          <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             {isDownscale ? <TrendingDown className="text-emerald-400" /> : <TrendingUp className="text-emerald-400" />} {isDownscale ? "Downscale" : "Upscale"}
@@ -430,11 +430,13 @@ export function UpscaleView() {
                 )}
              </div>
           ) : (
-            <div className="text-center text-slate-600">
-              <TrendingUp size={64} className="mx-auto mb-4 opacity-20" />
-              <h3 className="text-xl font-medium mb-1">Select Media to Upscale</h3>
-              <p>Supports Image (PNG, JPG) and Video (MP4)</p>
-            </div>
+            <div className="text-center text-slate-500">
+            <TrendingUp size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Upscale</h3>
+            <p className="text-slate-400 max-w-sm">
+                Upload an image/video from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start upscaling.
+            </p>
+          </div>
           )}
        </div>
 

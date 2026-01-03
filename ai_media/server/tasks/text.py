@@ -70,8 +70,9 @@ def run_article_generation(
                        message="Article generated successfully", result_path=output_path,
                        reasoning=generator.last_reasoning)
         else:
+            error_msg = getattr(generator, 'last_error', None) or "Article generation returned False"
             send_update(status="failed", phase="failed", progress=100,
-                       message="Generation failed", error="Article generation returned False")
+                       message="Generation failed", error=error_msg)
     except Exception as e:
         send_update(status="failed", phase="failed", progress=100,
                    message=f"Error: {str(e)}", error=str(e))
@@ -129,10 +130,16 @@ def run_code_generation(
         )
         
         # Generate code using the generator (output_path is the folder)
-        generator.generate_code(
+        success = generator.generate_code(
             prompt=prompt,
             output_file=output_path,
         )
+        
+        if not success:
+             error_msg = getattr(generator, 'last_error', None) or "Code generation failed (Check server logs)"
+             send_update(status="failed", phase="failed", progress=100,
+                        message="Generation failed", error=error_msg)
+             return
         
         # Detect what was generated - count files in output folder
         generated_files = []

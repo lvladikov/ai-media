@@ -150,21 +150,7 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
         "propagate": False
     }
     
-    # Define a custom filter class inline to be used by the config
-    # Since we can't easily inject a class into the dict config that uvicorn parses,
-    # we'll use the easier approach: set access_log=False for noisy paths? 
-    # Or just set log_level="warning" for access logs generally if user wants quiet?
-    # The user asked "can we suppress *those*", referring to the GET logs.
-    # The simplest way is to disable access logs entirely or filter them.
-    # Let's filter them by modifying the log level for uvicorn.access to WARNING.
-    # This will hide all 200 OK logs but keep errors.
-    
-    # Actually, let's keep it simple and just bump the level for uvicorn.access to WARNING.
-    # This suppresses the standard "INFO: ... GET /... 200 OK" messages.
-    # Errors and startup info will still be shown.
-    
     # Set all uvicorn status/access logs to WARNING to keep the console clean
-    # This suppresses "GET /... 200 OK", "WebSocket ... [accepted]", "connection open/closed"
     for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi"]:
         if logger_name in log_config["loggers"]:
             log_config["loggers"][logger_name]["level"] = "WARNING"

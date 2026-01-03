@@ -46,24 +46,24 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
   };
 
   return (
-    <div className={`flex flex-col gap-1 text-xs text-slate-400 ${className}`}>
+    <div className={`flex flex-col gap-2 text-xs text-slate-400 ${className}`}>
       
       {/* Row 1: Global Resources */}
-      <div className="flex items-center">
-        <div className="flex items-center gap-1.5 w-40 shrink-0">
+      <div className="flex flex-wrap items-center gap-y-1 gap-x-4">
+        <div className="flex items-center gap-1.5 shrink-0">
            <Server size={12} className="text-slate-500" />
            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Global:</span>
         </div>
 
         {/* Global CPU */}
-        <div className="flex items-center gap-1.5 w-32 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Cpu size={14} className="text-primary-400/70" />
           <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>CPU:</span>
           <span className="text-slate-200 font-medium">{formatPercent(resources.global.cpu_percent)}</span>
         </div>
 
         {/* Global RAM */}
-        <div className="flex items-center gap-1.5 w-48 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <HardDrive size={14} className="text-green-400/70" />
           <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>RAM:</span>
           <span className="text-slate-200 font-medium">
@@ -73,7 +73,7 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
         {/* Global Swap */}
         {resources.global.swap_used_gb !== undefined && resources.global.swap_used_gb > 0 && (
-          <div className="flex items-center gap-1.5 w-44 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Activity size={12} className="text-orange-400/70" />
             <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>Swap:</span>
             <span className="text-slate-200 font-medium">{formatGb(resources.global.swap_used_gb)} GB</span>
@@ -82,7 +82,7 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
         {/* Global VRAM (Hidden on Mac) */}
         {showVram && (
-          <div className="flex items-center gap-1.5 w-48 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Gpu size={14} className="text-yellow-400/70" />
             <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>VRAM:</span>
             <span className="text-slate-200 font-medium">
@@ -93,7 +93,7 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
          {/* Global GPU (Hidden on Mac) */}
          {showGpu && resources.global.gpu_percent > 0 && (
-          <div className="flex items-center gap-1.5 w-32 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Activity size={14} className="text-purple-400/70" />
             <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>GPU:</span>
             <span className="text-slate-200 font-medium">{formatPercent(resources.global.gpu_percent)}</span>
@@ -102,22 +102,22 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
       </div>
 
       {/* Row 2: Process Resources */}
-      <div className="flex items-center">
-                <div className="flex items-center text-blue-400 w-40 shrink-0 gap-1.5">
+      <div className="flex flex-wrap items-center gap-y-1 gap-x-4">
+                <div className="flex items-center text-blue-400 shrink-0 gap-1.5">
                     <Zap size={12} />
-                    <span className="font-semibold uppercase tracking-wider text-[10px] truncate" title={`PID: ${resources.process.pid}`}>
+                    <span className="font-semibold uppercase tracking-wider text-[10px] truncate max-w-[100px] sm:max-w-none" title={`PID: ${resources.process.pid}`}>
                         {processLabel}:
                     </span>
                 </div>
                 
-                <div className={`flex items-center gap-1.5 ${getUsageColor(resources.process.cpu_percent)} w-32 shrink-0`}>
+                <div className={`flex items-center gap-1.5 ${getUsageColor(resources.process.cpu_percent)} shrink-0`}>
           <Cpu size={14} className="text-primary-400" />
           <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>CPU:</span>
           <span className="text-white font-bold">{formatPercent(resources.process.cpu_percent)}</span>
         </div>
 
         {/* Process RAM */}
-        <div className="flex items-center gap-1.5 w-48 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <HardDrive size={14} className="text-green-400" />
           <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>RAM:</span>
           <span className="text-white font-bold">
@@ -127,7 +127,7 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
         {/* Process VRAM (CUDA only) */}
         {resources.process.vram_used_gb !== undefined && resources.process.vram_used_gb > 0 && (
-          <div className="flex items-center gap-1.5 w-48 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
              <Gpu size={14} className="text-yellow-400" />
              <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>VRAM:</span>
              <span className="text-white font-bold">

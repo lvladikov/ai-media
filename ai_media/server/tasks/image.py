@@ -14,6 +14,7 @@ def run_image_generation(
     model: str,
     steps: int,
     guidance_scale: float,
+    negative_prompt: str = "",
     force: bool = False,
     progress_queue: Queue = None,
 ):
@@ -28,7 +29,7 @@ def run_image_generation(
                 pass
     
     try:
-        send_update(status="loading", phase="loading", progress=10, message="Loading model...")
+        send_update(status="loading", phase="loading", progress=0, message="Loading model...")
         
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -36,8 +37,15 @@ def run_image_generation(
         # Import and run the existing generator
         from ai_media.generators.image import generate_image as gen_image
         
-        send_update(status="generating", phase="generating", progress=30, message="Generating image...")
-        
+        # Define callback for progress updates
+        def on_progress(percent, message):
+            send_update(
+                status="generating",
+                phase="generating",
+                progress=percent,
+                message=message
+            )
+
         success = gen_image(
             prompt=prompt,
             output_file=output_path,
@@ -46,7 +54,9 @@ def run_image_generation(
             model_name=model,
             steps=steps,
             guidance_scale=guidance_scale,
+            negative_prompt=negative_prompt,
             force=force,
+            progress_callback=on_progress,
         )
         
         if success:

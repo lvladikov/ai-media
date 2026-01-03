@@ -101,12 +101,14 @@ def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False):
 def get_system_resources():
     """Get available system RAM and VRAM."""
     ram_available = 0
+    ram_total = 0
     vram_available = 0
     
     try:
         if psutil:
             mem = psutil.virtual_memory()
             ram_available = mem.available / (1024**3)  # GB
+            ram_total = mem.total / (1024**3) # GB
     except Exception:
         pass
     
@@ -126,7 +128,7 @@ def get_system_resources():
     except ImportError:
         pass
     
-    return ram_available, vram_available
+    return ram_available, vram_available, ram_total
 
 
 def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None):
@@ -149,7 +151,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     if not reqs:
         return True  # Unknown model, proceed with caution
     
-    ram_available, vram_available = get_system_resources()
+    ram_available, vram_available, ram_total = get_system_resources()
     warnings = []
     
     # Check for half-precision support (bf16/fp16)
@@ -172,7 +174,10 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     
     # Check RAM
     if ram_available > 0 and ram_available < req_ram:
-        warnings.append(f"RAM: {ram_available:.1f}GB available, {req_ram:.1f}GB recommended ({dtype_label})")
+        if ram_total > 0:
+            warnings.append(f"RAM: {ram_available:.1f}GB available / {ram_total:.1f}GB Total, {req_ram:.1f}GB recommended ({dtype_label})")
+        else:
+             warnings.append(f"RAM: {ram_available:.1f}GB available, {req_ram:.1f}GB recommended ({dtype_label})")
     
     # Check VRAM (if available)
     if vram_available > 0 and vram_available < req_vram:

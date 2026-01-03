@@ -27,7 +27,7 @@ const MODEL_ORDER = [
   'audioldm2', 'stable-audio', 'bark'
 ];
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateAudio, fetchModels } from '../hooks/useApi';
 import { FileAudio, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
@@ -128,117 +128,134 @@ export function AudioGenerator() {
     availableModels.some(m => m.name === name)
   );
 
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  const handleViewResult = () => {
+    setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
   return (
-    <div className="w-full max-w-none px-4 mx-auto">
-      <div className="card p-6 mb-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <FileAudio className="text-primary-400" />
-          Audio Generation
-        </h1>
-      </div>
-
-      <div className="card space-y-4">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="label mb-0">Prompt</label>
-            <RandomPrompt type="audio" onPromptSelect={setPrompt} />
-          </div>
-          <textarea
-            className="input min-h-[150px] resize-y"
-            placeholder="Upbeat electronic music with a driving beat..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <FileAudio className="text-brand-400" /> Audio Gen
+          </h2>
+          <p className="text-xs text-slate-500">Generate sound effects and music</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Model</label>
-            <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
-               {sortedModels.map((name) => {
-                const info = MODEL_DISPLAY_INFO[name];
-                return (
-                  <option key={name} value={name}>
-                    {info ? `${info.label} ${info.vram}` : name}
-                  </option>
-                );
-              })}
-            </select>
-            {/* Warnings */}
-            {model === 'stable-audio' && (
-              <div className="mt-2 flex items-center gap-2 text-yellow-400 text-sm">
-                <AlertTriangle size={16} />
-                <span>Gated model - requires Hugging Face login</span>
-                 <button 
-                  onClick={() => useAppStore.getState().toggleHelp()} 
-                  className="underline hover:text-yellow-300 ml-1"
-                >
-                  (See Help)
-                </button>
-              </div>
-            )}
-            {model === 'bark' && (
-              <div className="mt-2 flex items-center gap-2 text-blue-400 text-sm">
-                <AlertCircle size={16} />
-                <span>Duration depends on text length (approx 14s). Use [laughter], [music] tags.</span>
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="label flex items-center">
-              Duration (seconds)
-              <Tooltip content="Audio duration in seconds. Ignored for Bark (text-based length) and MusicGen-Small/Medium (fixed 30s tokens often). Default 10s." />
-            </label>
-            <NumberInput 
-              value={duration} 
-              onChange={setDuration} 
-              min={1} 
-              max={120} 
-              disabled={model === 'bark'}
-              placeholder={model === 'bark' ? 'Auto-determined' : '10'}
-            />
-          </div>
+        {/* Prompt */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className="text-sm font-medium text-slate-400">Prompt</label>
+             <RandomPrompt type="audio" onPromptSelect={setPrompt} />
+           </div>
+           <textarea
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+             placeholder="Upbeat electronic music with a driving beat..."
+             value={prompt}
+             onChange={(e) => setPrompt(e.target.value)}
+           />
         </div>
 
+        {/* Model Selector */}
+        <div className="space-y-2">
+           <label className="text-sm font-medium text-slate-400">Model</label>
+           <select 
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
+             value={model} 
+             onChange={(e) => setModel(e.target.value)}
+            >
+              {sortedModels.map((name) => {
+               const info = MODEL_DISPLAY_INFO[name];
+               return (
+                 <option key={name} value={name}>
+                   {info ? `${info.label} ${info.vram}` : name}
+                 </option>
+               );
+             })}
+           </select>
+           {/* Warnings */}
+           {model === 'stable-audio' && (
+             <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+               <AlertTriangle size={12} />
+               <span>Requires HF Login</span>
+             </div>
+           )}
+           {model === 'bark' && (
+             <div className="flex items-center gap-2 text-blue-400 text-xs mt-1">
+               <AlertCircle size={12} />
+               <span>Duration based on text length (~14s)</span>
+             </div>
+           )}
+        </div>
 
-        <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt to generate audio" : null} className="w-full">
+        {/* Duration */}
+        <div className="space-y-2">
+           <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
+             Duration (seconds)
+             <Tooltip content="Audio duration in seconds. Ignored for Bark (text-based length) and MusicGen-Small/Medium (fixed 30s tokens often). Default 10s." />
+           </label>
+           <NumberInput 
+             value={duration} 
+             onChange={setDuration} 
+             min={1} 
+             max={120} 
+             disabled={model === 'bark'}
+             placeholder={model === 'bark' ? 'Auto-determined' : '10'}
+           />
+        </div>
+
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
+
+        <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt" : null} className="w-full mt-auto pt-4">
           <button 
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
+            className="w-full bg-gradient-to-r from-brand-600 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
             onClick={handleGenerate} 
             disabled={isLoading || !prompt.trim()}
           >
-            {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><FileAudio size={18} />Generate Audio</>)}
+            {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><FileAudio size={18} /> Generate Audio</>)}
           </button>
         </ValidationTooltip>
       </div>
 
-      <ErrorAlert error={error} onDismiss={() => setError(null)} />
-
-      {result && (
-        <div className="mt-6 card">
-          <div className="flex items-center justify-between mb-4 text-primary">
-            <h2 className="text-lg font-semibold">Result</h2>
-            <div className="flex gap-2">
-               <button 
-                  className="btn-primary text-sm"
-                  onClick={() => setIsPreviewOpen(true)}
-                >
-                  Preview
-                </button>
-                <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
-            </div>
+      {/* Main Preview */}
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 min-h-[500px] lg:min-h-0 scroll-mt-4">
+        {result ? (
+           <div className="flex flex-col items-center justify-center max-w-2xl w-full gap-6">
+                <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col items-center gap-6">
+                   <div className="w-24 h-24 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 animate-pulse">
+                      <FileAudio size={48} />
+                   </div>
+                   <audio src={`http://localhost:8000/api/files/${result}`} controls className="w-full" />
+                   <p className="text-sm text-slate-400">Generated Audio Result</p>
+                </div>
+                
+                <div className="flex gap-2">
+                   <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+                </div>
+           </div>
+        ) : (
+          <div className="text-center text-slate-500">
+            <FileAudio size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Compose</h3>
+            <p className="max-w-sm mx-auto">Describe the sound or music you want to create.</p>
           </div>
-          <div className="p-4 bg-slate-900/50 rounded-lg border border-border">
-            <audio src={`http://localhost:8000/api/files/${result}`} controls className="w-full" />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {currentJobId && (
-        <JobProgressModal jobId={currentJobId} onClose={() => {
-          setCurrentJobId(null);
-          setIsLoading(false);
-        }} />
+        <JobProgressModal 
+          jobId={currentJobId} 
+          onClose={() => {
+            setCurrentJobId(null);
+            setIsLoading(false);
+          }} 
+          onViewResult={handleViewResult}
+        />
       )}
 
       {result && (

@@ -169,6 +169,7 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
             <li><strong>Text-to-Image</strong>: Detailed wallpapers, art, photos.</li>
             <li><strong>Format Control</strong>: Landscape (16:9), Portrait (9:16), Square.</li>
             <li><strong>Proactive Optimization</strong>: Auto-upscaling for high resolutions.</li>
+            <li><strong>Negative Prompt</strong>: List items to remove (e.g., "blurry, text"). Avoid "no" or "without".</li>
             <li><strong>Safety</strong>: Optional NSFW checker.</li>
           </ul>
         </InfoCard>
@@ -468,50 +469,51 @@ export function HelpModal() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={toggleHelp}>
       <div 
-        className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex overflow-hidden"
+        className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sidebar */}
-        <div className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0">
-          <div className="p-4 border-b border-slate-800 flex items-center gap-2 font-semibold text-slate-200">
+        {/* Sidebar / Top Nav */}
+        <div className="w-full md:w-64 bg-slate-950 border-b md:border-b-0 md:border-r border-slate-800 flex flex-row md:flex-col shrink-0 overflow-x-auto md:overflow-visible">
+          <div className="p-4 border-r md:border-r-0 md:border-b border-slate-800 flex items-center gap-2 font-semibold text-slate-200 shrink-0 sticky left-0 bg-slate-950 z-10">
             <Book size={20} className="text-primary-400" />
-            <span>Help Guide</span>
+            <span className="hidden md:inline">Help Guide</span>
+            <span className="md:hidden">Help</span>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 md:overflow-y-auto p-2 flex md:block gap-2 md:gap-0 md:space-y-1">
             {SECTIONS.map((section) => (
               <button
                 key={section.id}
                 onClick={() => setActiveSection(section.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+                className={`flex items-center gap-2 md:gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left shrink-0 md:w-full ${
                   activeSection === section.id 
                     ? 'bg-primary-500/10 text-primary-400 border border-primary-500/20' 
                     : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent'
                 }`}
               >
                 {section.icon}
-                <span className="truncate">{section.label}</span>
+                <span className="whitespace-nowrap md:truncate">{section.label}</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden min-w-0">
           <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2 truncate">
               {activeItem.icon}
-              {activeItem.label}
+              <span className="truncate">{activeItem.label}</span>
             </h2>
             <button 
               onClick={toggleHelp}
-              className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors"
+              className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors shrink-0"
             >
               <X size={24} />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
              <ActiveComponent onNavigate={setActiveSection} />
           </div>
         </div>

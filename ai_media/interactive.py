@@ -411,11 +411,11 @@ def run_interactive(jump_point=None):
                 ("SD 3.5 Large (Best Quality, 🔒 Gated) ~19GB", "sd3.5-large"),
             ])
             
-            # Qwen-Image models with platform-specific variants
-            if is_cuda:
-                model_options.append(("Qwen-Image (Best Text, CUDA 4-bit) ~20GB", "qwen-image"))
-            elif is_mac:
-                model_options.append(("Qwen-Image 2512 (Latest, Mac/Full) ~40GB", "qwen-image-2512"))
+            # Qwen-Image models
+            # Auto: Smart select (Full on Mac, 4-bit on CUDA)
+            model_options.append(("Qwen 2.5 Image (Auto: Best Quality) ~20-40GB", "qwen-image-auto"))
+            # Lightning: Fast 8-step
+            model_options.append(("Qwen 2.5 Image (Lightning: Fast 8-step) ~40GB", "qwen-image-lightning"))
             
             # Flux base models with Mac-specific notes
             if is_mac:
@@ -449,6 +449,11 @@ def run_interactive(jump_point=None):
         prompt = prompt_text("📝 Enter prompt")
         if prompt is None:
             return
+
+        # Negative Prompt (Optional)
+        print("   (Tip: List content to exclude, e.g. 'blur, text'. Do NOT use 'no' or 'without'.)")
+        print("   (⚠️  Note: Negative prompts have NO effect on Lightning models - they ignore CFG. Leave empty.)")
+        neg_prompt = prompt_text("🚫 Enter Negative Prompt (Optional)", required=False)
         
         # Resolution
         print("\n📐 Select Resolution:\n")
@@ -488,6 +493,8 @@ def run_interactive(jump_point=None):
         cmd = f"-i -p \"{prompt}\" -s {size} -otn {orientation} --image-model {model}"
         if output:
             cmd += f" -o \"{output}\""
+        if neg_prompt:
+            cmd += f" --negative-prompt \"{neg_prompt}\""
         
         run_self_command(cmd)
         wait_for_back()

@@ -222,47 +222,47 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         style={{ maxWidth: '90vw', maxHeight: '90vh' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-0 flex-shrink-0 px-4 pt-4">
-          <div className="flex items-center gap-3 pb-4">
-             <h3 className="text-lg font-semibold truncate max-w-md flex items-center gap-2">
-                {fileType === 'image' && <Image size={18} className="text-purple-400" />}
-                {fileType === 'video' && <span className="text-blue-400">🎥</span>}
-                {fileType === 'audio' && <span className="text-pink-400">🎵</span>}
-                {fileType === 'pdf' && <FileText className="text-red-400" size={18} />}
-                {fileType === 'markdown' && <FileText className="text-blue-400" size={18} />}
-                {fileType === 'html' && <Code className="text-orange-400" size={18} />}
-                {fileType === 'text' && <FileText className="text-slate-400" size={18} />}
-                {fileName}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-0 flex-shrink-0 px-4 pt-4">
+          <div className="flex items-center gap-3 pb-2 sm:pb-4 min-w-0">
+             <h3 className="text-lg font-semibold truncate flex items-center gap-2">
+                {fileType === 'image' && <Image size={18} className="text-purple-400 shrink-0" />}
+                {fileType === 'video' && <span className="text-blue-400 shrink-0">🎥</span>}
+                {fileType === 'audio' && <span className="text-pink-400 shrink-0">🎵</span>}
+                {fileType === 'pdf' && <FileText className="text-red-400 shrink-0" size={18} />}
+                {fileType === 'markdown' && <FileText className="text-blue-400 shrink-0" size={18} />}
+                {fileType === 'html' && <Code className="text-orange-400 shrink-0" size={18} />}
+                {fileType === 'text' && <FileText className="text-slate-400 shrink-0" size={18} />}
+                <span className="truncate">{fileName}</span>
              </h3>
           </div>
           
-          <div className="flex items-end gap-4 h-full relative top-[1px]">
+          <div className="flex items-end justify-between sm:justify-end gap-4 h-full relative sm:top-[1px]">
             {showViewToggle && (
                <div className="flex items-end">
                   <button 
                     onClick={() => setViewMode('render')}
-                    className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${
+                    className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${
                       viewMode === 'render' 
                         ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
                         : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
                     }`}
                   >
-                    <FileText size={14} /> Preview
+                    <FileText size={14} /> <span className="hidden md:inline">Preview</span>
                   </button>
                   <button 
                     onClick={() => setViewMode('code')}
-                    className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ml-[-1px] ${
+                    className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ml-[-1px] ${
                       viewMode === 'code' 
                         ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
                         : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
                     }`}
                   >
-                    <Code size={14} /> Code
+                    <Code size={14} /> <span className="hidden md:inline">Code</span>
                   </button>
                </div>
             )}
           
-            <div className="flex items-center gap-2 pb-3 mb-1 pl-4 border-l border-slate-700/50">
+            <div className="flex items-center gap-2 pb-0 sm:pb-3 mb-1 pl-4 sm:border-l border-slate-700/50">
               <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center" onClick={handleDownload} title="Download">
                 <Download size={16} />
               </button>
@@ -438,7 +438,7 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
         className="flex-1 overflow-auto scrollbar-themed"
       >
          <pre 
-           className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 !m-0 text-sm`}
+           className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm`}
            style={{ minWidth: 'max-content', fontFamily: 'JetBrains Mono, monospace' }}
          >
           <code ref={codeRef} className={`language-${language}`}>

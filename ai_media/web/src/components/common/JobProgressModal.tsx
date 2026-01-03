@@ -8,6 +8,7 @@ import { formatDuration } from '../../utils/formatTime';
 interface JobProgressModalProps {
   jobId: string | null;
   onClose?: () => void;
+  onViewResult?: () => void;
 }
 
 
@@ -28,7 +29,7 @@ const getFriendlyModelName = (modelName: string | undefined | null) => {
   return modelName;
 };
 
-export function JobProgressModal({ jobId, onClose }: JobProgressModalProps) {
+export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressModalProps) {
   const { jobs, removeJob } = useAppStore();
   const [dots, setDots] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
@@ -117,7 +118,7 @@ export function JobProgressModal({ jobId, onClose }: JobProgressModalProps) {
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-4 md:p-6 space-y-4">
           
           {/* Status Header - Compact */}
           <div className="text-center">
@@ -188,7 +189,13 @@ export function JobProgressModal({ jobId, onClose }: JobProgressModalProps) {
           
           {/* Success Actions */}
           {isComplete && (
-             <button onClick={onClose} className="btn-primary w-full">
+             <button 
+               onClick={() => {
+                 if (onViewResult) onViewResult();
+                 if (onClose) onClose();
+               }}
+               className="btn-primary w-full"
+             >
                 View Result
              </button>
           )}

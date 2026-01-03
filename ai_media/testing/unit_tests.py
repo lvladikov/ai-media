@@ -1353,6 +1353,38 @@ class TestGenerationWrappers(unittest.TestCase):
                                 mock_diffusers.AutoPipelineForText2Image.from_pretrained.assert_called()
                                 mock_pipeline.assert_called() # The inference call
 
+    @patch('ai_media.utils.system.get_optimal_device_and_dtype')
+    def test_generate_image_negative_prompt(self, mock_get_device):
+        """Test generate_image passes negative_prompt correctly."""
+        # mocks
+        mock_diffusers = MagicMock()
+        mock_pipeline = mock_diffusers.AutoPipelineForText2Image.from_pretrained.return_value
+        mock_pipeline.to.return_value = mock_pipeline
+        mock_output = MagicMock()
+        mock_output.images = [MagicMock()]
+        mock_pipeline.return_value = mock_output
+        mock_device = MagicMock()
+        mock_device.type = 'cuda'
+        import torch
+        mock_get_device.return_value = (mock_device, torch.float16 if 'torch' in sys.modules else MagicMock())
+        
+        with patch.dict('sys.modules', {'diffusers': mock_diffusers, 'torch': MagicMock()}):
+            with patch('ai_media.utils.system.get_system_resources', return_value=(16.0, 8.0)):
+                with patch('ai_media.generators.image.PerformanceTracker'):
+                    with patch('ai_media.generators.image.ResourceMonitor') as MockMonitor:
+                        with patch('os.path.exists', return_value=True):
+                            monitor_instance = MockMonitor.return_value
+                            monitor_instance.__enter__.return_value = monitor_instance
+                            monitor_instance.get_averages.return_value = (10.0, 4.0, 2.0, 50.0)
+                            
+                            with patch('sys.stdout', new_callable=io.StringIO):
+                                result = ai_media.generate_image("prompt", "out.png", 512, 512, model_name="sdxl", negative_prompt="bad quality")
+                                self.assertTrue(result)
+                                # Verify negative_prompt was passed to pipeline call
+                                _, kwargs = mock_pipeline.call_args
+                                self.assertIn("negative_prompt", kwargs)
+                                self.assertEqual(kwargs["negative_prompt"], "bad quality")
+
     @patch('ai_media.generate_video')
     def test_generate_video_call(self, mock_gen):
         """Test generate_video wrapper arguments."""

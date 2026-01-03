@@ -16,13 +16,14 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image`, `qwen-image-2512`. See [Models](#models) below. |
+| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image-auto`, `qwen-image-lightning`, `qwen-image-4bit`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
 | `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 | `-f, --format` | File format: jpg, png (default: jpg). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", "1536" (square), `{w:1280, h:720}`. Default: 720p. |
+| `--negative-prompt` | Negative prompt (what to avoid). Only supported by standard models (SD 1.5, SD 3.5, Qwen). Ignored by Turbo/Flux. |
 
 See [Image Generation Examples](#examples) and [Models](#models).
 
@@ -67,8 +68,10 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
 | **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | **Default**. Fast (4 steps) and Good Quality. 🔒 **Gated**. |
-| **Qwen-Image** | `qwen-image` | ~20GB | ~20GB | Best text rendering. 🔒 **CUDA only** (4-bit). (v2512) |
-| **Qwen-Image-2512** | `qwen-image-2512` | ~40GB | ~40GB | Text rendering on Mac. Full Model (v2512). Float32. |
+| **Qwen 2.5 Image (Auto)** | `qwen-image-auto` | ~20-40GB | ~20-40GB | **Best Quality**. Automatically picks best model for your hardware (MPS/CUDA). |
+| **[Qwen 2.5 Img (Lightning)](https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning)** | `qwen-image-lightning` | ~40GB | ~40GB | **Fastest Qwen**. 8 steps. Works on **MPS (Mac)** & CUDA. |
+| **[Qwen 2.5 Img (4-bit)](https://huggingface.co/ovedrive/qwen-image-4bit)** | `qwen-image-4bit` | ~20GB | ❌ N/A | **Low VRAM (CUDA Only)**. 4-bit quantized. 8 steps. |
+| **[Qwen 2.5 Img (Full)](https://huggingface.co/Qwen/Qwen-Image)** | `qwen-image-2512` | ~40GB | ~40GB | Manual Full Model selection. Float32. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
 | **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
@@ -99,13 +102,14 @@ Both models share the same **8.1B parameter** architecture but differ in speed a
 ### Qwen-Image: Best Text Rendering
 
 > [!IMPORTANT]
-> **Platform-Specific Variants:** Qwen-Image uses 4-bit quantization (`bitsandbytes`) which only works on CUDA/NVIDIA GPUs.
-> - **CUDA:** Uses `qwen-image` (4-bit, 20GB VRAM, 8 steps)
-> - **MPS (Mac):** Uses `qwen-image-2512` (Full, float32, 15 steps)
+> **Qwen Families:**
+> - **Auto (`qwen-image-auto`):** Smartly selects `qwen-image-2512` (Mac) or `qwen-image-4bit` (CUDA). Recommended for most users.
+> - **Lightning (`qwen-image-lightning`):** Optimized for speed (8 steps). Works on Mac/MPS. Uses ~40GB RAM (base model) but generates much faster.
+> - **4-bit (`qwen-image-4bit`):** Highly optimized for **CUDA GPUs only**. Saves 50% VRAM (~20GB).
 >
-> The script **automatically switches** to the correct variant for your hardware. If you select `qwen-image` on Mac, it will switch to `qwen-image-2512` and display an info message.
+> **Mac Users:** Use `qwen-image-auto` or `qwen-image-lightning`. The 4-bit model will not work (requires `bitsandbytes` CUDA library).
 
-| Feature | Qwen-Image |
+| Feature | Qwen 2.5 Image |
 |---------|-----------|
 | **Text in images** | ✅ Best (English + Chinese) |
 | **Parameters** | 20B |
@@ -194,6 +198,25 @@ python ai-media.py -i -p "Mountains" -s 720p -u --upscale-factor 2x
 # Disable Safety Checker
 # Useful if you get false positive black images (common on Mac/MPS with SD 1.5).
 python ai-media.py -i -p "Classical marble statue" --unsafe
+```
+
+### Negative Prompt
+
+Specify elements to exclude from the generation (only supported by standard models like SD 1.5, SD 3.5 Medium/Large, and Qwen; ignored by Turbo/Flux).
+
+> [!TIP]
+> **How to use:** List the *objects* or *concepts* you want to remove.
+> **Do NOT use:** "No", "Don't", "Without".
+>
+> ✅ **Correct**: `blurry, watermark, text, low quality, chinese letters`
+> ❌ **Incorrect**: `no blur, don't use watermarks, without text`
+
+```bash
+# Avoid blurry or low quality results
+python ai-media.py -i -p "Cyberpunk city street" --negative-prompt "blurry, low quality, distorted"
+
+# Avoid specific objects (Just list them!)
+python ai-media.py -i -p "A cozy living room" --negative-prompt "people, pets, tv"
 ```
 
 ← [Back to Main README](../README.md)

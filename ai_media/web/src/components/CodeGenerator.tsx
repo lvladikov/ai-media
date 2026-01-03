@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateCode, fetchModels } from '../hooks/useApi';
 import { Code, Loader2, Download, FolderArchive, AlertTriangle } from 'lucide-react';
 import { RandomPrompt } from './common/RandomPrompt';
-import { Tooltip } from './common/Tooltip';
+
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { ErrorAlert } from './common/ErrorAlert';
 import { JobProgressModal } from './common/JobProgressModal';
@@ -27,7 +27,7 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
-  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
+  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B MoE (⚠️ 64GB RAM)', vram: '~10GB' },
   'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
   'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B', vram: '~12GB' },
   'qwen-coder-7b': { label: 'Qwen 2.5 Coder 7B', vram: '~6GB' },
@@ -191,39 +191,47 @@ export function CodeGenerator() {
   // Get display name for result
   const resultDisplayName = result ? result.split('/').pop() : '';
 
-  return (
-    <div className="w-full max-w-none px-4 mx-auto">
-      <div className="card p-6 mb-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Code className="text-primary-400" />
-          Code Generation
-        </h1>
-      </div>
+  const resultRef = useRef<HTMLDivElement>(null);
 
-      <div className="card space-y-4">
+  const handleViewResult = () => {
+    setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
-          <div className="flex items-center justify-between mb-2">
-          <label className="label flex items-center mb-0">
-             Instructions
-             <Tooltip content="Describe the code you want to generate. Be specific about libraries, functionality, and input/output. The model will determine the appropriate language and file structure." />
-          </label>
-          <RandomPrompt type="code" onPromptSelect={setPrompt} />
-          </div>
-          <textarea
-            className="input min-h-[180px] resize-y"
-            placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <Code className="text-brand-400" /> Code Gen
+          </h2>
+          <p className="text-xs text-slate-500">Generate applications, scripts and modules</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="label flex items-center">
-               Model
-               <Tooltip content="LLM for coding. DeepSeek R1 models are recommended for best logic." />
-            </label>
-            <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
+        {/* Instructions */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className="text-sm font-medium text-slate-400">Instructions</label>
+             <RandomPrompt type="code" onPromptSelect={setPrompt} />
+           </div>
+           <textarea
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
+             placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
+             value={prompt}
+             onChange={(e) => setPrompt(e.target.value)}
+           />
+        </div>
+
+        {/* Model Selector */}
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-400">Model</label>
+            <select 
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
+              value={model} 
+              onChange={(e) => setModel(e.target.value)}
+            >
                {!model && <option value="">Loading...</option>}
                {sortedModels.map((name) => {
                 const info = MODEL_DISPLAY_INFO[name];
@@ -235,120 +243,128 @@ export function CodeGenerator() {
               })}
             </select>
             {model === 'deepseek-r1-llama-70b' && (
-              <div className="mt-2 flex items-center gap-2 text-yellow-400 text-sm">
-                <AlertTriangle size={16} />
-                <span>Requires 40GB+ VRAM (Dual 3090/4090 or Mac Studio Ultra)</span>
+              <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+                <AlertTriangle size={12} />
+                <span>Requires 40GB+ VRAM</span>
               </div>
             )}
              {/* Recommendation for Code */}
              {(model.includes('deepseek') || model.includes('qwen')) && (
-              <div className="mt-1 text-green-400 text-xs text-right">
+              <div className="text-green-500 text-xs text-right mt-1">
                 Recommended for coding
               </div>
             )}
-          </div>
-          
-          <div>
-            <label className="label flex items-center">
-               Output
-               <Tooltip content="Optional output name. Leave empty for auto-generated names based on content. For multi-file projects, this becomes the zip filename." />
-            </label>
-            <input 
-              type="text" 
-              className="input" 
-              placeholder="Leave empty for auto-generated name"
-              value={outputName} 
-              onChange={(e) => setOutputName(e.target.value)}
-            />
-          </div>
         </div>
 
+        {/* Output Name */}
+        <div className="space-y-2">
+           <label className="text-xs font-medium text-slate-400">
+              Output Name (Optional)
+           </label>
+           <input
+             type="text"
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+             placeholder="Auto-generated if empty"
+             value={outputName}
+             onChange={(e) => setOutputName(e.target.value)}
+           />
+        </div>
 
-        <ValidationTooltip error={!prompt.trim() ? "Please enter instructions for the code" : null} className="w-full">
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
+
+        <ValidationTooltip error={!prompt.trim() ? "Please enter instructions" : null} className="w-full mt-auto pt-4">
           <button 
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
             onClick={handleGenerate} 
             disabled={isLoading || !prompt.trim()}
           >
-            {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><Code size={18} />Generate Code</>)}
+            {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><Code size={18} /> Generate Code</>)}
           </button>
         </ValidationTooltip>
       </div>
 
-      <ErrorAlert error={error} onDismiss={() => setError(null)} />
+      {/* Main Result Area */}
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
+        {result ? (
+           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
+                <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+                   <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
+                            {isMultiFile ? <FolderArchive size={24} /> : <Code size={24} />}
+                         </div>
+                         <div className="overflow-hidden">
+                            <h3 className="font-medium text-slate-200 truncate max-w-md">{resultDisplayName}{isMultiFile && '.zip'}</h3>
+                            {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                         </div>
+                      </div>
+                      <div className="flex gap-2">
+                         {!isMultiFile ? (
+                           <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
+                         ) : (
+                           <button className="btn-secondary text-sm" onClick={() => setShowProjectPreview(true)}>Preview Project</button>
+                         )}
+                         
+                         <a 
+                           href={isMultiFile 
+                             ? `${API_BASE_URL}/api/files/zip?path=${encodeURIComponent(result)}` 
+                             : `${API_BASE_URL}/api/files/${result}`
+                           } 
+                           target="_blank" 
+                           rel="noreferrer" 
+                           className="btn-secondary text-sm flex items-center gap-1"
+                         >
+                           <Download size={14} />
+                           {isMultiFile ? 'Download ZIP' : 'Download'}
+                         </a>
+                      </div>
+                   </div>
 
-      {result && (
-        <div className="mt-6 card">
-          <div className="flex items-end justify-between mb-4">
-             <h2 className="text-lg font-semibold text-primary">Result</h2>
-             {duration && <span className="text-xs text-secondary mb-1">Generated in {formatDuration(duration * 1000)}</span>}
-          </div>
-          <div className="p-4 bg-tertiary rounded-lg flex items-center justify-between border border-border">
-             <span className="truncate text-primary flex items-center gap-2">
-               {isMultiFile ? <FolderArchive size={18} className="text-brand-400" /> : <Code size={18} className="text-brand-400" />}
-               {resultDisplayName}{isMultiFile && '.zip'}
-             </span>
-             <div className="flex gap-2">
-                {!isMultiFile ? (
-                  <button 
-                    className="btn-primary text-sm"
-                     onClick={() => setIsPreviewOpen(true)}
-                  >
-                    Preview
-                  </button>
-                ) : (
-                  <button 
-                    className="btn-primary text-sm"
-                     onClick={() => setShowProjectPreview(true)}
-                  >
-                    Preview Project
-                  </button>
-                )}
-                <a 
-                  href={isMultiFile 
-                    ? `${API_BASE_URL}/api/files/zip?path=${encodeURIComponent(result)}` 
-                    : `${API_BASE_URL}/api/files/${result}`
-                  } 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="btn-secondary text-sm flex items-center gap-1"
-                >
-                  <Download size={14} />
-                  {isMultiFile ? 'Download ZIP' : 'Download'}
-                </a>
-             </div>
-          </div>
-          
-          {/* Multi-file project explanation */}
-          {isMultiFile && (
-            <div className="mt-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
-              <div className="flex items-start gap-3">
-                <FolderArchive size={20} className="text-brand-400 mt-0.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-primary font-medium mb-2">
-                    Multi-File Project ({generatedFiles.length} files)
-                  </p>
-                  <p className="text-xs text-secondary mb-3">
-                     Click "Preview Project" above to browse all files in a VS Code-like interface.
-                  </p>
+                   {/* Multi-file project explanation */}
+                   {isMultiFile && (
+                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                       <div className="flex items-start gap-3">
+                         <FolderArchive size={20} className="text-brand-400 mt-0.5 shrink-0" />
+                         <div className="flex-1">
+                           <p className="text-sm text-slate-300 font-medium mb-1">
+                             Multi-File Project ({generatedFiles.length} files)
+                           </p>
+                           <p className="text-xs text-slate-500">
+                              Click "Preview Project" above to browse the file structure.
+                           </p>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+
+                   {/* Reasoning / Thinking Block */}
+                   {reasoning && (
+                      <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                        <div className="flex items-center gap-2 mb-2 text-brand-400">
+                           <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                           {reasoning}
+                        </div>
+                      </div>
+                   )}
+                   
+                   {!reasoning && (
+                       <div className="text-center py-12 text-slate-500">
+                          <p>Code generated successfully.</p>
+                       </div>
+                   )}
                 </div>
-              </div>
-            </div>
-          )}
+           </div>
+        ) : (
+          <div className="text-center text-slate-500">
+            <Code size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Code</h3>
+            <p className="max-w-sm mx-auto">Generate scripts, modules, or full applications by describing your requirements.</p>
+          </div>
+        )}
+      </div>
 
-          {/* Reasoning / Thinking Block */}
-          {reasoning && (
-             <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
-               <div className="flex items-center gap-2 mb-2 text-primary-400">
-                  <span className="text-xs font-semibold uppercase tracking-wider">Reasoning Process</span>
-               </div>
-               <div className="text-xs text-secondary font-mono whitespace-pre-wrap max-h-48 overflow-y-auto italic">
-                  {reasoning}
-               </div>
-             </div>
-          )}
-        </div>
-      )}
       {currentJobId && (
         <JobProgressModal 
           jobId={currentJobId} 
@@ -359,6 +375,7 @@ export function CodeGenerator() {
               else setIsPreviewOpen(true);
             }
           }} 
+          onViewResult={handleViewResult}
         />
       )}
       {result && isMultiFile && (

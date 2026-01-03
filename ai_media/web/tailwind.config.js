@@ -12,6 +12,7 @@ export default {
         secondary: 'var(--bg-secondary)',
         tertiary: 'var(--bg-tertiary)',
         overlay: 'var(--bg-overlay)',
+        border: 'var(--border-color)',
       },
       textColor: {
         primary: 'var(--text-primary)',
@@ -31,7 +32,6 @@ export default {
         primary: {
            DEFAULT: 'var(--bg-primary)',
            ...require('tailwindcss/colors').slate // fallback or just remove if not needed? 
-           // actually, let's just leave the brand/slate here
         },
         // Preserve existing palette
         slate: {

@@ -54,6 +54,24 @@ function MainContent() {
   return <div className="main-content">{renderContent()}</div>;
 }
 
+import { Menu, X } from 'lucide-react';
+
+function MobileHeader() {
+  const { toggleMobileMenu, isMobileMenuOpen } = useAppStore();
+  
+  return (
+    <div className="md:hidden h-14 bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 z-20 relative">
+      <div className="flex items-center gap-2">
+         {/* Hamburger */}
+         <button onClick={toggleMobileMenu} className="text-secondary hover:text-primary p-1">
+           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+         </button>
+         <span className="font-semibold text-lg">AI-Media</span>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // Initialize hooks
   useResourceMonitor();
@@ -72,11 +90,12 @@ function App() {
   }, [activeTab]);
 
   return (
-    <div className="flex flex-col h-screen bg-primary text-primary">
+    <div className="flex flex-col h-screen bg-primary text-primary overflow-hidden">
       <TitleBar />
-      <div className="flex flex-1 overflow-hidden">
+      <MobileHeader />
+      <div className="flex flex-1 overflow-hidden relative">
         <Sidebar />
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
           <MainContent />
           <HelpModal />
         </div>

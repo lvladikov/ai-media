@@ -194,9 +194,9 @@ export function TransformView() {
   }, [currentJobId]);
 
   return (
-    <div className="flex h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
       {/* Parameters Sidebar */}
-      <div className="w-96 border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <Wand2 className="text-pink-400" /> Transform
@@ -424,7 +424,9 @@ export function TransformView() {
           <div className="text-center text-slate-500">
             <Wand2 size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to transform</h3>
-            <p className="max-w-sm mx-auto">Upload an image from the sidebar to start editing with AI instructions.</p>
+            <p className="text-slate-400 max-w-sm">
+                Upload an image from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start editing with AI instructions.
+            </p>
           </div>
         )}
       </div>

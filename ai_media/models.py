@@ -17,6 +17,9 @@ IMAGE_MODELS = {
     "sd3.5-large": "stabilityai/stable-diffusion-3.5-large",       # SD 3.5 Large (best quality)
     "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps) (DEFAULT)
     "qwen-image": "ovedrive/qwen-image-4bit",                      # Qwen-Image 4-bit (CUDA, 20GB)
+    "qwen-image-auto": "ovedrive/qwen-image-4bit",                 # Auto alias (defaults to CUDA 4-bit ID, logic switches on MPS)
+    "qwen-image-4bit": "ovedrive/qwen-image-4bit",                 # Explicit 4-bit alias
+    "qwen-image-lightning": "lightx2v/Qwen-Image-2512-Lightning",  # Qwen-Image Lightning (Fast 8-step, Works on MPS)
     "qwen-image-2512": "Qwen/Qwen-Image",                          # Qwen-Image 2512 (Latest) (MPS, ~40GB RAM)
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler",  # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",      # 2x Latent Upscaling
@@ -30,7 +33,7 @@ EDIT_MODELS = {
     "qwen-image-edit": "Qwen/Qwen-Image-Edit-2511",         # Qwen-Image-Edit (CUDA, 4-bit)
     "qwen-image-edit-mps": "Qwen/Qwen-Image-Edit-2511",     # Qwen-Image-Edit (MPS, float32)
     # The 'Lightning' 2512 model is hosted by lightx2v and uses LoRA/distillation
-    "qwen-image-edit-lightning": "lightx2v/Qwen-Image-Edit-2512-Lightning", 
+    "qwen-image-edit-lightning": "lightx2v/Qwen-Image-Edit-2512-Lightning",
     "remove-bg": "briaai/RMBG-1.4",
     "default": "timbrooks/instruct-pix2pix"
 }
@@ -113,7 +116,7 @@ MODEL_REQUIREMENTS = {
     "stabilityai/stable-diffusion-3.5-large": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
     "stabilityai/stable-diffusion-3.5-large-turbo": {"vram": 19, "ram": 40, "max_resolution": (1296, 1296)},
     "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
-    "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
+    "lightx2v/Qwen-Image-2512-Lightning": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)}, # Base model size
     "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)}, # Covers qwen-image-2512 too
     
     # Audio Models (max_duration in seconds, based on model architecture limits)

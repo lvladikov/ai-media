@@ -29,7 +29,7 @@ def run_video_generation(
                 pass
     
     try:
-        send_update(status="loading", phase="loading", progress=10, message="Loading video model...")
+        send_update(status="loading", phase="loading", progress=0, message="Loading video model...")
         
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         

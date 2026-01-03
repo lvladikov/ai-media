@@ -378,6 +378,7 @@ Examples:
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
   python ai-media.py -i -p "Capybara holding a sign" -im sd3.5-medium (SD 3.5 - Consumer-Friendly)
   python ai-media.py -i -p "Astronaut portrait" -im sd3.5-turbo (SD 3.5 - Fast, 4 steps)
+  python ai-media.py -i -p "Cyberpunk city" --negative-prompt "blurry, dark, low quality" (With Negative Prompt)
   
   -- Video Generation --
   python ai-media.py -v -p "Robot dancing" -o robot.mp4 -l 5s
@@ -442,7 +443,9 @@ Supported Models (Code : Download Size | Description):
     - sd-1.5                     : ~4GB  | Lightweight, lower VRAM.
     - sd3.5-medium               : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
     - sd3.5-large                : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
-    - qwen-image                 : ~20GB | Best text rendering. (CUDA 4-bit, auto-switches on MPS)
+    - qwen-image-auto            : ~40GB | Best text rendering. (Auto-selects 4-bit CUDA / Full MPS)
+    - qwen-image-lightning       : ~40GB | Lightning Fast (8-step). (MPS/CUDA)
+    - qwen-image-4bit            : ~20GB | 4-bit Lite Qwen. (CUDA Only)
     - qwen-image-2512            : ~40GB | Qwen-Image 2512 (Latest). (MPS/Full, float32)
     - flux                       : ~24GB | High quality (🔒 Gated - Free Login Required)
     - flux-dev                   : ~24GB | Professional creative work (🔒 Gated - Free Login Required)
@@ -532,10 +535,11 @@ Supported Models (Code : Download Size | Description):
     
     # Specific options
     image_group = parser.add_argument_group("Image Options")
-    image_models_help = [k + " (Gated)" if k in ["flux", "flux-dev", "flux2", "flux2-full"] else k for k in IMAGE_MODELS.keys()]
+    image_models_help = [k + " (Gated)" if k in ["flux", "flux-dev", "flux2", "flux2-full", "qwen-image-lightning"] else k for k in IMAGE_MODELS.keys()]
     image_group.add_argument("-im", "--image-model", default="default", help=f"Model: {', '.join(image_models_help)}")
     image_group.add_argument("-otn", "--orientation", choices=["landscape", "portrait", "square"], default="landscape",
                               help="Orientation for SDXL/Flux generation. 'portrait' swaps width/height.")
+    image_group.add_argument("--negative-prompt", help="Negative prompt (what to avoid). Only supported by standard models (SD 1.5, SD 3.5, Qwen). Ignored by Turbo/Flux.")
     image_group.add_argument("--unsafe", action="store_true", help="Disable NSFW safety checker (Use with caution).")
     
     video_group = parser.add_argument_group("Video Options")
@@ -577,7 +581,8 @@ Supported Models (Code : Download Size | Description):
     # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
     transform_group.add_argument("-tp", "--transform-prompt", help="Edit instruction for InstructPix2Pix (e.g., 'Make it anime'). Used with -ti.")
-    transform_group.add_argument("-em", "--edit-model", default="default", help=f"Model for image editing. Options: {', '.join(EDIT_MODELS.keys())}")
+    edit_models_help = [k + " (Gated)" if k in ["qwen-image-edit-lightning"] else k for k in EDIT_MODELS.keys()]
+    transform_group.add_argument("-em", "--edit-model", default="default", help=f"Model for image editing. Options: {', '.join(edit_models_help)}")
     transform_group.add_argument("-rb", "--remove-background", action="store_true", help="Remove background (Transparent PNG).")
     transform_group.add_argument("--silhouette", action="store_true", help="Create a black silhouette (requires -rb).")
     transform_group.add_argument("--image-guidance", type=float, default=1.5, help="Image guidance scale (default: 1.5). Higher = closer to original.")
@@ -676,8 +681,6 @@ Supported Models (Code : Download Size | Description):
     serve_any = args.serve or args.serve_web_only_client or args.serve_electron_dev_only_client or args.serve_no_client
     if serve_any:
         # Load config for host/ports
-        from ai_media.server.config import CONFIG
-        
         host = CONFIG["server"]["host"]
         server_port = CONFIG["server"]["port"]
         web_port = CONFIG["client"]["port"]
@@ -908,7 +911,7 @@ Supported Models (Code : Download Size | Description):
         # Resolve Model ID
         model_id = get_model_id(args.image_model, IMAGE_MODELS)
             
-        success = pkg_generate_image(args.prompt, outfile, w, h, model_id, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
+        success = pkg_generate_image(args.prompt, outfile, w, h, model_id, negative_prompt=args.negative_prompt, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
         if not success:
             sys.exit(1)
         

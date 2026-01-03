@@ -1,9 +1,9 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateArticle, fetchModels, type ModelInfo } from '../hooks/useApi';
 import { FileText, Loader2, Globe, AlertTriangle } from 'lucide-react';
-import { Tooltip } from './common/Tooltip';
+
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { RandomPrompt } from './common/RandomPrompt';
 import { NumberInput } from './common/NumberInput';
@@ -173,53 +173,61 @@ export function ArticleGenerator() {
     availableModels.some(m => m.name === name)
   );
 
-  return (
-    <div className="w-full max-w-none px-4 mx-auto">
-      <div className="card p-6 mb-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <FileText className="text-primary-400" />
-          Article Generation
-        </h1>
-      </div>
+  const resultRef = useRef<HTMLDivElement>(null);
 
-      <div className="card space-y-4">
+  const handleViewResult = () => {
+    setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
-          <div className="flex items-center justify-between mb-2">
-             <label className="label flex items-center mb-0">
-                Topic
-                <Tooltip content="Main subject of the article. Be specific for better results." />
-             </label>
-             <RandomPrompt type="article" onPromptSelect={setTopic} />
-          </div>
-          <textarea
-            className="input min-h-[150px] resize-y"
-            placeholder="The future of renewable energy technologies..."
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <FileText className="text-brand-400" /> Article Gen
+          </h2>
+          <p className="text-xs text-slate-500">Generate articles, blogs and essays</p>
         </div>
 
-        <div>
-           <label className="label flex items-center">
+        {/* Topic */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className="text-sm font-medium text-slate-400">Topic</label>
+             <RandomPrompt type="article" onPromptSelect={setTopic} />
+           </div>
+           <textarea
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+             placeholder="The future of renewable energy technologies..."
+             value={topic}
+             onChange={(e) => setTopic(e.target.value)}
+           />
+        </div>
+
+        {/* Filename */}
+        <div className="space-y-2">
+           <label className="text-xs font-medium text-slate-400">
               Filename (Optional)
-              <Tooltip content="Custom output filename. Leave empty for auto-generated name." />
            </label>
            <input
              type="text"
-             className="input py-2"
-             placeholder="Auto-generated if empty (e.g. article_20260101.md)"
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+             placeholder="Auto-generated if empty"
              value={filename}
              onChange={(e) => setFilename(e.target.value)}
            />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="label flex items-center">
-               Model
-               <Tooltip content="LLM for generation. DeepSeek R1 for reasoning, Llama 3.1 for general speed." />
-            </label>
-            <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
+        {/* Model Selector */}
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-400">Model</label>
+            <select 
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
+              value={model} 
+              onChange={(e) => setModel(e.target.value)}
+            >
                {!model && <option value="">Loading...</option>}
                {sortedModels.map((name) => {
                 const info = MODEL_DISPLAY_INFO[name];
@@ -231,136 +239,147 @@ export function ArticleGenerator() {
               })}
             </select>
             {model === 'deepseek-r1-llama-70b' && (
-              <div className="mt-2 flex items-center gap-2 text-yellow-400 text-sm">
-                <AlertTriangle size={16} />
-                <span>Requires 40GB+ VRAM (Dual 3090/4090 or Mac Studio Ultra)</span>
+              <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+                <AlertTriangle size={12} />
+                <span>Requires 40GB+ VRAM</span>
               </div>
             )}
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label flex items-center">
-                 Format
-                 <Tooltip content="Output file format. Markdown is best for editing, HTML for web, PDF for sharing." />
-              </label>
-              <select className="select" value={format} onChange={(e) => setFormat(e.target.value)}>
-                <option value="md">Markdown</option>
-                <option value="html">HTML (.html)</option>
-                <option value="xhtml">XHTML (.xhtml)</option>
-                <option value="pdf">PDF</option>
-                <option value="docx">Word (DOCX)</option>
-                <option value="txt">Text (TXT)</option>
-                <option value="json">JSON</option>
-                <option value="rtf">Rich Text Format (.rtf)</option>
-              </select>
-            </div>
-             <div>
-              <label className="label flex items-center">
-                 Length
-                 <Tooltip content="Target word count. Quick ~500, Standard ~1500, Detailed ~3000 words." />
-              </label>
-              <select className="select" value={length} onChange={(e) => setLength(e.target.value)}>
-                <option value="quick">Quick (~500 words)</option>
-                <option value="standard">Standard (~1500 words)</option>
-                <option value="detailed">Detailed (~3000 words)</option>
-              </select>
-            </div>
-          </div>
         </div>
 
-            <label className="flex items-center gap-2 cursor-pointer mt-8">
+        {/* Format & Length */}
+        <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Format</label>
+              <select 
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
+                value={format} 
+                onChange={(e) => setFormat(e.target.value)}
+              >
+                <option value="md">Markdown</option>
+                <option value="html">HTML</option>
+                <option value="pdf">PDF</option>
+                <option value="docx">Word</option>
+                <option value="txt">Text</option>
+                <option value="json">JSON</option>
+              </select>
+            </div>
+             <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400">Length</label>
+              <select 
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
+                value={length} 
+                onChange={(e) => setLength(e.target.value)}
+              >
+                <option value="quick">Quick</option>
+                <option value="standard">Standard</option>
+                <option value="detailed">Detailed</option>
+              </select>
+            </div>
+        </div>
+
+        {/* Online Research */}
+         <div className="space-y-3 pt-2 border-t border-slate-800">
+            <label className="flex items-center gap-2 cursor-pointer">
                <input 
                  type="checkbox" 
-                 className="checkbox checkbox-primary"
+                 className="checkbox checkbox-xs checkbox-primary"
                  checked={online}
                  onChange={(e) => setOnline(e.target.checked)}
                />
-               <span className="label-text font-medium flex items-center gap-2">
-                 <Globe size={16} className="text-success" />
-                 Enable Online Research (DuckDuckGo Search)
-                 <Tooltip content="Provides real-time information and images from the web. Increases generation time." />
+               <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                 <Globe size={14} className="text-brand-400" />
+                 Online Research
                </span>
             </label>
 
             {online && (
-              <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-base-200 rounded-lg border border-base-300">
+              <div className="grid grid-cols-2 gap-4 pl-6">
                 <div>
-                  <label className="label flex items-center">
-                    Research Sources (Iterations)
-                    <Tooltip content="Number of search iterations/sources to analyze. warning: Higher values increase RAM usage significantly." />
-                  </label>
+                  <label className="text-xs text-slate-400">Sources</label>
                   <NumberInput
                     value={researchIterations}
                     onChange={setResearchIterations}
                     min={1}
                     max={10}
-                    className="input w-full"
+                    className="w-full h-8 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="label flex items-center">
-                    Max Images
-                    <Tooltip content="Maximum number of images to fetch and consider for the article. warning: Processing more images increases RAM usage." />
-                  </label>
+                  <label className="text-xs text-slate-400">Max Images</label>
                   <NumberInput
                     value={maxImages}
                     onChange={setMaxImages}
                     min={0}
                     max={20}
-                    className="input w-full"
+                    className="w-full h-8 text-sm"
                   />
                 </div>
               </div>
             )}
+        </div>
 
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
-
-        <ValidationTooltip error={!topic.trim() ? "Please enter a topic for the article" : null} className="w-full">
+        <ValidationTooltip error={!topic.trim() ? "Please enter a topic" : null} className="w-full mt-auto pt-4">
           <button 
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
             onClick={handleGenerate} 
             disabled={isLoading || !topic.trim()}
           >
-            {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><FileText size={18} />Generate Article</>)}
+            {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><FileText size={18} /> Generate Article</>)}
           </button>
         </ValidationTooltip>
       </div>
 
-      <ErrorAlert error={error} onDismiss={() => setError(null)} />
+      {/* Main Result Area */}
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
+        {result ? (
+           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
+                <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+                   <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
+                            <FileText size={24} />
+                         </div>
+                         <div>
+                            <h3 className="font-medium text-slate-200">{result?.split('/').pop()}</h3>
+                            {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                         </div>
+                      </div>
+                      <div className="flex gap-2">
+                         <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
+                         <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+                      </div>
+                   </div>
 
-      {result && (
-        <div className="mt-6 card">
-          <div className="flex items-end justify-between mb-4">
-             <h2 className="text-lg font-semibold text-primary">Result</h2>
-             {duration && <span className="text-xs text-secondary mb-1">Generated in {formatDuration(duration * 1000)}</span>}
+                   {/* Reasoning / Thinking Block */}
+                   {reasoning && (
+                      <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                        <div className="flex items-center gap-2 mb-2 text-brand-400">
+                           <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                           {reasoning}
+                        </div>
+                      </div>
+                   )}
+                   
+                   {!reasoning && (
+                       <div className="text-center py-12 text-slate-500">
+                          <p>Article generated successfully.</p>
+                       </div>
+                   )}
+                </div>
+           </div>
+        ) : (
+          <div className="text-center text-slate-500">
+            <FileText size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Write</h3>
+            <p className="max-w-sm mx-auto">Enter a topic to generate a comprehensive article, blog post, or essay.</p>
           </div>
-          <div className="p-4 bg-tertiary rounded-lg flex items-center justify-between border border-border">
-             <span className="truncate text-primary">{result?.split('/').pop()}</span>
-             <div className="flex gap-2">
-                <button 
-                  className="btn-primary text-sm"
-                  onClick={() => setIsPreviewOpen(true)}
-                >
-                  Preview
-                </button>
-                 <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
-             </div>
-          </div>
-          
-          {/* Reasoning / Thinking Block */}
-          {reasoning && (
-             <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
-               <div className="flex items-center gap-2 mb-2 text-primary-400">
-                  <span className="text-xs font-semibold uppercase tracking-wider">Reasoning Process</span>
-               </div>
-               <div className="text-xs text-secondary font-mono whitespace-pre-wrap max-h-48 overflow-y-auto italic">
-                  {reasoning}
-               </div>
-             </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
+
       {currentJobId && (
         <JobProgressModal 
           jobId={currentJobId} 
@@ -368,6 +387,7 @@ export function ArticleGenerator() {
             handleCloseModal();
             if (result) setIsPreviewOpen(true);
           }} 
+          onViewResult={handleViewResult}
         />
       )}
       {result && (

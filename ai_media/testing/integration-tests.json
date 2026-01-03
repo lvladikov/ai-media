@@ -10,6 +10,15 @@
       "description": "Generate image with auto-generated filename from prompt"
     },
     {
+      "name": "Image - Negative Prompt",
+      "command": "-i -p \"A clean room\" --negative-prompt \"messy, cluttered\" -s 64x64 --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "a-clean-room.jpg"
+      ],
+      "description": "Generate image with negative prompt argument"
+    },
+    {
       "name": "Image - Chained Simple Upscale",
       "command": "-i -p \"Mountain\" -o ai_media/testing/data/outputs/mountain.jpg -s 64x64 --upscale -uf 2x -su --force --unsafe",
       "expectedInputItems": [],
@@ -186,6 +195,39 @@
         "ai_media/testing/data/outputs/img_qwen_2512.jpg"
       ],
       "description": "Generate image using Qwen-Image 2512 model (MPS, float32)"
+    },
+    {
+      "name": "Image - Qwen Auto (MPS)",
+      "timeout": 3600,
+      "runOn": "mps",
+      "command": "-i -p \"Hello Auto\" -o ai_media/testing/data/outputs/img_qwen_auto.jpg -s 64x64 --image-model qwen-image-auto --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_qwen_auto.jpg"
+      ],
+      "description": "Generate image using Qwen Auto alias on MPS (Should resolve to 2512)"
+    },
+    {
+      "name": "Image - Qwen Lightning (MPS)",
+      "timeout": 3600,
+      "runOn": "mps",
+      "command": "-i -p \"Hello Lightning\" -o ai_media/testing/data/outputs/img_qwen_lightning.jpg -s 64x64 --image-model qwen-image-lightning --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_qwen_lightning.jpg"
+      ],
+      "description": "Generate image using Qwen Lightning model on MPS"
+    },
+    {
+      "name": "Image - Qwen 4-bit (CUDA)",
+      "timeout": 3600,
+      "runOn": "cuda",
+      "command": "-i -p \"Hello 4bit\" -o ai_media/testing/data/outputs/img_qwen_4bit.jpg -s 64x64 --image-model qwen-image-4bit --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_qwen_4bit.jpg"
+      ],
+      "description": "Generate image using Qwen 4-bit alias on CUDA"
     },
     {
       "name": "Image - Square Orientation",

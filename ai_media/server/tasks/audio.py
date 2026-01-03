@@ -24,7 +24,7 @@ def run_audio_generation(
                 pass
     
     try:
-        send_update(status="loading", phase="loading", progress=10, message="Loading audio model...")
+        send_update(status="loading", phase="loading", progress=0, message="Loading audio model...")
         
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         

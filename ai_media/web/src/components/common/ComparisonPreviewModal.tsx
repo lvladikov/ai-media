@@ -129,8 +129,8 @@ export function ComparisonPreviewModal({
           )}
           
           {activeTab === 'sideBySide' && (
-            <div className="flex gap-4 w-full h-full items-center justify-center">
-              <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center">
+            <div className="flex flex-col md:flex-row gap-4 w-full h-full items-center justify-center">
+              <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
                 <span className="text-xs font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">Original</span>
                 <img
                   src={originalUrl}
@@ -139,7 +139,7 @@ export function ComparisonPreviewModal({
                   style={originalStyle.style}
                 />
               </div>
-              <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center">
+              <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
                 <span className="text-xs font-medium text-primary-400 bg-primary-500/10 px-2 py-1 rounded border border-primary-500/30">{resultLabel}</span>
                 <img
                   src={resultUrl}

@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { Upload, RefreshCw, FileType, Loader2, ArrowRight } from 'lucide-react';
+import { Upload, RefreshCw, FileType, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
@@ -212,7 +212,9 @@ export function ConvertView() {
             {/* Arrow */}
             {file && (
                <div className="flex justify-center">
-                 <ArrowRight className="text-slate-600" />
+                 <p className="text-slate-400 max-w-sm text-center">
+                    Upload media from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start converting.
+                 </p>
                </div>
             )}
 

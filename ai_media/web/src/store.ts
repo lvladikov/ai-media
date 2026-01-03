@@ -102,6 +102,11 @@ interface AppState {
   isHelpOpen: boolean;
   toggleHelp: () => void;
   
+  // Mobile Menu
+  isMobileMenuOpen: boolean;
+  toggleMobileMenu: () => void;
+  setMobileMenuOpen: (isOpen: boolean) => void;
+  
   // Server connection
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
@@ -159,6 +164,11 @@ export const useAppStore = create<AppState>((set) => ({
   // Help
   isHelpOpen: false,
   toggleHelp: () => set((state) => ({ isHelpOpen: !state.isHelpOpen })),
+  
+  // Mobile Menu
+  isMobileMenuOpen: false,
+  toggleMobileMenu: () => set((state) => ({ isMobileMenuOpen: !state.isMobileMenuOpen })),
+  setMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
   
   // Server connection
   isConnected: false,

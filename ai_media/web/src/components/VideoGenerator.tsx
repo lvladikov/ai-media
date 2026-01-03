@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateVideo, fetchModels } from '../hooks/useApi';
 import { Film, Loader2, AlertTriangle, Info } from 'lucide-react';
@@ -158,32 +158,47 @@ export function VideoGenerator() {
     availableModels.some(m => m.name === name)
   );
 
-  return (
-    <div className="w-full max-w-none px-4 mx-auto relative">
-      <div className="card p-6 mb-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Film className="text-primary-400" />
-          Video Generation
-        </h1>
-      </div>
+  const resultRef = useRef<HTMLDivElement>(null);
 
-      <div className="card space-y-4">
+  const handleViewResult = () => {
+    setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="label mb-0">Prompt</label>
-            <RandomPrompt type="video" onPromptSelect={setPrompt} />
-          </div>
-          <textarea
-            className="input min-h-[150px] resize-y"
-            placeholder="A serene forest with sunlight filtering through the trees..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <Film className="text-brand-400" /> Video Gen
+          </h2>
+          <p className="text-xs text-slate-500">Generate videos from text descriptions</p>
         </div>
 
-        <div>
-          <label className="label">Model</label>
-          <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
+        {/* Prompt */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className="text-sm font-medium text-slate-400">Prompt</label>
+             <RandomPrompt type="video" onPromptSelect={setPrompt} />
+           </div>
+           <textarea
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+             placeholder="A serene forest with sunlight filtering through the trees..."
+             value={prompt}
+             onChange={(e) => setPrompt(e.target.value)}
+           />
+        </div>
+
+        {/* Model Selector */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-400">Model</label>
+          <select 
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            value={model} 
+            onChange={(e) => setModel(e.target.value)}
+          >
              {sortedModels.map((name) => {
               const info = MODEL_DISPLAY_INFO[name];
               return (
@@ -195,98 +210,103 @@ export function VideoGenerator() {
           </select>
           {/* Warnings */}
           {model === 'cogvideox' && (
-            <div className="mt-2 flex items-center gap-2 text-red-400 text-sm">
-              <AlertTriangle size={16} />
-              <span>Extremely high VRAM usage (38GB+) - likely to fail on consumer GPUs</span>
+            <div className="flex items-center gap-2 text-red-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Extremely high VRAM (38GB+)</span>
             </div>
           )}
           {model === 'wan-2.2' && (
-            <div className="mt-2 flex items-center gap-2 text-yellow-400 text-sm">
-              <AlertTriangle size={16} />
-              <span>Gated model - requires Hugging Face login</span>
-               <button 
-                onClick={() => useAppStore.getState().toggleHelp()} 
-                className="underline hover:text-yellow-300 ml-1"
-              >
-                (See Help)
-              </button>
+            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Requires HF Login</span>
             </div>
           )}
           {model === 'svd' && (
-            <div className="mt-2 flex items-center gap-2 text-blue-400 text-sm">
-              <Info size={16} />
-              <span>SVD requires an input image (not supported in text-to-video mode yet)</span>
+            <div className="flex items-center gap-2 text-blue-400 text-xs mt-1">
+              <Info size={12} />
+              <span>Requires input image (not supported in text mode)</span>
             </div>
           )}
         </div>
 
-
         {/* Resolution */}
-        <ResolutionSelector 
-            width={width} 
-            height={height} 
-            onChange={(w, h) => { setWidth(w); setHeight(h); }} 
-        />
+        <div className="space-y-2">
+            <ResolutionSelector 
+                width={width} 
+                height={height} 
+                onChange={(w, h) => { setWidth(w); setHeight(h); }} 
+            />
+        </div>
 
+        {/* Duration/FPS */}
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label flex items-center">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
                Duration (s)
                <Tooltip content="Length of video in seconds. Default 2s. Longer videos take significantly more VRAM/time." />
             </label>
             <NumberInput value={duration} onChange={setDuration} min={1} max={10} step={0.1} allowFloat={true} />
           </div>
-             <div>
-            <label className="label flex items-center">
-               FPS
+             <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
+               FPS (Read Only)
                <Tooltip content="Frames Per Second. Determined by model (e.g. 8, 24). Cannot be manually changed." />
             </label>
             <NumberInput value={fps} onChange={() => {}} disabled={true} />
           </div>
         </div>
 
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
-        <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt to generate a video" : null} className="w-full">
-          <button 
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
-            onClick={handleGenerate} 
-            disabled={isLoading || !prompt.trim()}
-          >
-            {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><Film size={18} />Generate Video</>)}
-          </button>
-        </ValidationTooltip>
+          <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt" : null} className="w-full mt-auto pt-4">
+            <button 
+                className="w-full bg-gradient-to-r from-brand-600 to-pink-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
+                onClick={handleGenerate} 
+                disabled={isLoading || !prompt.trim()}
+            >
+                {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><Film size={18} /> Generate Video</>)}
+            </button>
+          </ValidationTooltip>
       </div>
       
-      <ErrorAlert error={error} onDismiss={() => setError(null)} />
+      {/* Main Preview */}
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 min-h-[500px] lg:min-h-0 scroll-mt-4">
+        {result ? (
+           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
+               <div 
+                 className="relative group rounded-lg overflow-hidden border border-brand-500/30 shadow-2xl max-h-[85vh] cursor-pointer" 
+                 onClick={() => setIsPreviewOpen(true)}
+               >
+                 <video src={`http://localhost:8000/api/files/${result}`} controls className="max-h-[85vh] object-contain" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                     <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                  </div>
+               </div>
 
-      {/* Job Info Modal */}
-      {currentJobId && (
-          <JobProgressModal jobId={currentJobId} onClose={handleCloseModal} />
-      )}
-
-      {result && (
-        <div className="mt-6 card">
-          <div className="flex items-center justify-between mb-4 text-primary">
-            <h2 className="text-lg font-semibold">Result</h2>
-             <div className="flex gap-2">
-                <button 
-                  className="btn-primary text-sm"
-                  onClick={() => setIsPreviewOpen(true)}
-                >
-                  Preview
-                </button>
-                <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
-             </div>
-          </div>
-          <div className="cursor-pointer group relative rounded-lg overflow-hidden border border-border" onClick={() => setIsPreviewOpen(true)}>
-            <video src={`http://localhost:8000/api/files/${result}`} controls className="max-w-full rounded-lg" />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
-               <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                <div className="flex gap-2">
+                 <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Screen</button>
+                 <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+               </div>
+           </div>
+        ) : (
+            <div className="text-center text-slate-500">
+              <Film size={48} className="mx-auto mb-4 opacity-20" />
+              <h3 className="text-lg font-medium mb-2">Ready to Generate</h3>
+              <p className="text-slate-400 max-w-sm">
+                Enter a prompt in the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start creating videos.
+              </p>
             </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
+      {currentJobId && (
+          <JobProgressModal 
+            jobId={currentJobId} 
+            onClose={handleCloseModal} 
+            onViewResult={handleViewResult}
+          />
+      )}
+      
       {result && (
         <PreviewModal 
           isOpen={isPreviewOpen}

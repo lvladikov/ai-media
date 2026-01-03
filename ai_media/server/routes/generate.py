@@ -28,6 +28,7 @@ async def generate_image(request: ImageGenerateRequest):
             "height": request.height,
             "steps": request.steps,
             "guidance_scale": request.guidance_scale,
+            "negative_prompt": request.negative_prompt,
         }
     )
     
@@ -47,6 +48,7 @@ async def generate_image(request: ImageGenerateRequest):
             request.model,
             request.steps,
             request.guidance_scale,
+            request.negative_prompt,
             request.force,
         ),
     )

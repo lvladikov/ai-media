@@ -16,7 +16,7 @@ from ..utils.performance import PerformanceTracker, ResourceMonitor, write_repor
 
 
 def generate_image(prompt, output_file, width, height, model_name="default", steps=30, 
-                   guidance_scale=7.5, unsafe=False, report_json=None, force=False):
+                   guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, force=False, progress_callback=None):
     """Generate image using Diffusers (Flux/SDXL).
     
     Args:
@@ -26,7 +26,9 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         height: Image height in pixels
         model_name: Model short code or HF ID (default: 'sdxl')
         steps: Number of inference steps
+        steps: Number of inference steps
         guidance_scale: Classifier-free guidance scale
+        negative_prompt: Negative prompt (what to avoid)
         unsafe: Disable NSFW safety checker
         report_json: Path to write performance stats JSON
         force: Skip resource warnings
@@ -144,41 +146,166 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             extra_kwargs = {
                 "guidance_scale": 0.0 if is_turbo else 4.5,
                 "num_inference_steps": 4 if is_turbo else 40,
-                "max_sequence_length": 512
+                "max_sequence_length": 512,
+                "negative_prompt": negative_prompt or ""
             }
         elif "qwen-image" in model_name.lower() and "edit" not in model_name.lower():
             # Qwen-Image Text-to-Image generation
             from diffusers import DiffusionPipeline
             
             # Auto-switch: CUDA model on MPS → switch to MPS model, and vice versa
-            original_model_name = model_name
-            if device.type == "mps" and "-mps" not in model_name.lower():
-                print(f"   ℹ️  Switching to qwen-image-2512 (4-bit quantization not supported on MPS)")
-                model_id = IMAGE_MODELS["qwen-image-2512"]
-                model_name = "qwen-image-2512"
-            elif device.type == "cuda" and "-mps" in model_name.lower():
-                print(f"   ℹ️  Switching to qwen-image (using optimized CUDA 4-bit variant)")
-                model_id = IMAGE_MODELS["qwen-image"]
-                model_name = "qwen-image"
+            if "lightning" not in model_name.lower():
+                if device.type == "mps" and "-mps" not in model_name.lower():
+                    print(f"   ℹ️  Switching to qwen-image-2512 (4-bit quantization not supported on MPS)")
+                    model_id = IMAGE_MODELS["qwen-image-2512"]
+                    model_name = "qwen-image-2512"
+                elif device.type == "cuda" and "-mps" in model_name.lower():
+                    print(f"   ℹ️  Switching to qwen-image (using optimized CUDA 4-bit variant)")
+                    model_id = IMAGE_MODELS["qwen-image"]
+                    model_name = "qwen-image"
             
             # CUDA: bfloat16, MPS: try float16 to save RAM (Qwen is huge)
             qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
             
             print(f"   ℹ️  Loading Qwen-Image Pipeline...")
-            pipe = DiffusionPipeline.from_pretrained(
-                model_id,
-                torch_dtype=qwen_dtype
-            )
             
-            # Enable CPU offload on CUDA/MPS for memory efficiency
-            if device.type == "cuda" or device.type == "mps":
+            if "lightning" in model_name.lower():
+                try:
+                   # Pivot Strategy: The 'Lightning' checkpoint is likely a LoRA/UNet-only weight set, 
+                   # NOT a standalone pipeline. We must load the BASE Qwen model first, then apply these weights.
+                   from huggingface_hub import hf_hub_download
+                   
+                   print(f"   ℹ️  Loading Base Qwen-Image model first...")
+                   # Load the base model (Qwen/Qwen-Image)
+                   # Suppress "pooled_projection_dim" warning during load
+                   import diffusers.utils.logging as diffusers_logging
+                   import transformers.utils.logging as transformers_logging
+                   
+                   prev_diffusers = diffusers_logging.get_verbosity()
+                   prev_transformers = transformers_logging.get_verbosity()
+                   diffusers_logging.set_verbosity_error()
+                   transformers_logging.set_verbosity_error()
+                   
+                   try:
+                       pipe = DiffusionPipeline.from_pretrained(
+                           "Qwen/Qwen-Image", 
+                           torch_dtype=qwen_dtype
+                       )
+                   finally:
+                       diffusers_logging.set_verbosity(prev_diffusers)
+                       transformers_logging.set_verbosity(prev_transformers)
+                   
+                   # Download Lightning weights
+                   filename = "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors"
+                   msg = f"   ⬇️  Downloading Lightning weights: {filename}..."
+                   print(msg)
+                   checkpoint_path = hf_hub_download(repo_id=model_id, filename=filename)
+                   
+                   # Apply as LoRA / Weights
+                   print(f"   ⚡ Applying Lightning distilled weights...")
+                   try:
+                       pipe.load_lora_weights(checkpoint_path)
+                       print("   ✅ LoRA weights loaded successfully.")
+                       # Fuse for speed if supported
+                       try:
+                           pipe.fuse_lora()
+                       except:
+                           pass
+                   except Exception as lora_err:
+                       print(f"   ⚠️  Standard LoRA load failed ({lora_err}). Trying UNet load...")
+                       unet = UNet2DConditionModel.from_single_file(checkpoint_path, torch_dtype=qwen_dtype)
+                       pipe.unet = unet
+                       print("   ✅ UNet replaced successfully.")
+
+                   # IMPORTANT: Lightning models need specific schedulers and low step counts
+                   # Use FlowMatchEulerDiscreteScheduler which natively supports custom sigmas
+                   # (EulerDiscreteScheduler does NOT support sigmas, causing pipeline errors)
+                   from diffusers import FlowMatchEulerDiscreteScheduler
+                   
+                   # Keep the existing scheduler config but switch to FlowMatch variant
+                   scheduler_config = dict(pipe.scheduler.config)
+                   # Remove EDM-specific keys that FlowMatch doesn't need
+                   for key in ["mu", "sigma_min", "sigma_max", "sigma_data"]: 
+                       if key in scheduler_config:
+                           del scheduler_config[key]
+                   
+                   try:
+                       pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
+                       print("   ⚙️  Switched to FlowMatchEulerDiscreteScheduler (Lightning-compatible)")
+                   except Exception as sched_err:
+                       # Fallback: just keep the original scheduler if FlowMatch fails
+                       print(f"   ⚠️  FlowMatch scheduler init failed ({sched_err}), keeping original")
+
+                except Exception as e:
+                    print(f"   ⚠️  Single-file load failed, trying standard load... ({e})")
+                    
+                    # Use official verbosity setters to suppress "pooled_projection_dim" from transformers/diffusers
+                    import diffusers.utils.logging as diffusers_logging
+                    import transformers.utils.logging as transformers_logging
+                    
+                    prev_diffusers_level = diffusers_logging.get_verbosity()
+                    prev_transformers_level = transformers_logging.get_verbosity()
+                    
+                    diffusers_logging.set_verbosity_error()
+                    transformers_logging.set_verbosity_error()
+                    
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", message=".*pooled_projection_dim.*")
+                        try:
+                            pipe = DiffusionPipeline.from_pretrained(
+                                model_id,
+                                torch_dtype=qwen_dtype
+                            )
+                        finally:
+                            # Restore verbosity
+                            diffusers_logging.set_verbosity(prev_diffusers_level)
+                            transformers_logging.set_verbosity(prev_transformers_level)
+            else:
+                # Suppress "pooled_projection_dim" warning from upstream config in standard load path too
+                import diffusers.utils.logging as diffusers_logging
+                import transformers.utils.logging as transformers_logging
+                
+                prev_diffusers_level = diffusers_logging.get_verbosity()
+                prev_transformers_level = transformers_logging.get_verbosity()
+                
+                diffusers_logging.set_verbosity_error()
+                transformers_logging.set_verbosity_error()
+                
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=".*pooled_projection_dim.*")
+                    try:
+                        pipe = DiffusionPipeline.from_pretrained(
+                            model_id,
+                            torch_dtype=qwen_dtype
+                        )
+                    finally:
+                         # Restore verbosity
+                         diffusers_logging.set_verbosity(prev_diffusers_level)
+                         transformers_logging.set_verbosity(prev_transformers_level)
+            
+            # Enable CPU offload on CUDA for memory efficiency
+            # NOTE: Don't use CPU offload on MPS - it uses unified memory and offloading
+            # actually makes it SLOWER by adding unnecessary CPU↔GPU transfers
+            if device.type == "cuda":
                 use_offload = True
             
-            # Qwen-Image parameters: Distill uses 15 steps, 4-bit uses ~8 steps
-            is_distill = "distill" in model_id.lower()
+            # Qwen-Image parameters: Lightning/4-bit uses 4-8 steps
+            is_lightning = "lightning" in model_name.lower()
+            steps = 4 if is_lightning else (8 if "4bit" in model_id.lower() else 30)
+            
+            # Lightning models are NOT guidance-distilled, so CFG/negative prompts are ignored.
+            # Always use guidance_scale=0 for Lightning (model ignores it anyway).
+            if is_lightning:
+                target_guidance = 0
+            else:
+                # Standard robust guidance for base models
+                target_guidance = 5.0
+
             extra_kwargs = {
-                "true_cfg_scale": 4.0,
-                "num_inference_steps": 15 if is_distill else 8,
+                "true_cfg_scale": 4.0 if not is_lightning else target_guidance, 
+                "negative_prompt": negative_prompt or "",
+                "guidance_scale": target_guidance, 
+                "num_inference_steps": steps,
             }
         elif "flux" in model_id.lower():
             # FLUX 1 (Schnell/Dev) on MPS requires float32 to avoid dtype mismatch errors
@@ -221,7 +348,9 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 torch_dtype=run_dtype,
                 variant="fp16" if run_dtype == torch.float16 else None
             )
-            extra_kwargs = {}  # Use defaults
+            extra_kwargs = {
+                "negative_prompt": negative_prompt or ""
+            }
             
         # Apply memory optimizations if requested
         if use_offload:
@@ -269,12 +398,25 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             warnings.filterwarnings("ignore", category=RuntimeWarning, 
                                     message="invalid value encountered in cast")
             
+            # Define callback for Diffusers
+            def callback_on_step_end(pipe, step, timestep, callback_kwargs):
+                 if progress_callback:
+                    # Calculate progress
+                    # steps is the total inference steps
+                    # step is the current step index (0-based)
+                    current_step = step + 1
+                    percent = min(99, int((current_step / steps) * 100))
+                    progress_callback(percent, f"Generating: {percent}%")
+                
+                 return callback_kwargs
+
             # Start Resource Monitoring
             with ResourceMonitor() as monitor:
                 output = pipe(
                     prompt=prompt, 
                     height=height, 
                     width=width,
+                    callback_on_step_end=callback_on_step_end,
                     **extra_kwargs
                 )
             
@@ -333,14 +475,17 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
             # Check if this is the default model (SD 3.5 Turbo)
             is_default = model_id == IMAGE_MODELS.get("default", "") or "stable-diffusion-3.5" in model_id.lower()
             
-            print(f"\n❌ Access Denied: Model '{model_id}' requires accepting a license agreement.")
+            print(f"\n❌ Access Denied / Authentication Error")
+            print(f"   Error Details: {e}")
             print(f"")
-            print(f"   This model is 'gated' on Hugging Face (free, but requires agreement).")
+            print(f"   Possible causes:")
+            print(f"   1. The model '{model_id}' is Gated and requires license acceptance.")
+            print(f"   2. Your Hugging Face token is invalid or expired (triggers 401/403).")
             print(f"")
-            print(f"   🔧 How to fix:")
+            print(f"   🔧 Troubleshooting:")
             print(f"      1. Visit: https://huggingface.co/{model_id}")
-            print(f"      2. Click 'Agree and access repository' (one-time)")
-            print(f"      3. Run: huggingface-cli login")
+            print(f"         (If it asks to 'Agree', accept it. If not, it's open.)")
+            print(f"      2. Run: huggingface-cli login (to refresh your token)")
             print(f"")
             
             if is_default:

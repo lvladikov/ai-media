@@ -69,6 +69,7 @@ class ImageGenerateRequest(BaseModel):
     height: int = Field(1024, description="Image height")
     steps: int = Field(30, description="Number of inference steps")
     guidance_scale: float = Field(7.5, description="Guidance scale for generation")
+    negative_prompt: Optional[str] = Field("", description="Negative prompt (what to avoid)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     force: bool = Field(False, description="Force execution, skipping confirmations")
 

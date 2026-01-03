@@ -207,9 +207,10 @@ pip install -r requirements.txt
 hf auth login
 # (Paste your Access Token when prompted. It is invisible.)
 
-# 7. [Optional] Install Web UI & Electron dependencies (only needed for --serve flags or Web UI/Electron builds)
+# 7. [Optional] Install Web Server and Client + Electron standalone apps dependencies
+# If you only want to use the ai-media.py CLI, you can skip this step. 
+# Though the Web interface is highly recommended for ease of use.
 cd ai_media/web && npm install && cd ../..
-cd ai_media/web/packages/electron && npm install && cd ../../../..
 ```
 
 ## Usage
@@ -344,6 +345,8 @@ This project uses the following open-source libraries:
 - **Stable Diffusion 3.5 Large** by Stability AI - [stabilityai/stable-diffusion-3.5-large](https://huggingface.co/stabilityai/stable-diffusion-3.5-large)
 - **Stable Diffusion 3.5 Large Turbo** by Stability AI - [stabilityai/stable-diffusion-3.5-large-turbo](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo)
 - **Qwen-Image** (Text-to-Image, best text rendering) - [Qwen/Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) (v2512)
+- **Qwen-Image-Lightning** (Fast 8-step Image Gen) - [lightx2v/Qwen-Image-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning)
+- **Qwen-Image-4bit** (CUDA 4-bit Image Gen) - [ovedrive/qwen-image-4bit](https://huggingface.co/ovedrive/qwen-image-4bit)
 - **Qwen-Image-Edit** (Image editing) - [Qwen/Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)
 - **Qwen-Image-Edit-Lightning** (Fast 2512 Edit) - [lightx2v/Qwen-Image-Edit-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2512-Lightning)
 - **Qwen-Coder** (Code Generation) - [Qwen/Qwen2.5-Coder-32B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct)

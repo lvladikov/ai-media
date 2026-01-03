@@ -35,27 +35,30 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: s
   'sd-1.5': { label: 'SD 1.5 (Lightweight)', vram: '~4GB' },
   'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, 🔒 Gated)', vram: '~10GB' },
   'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, 🔒 Gated)', vram: '~19GB' },
-  'qwen-image': { label: 'Qwen-Image (CUDA, 4-bit, v2512)', vram: '~20GB' },
-  'qwen-image-2512': { label: 'Qwen-Image 2512 (MPS/Full)', vram: '~40GB' },
+  
+  'qwen-image-auto': { label: 'Qwen 2.5 Image (High Quality)', vram: '~20-40GB' },
+  'qwen-image-lightning': { label: 'Qwen 2.5 Image (Lightning, Fast)', vram: '~40GB' },
+  'qwen-image-4bit': { label: 'Qwen 2.5 Image (4-bit Lite, CUDA only)', vram: '~20GB' },
   'flux': { label: 'Flux Schnell (High Quality, Slow on Mac)', vram: '~12GB' },
   'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac)', vram: '~16GB' },
-  'flux2': { label: 'FLUX.2 (4-bit quantized)', vram: '~12GB' },
+  'flux2': { label: 'FLUX.2 (4-bit quantized, CUDA only)', vram: '~12GB' },
   'flux2-full': { label: 'FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!)', vram: '~65GB' },
 };
 
 const MODEL_ORDER = [
   'sd3.5-turbo', 'sdxl', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
-  'qwen-image', 'qwen-image-2512', 'flux', 'flux-dev', 'flux2', 'flux2-full'
+  'qwen-image-auto', 'qwen-image-lightning', 'qwen-image-4bit', 'flux', 'flux-dev', 'flux2', 'flux2-full'
 ];
 
 export function ImageGenerator() {
-  const { addJob } = useAppStore();
+  const { addJob, systemInfo } = useAppStore();
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('sd3.5-turbo'); // Default matching CLI
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
   const [steps, setSteps] = useState(4); // SD 3.5 Turbo uses 4 steps by default
   const [guidanceScale, setGuidanceScale] = useState(0); // SD 3.5 Turbo uses 0
+  const [negativePrompt, setNegativePrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -120,13 +123,33 @@ export function ImageGenerator() {
     setPendingGeneration(false);
 
     try {
+      // Resolve model alias for Qwen
+      let selectedModel = model;
+      if (model === 'qwen-image-auto') {
+          const has2512 = availableModels.some(m => m.name === 'qwen-image-2512');
+          const hasCUDA = availableModels.some(m => m.name === 'qwen-image');
+          const sys = useAppStore.getState().systemInfo;
+          
+          if (sys?.mps_available && has2512) {
+              selectedModel = 'qwen-image-2512';
+          } else if (hasCUDA) {
+              selectedModel = 'qwen-image';
+          } else if (has2512) {
+              selectedModel = 'qwen-image-2512';
+          }
+           // Fallback if neither found is unlikely due to availability check, but keep original if so
+      } else if (model === 'qwen-image-4bit' || model === 'qwen-image-lightning') {
+          selectedModel = model; // Explicit selection
+      }
+
       const response = await generateImage({ 
         prompt, 
-        model, 
+        model: selectedModel, 
         width, 
         height, 
         steps,
         guidance_scale: guidanceScale,
+        negative_prompt: negativePrompt, // Pass negative prompt
         force, // Pass force flag to API
       });
       
@@ -156,8 +179,9 @@ export function ImageGenerator() {
     if (!prompt.trim()) return;
 
     // Check for High Resource models that block the CLI
-    // "qwen-image", "qwen-image-2512", "flux2-full", "flux-dev" often trigger high-RAM/VRAM warnings
-    const highResourceModels = ['qwen-image', 'qwen-image-2512', 'flux2-full'];
+    // Check for High Resource models that block the CLI
+    // "qwen-image-auto" (resolves to heavy models), "flux2-full", "flux-dev" often trigger high-RAM/VRAM warnings
+    const highResourceModels = ['qwen-image-auto', 'qwen-image-4bit', 'qwen-image-lightning', 'flux2-full'];
     
     // Qwen2512 is notably heavy (40GB) and almost always warns on consumer hardware
     // Flux2 Full is 128GB+
@@ -169,8 +193,8 @@ export function ImageGenerator() {
         if (model === 'flux2-full') {
             warningMsg = "This model (FLUX.2 Full) requires over 128GB of RAM. It will almost certainly crash or freeze average consumer hardware (laptops/desktops) unless you have a workstation class machine. Proceed only if sure.";
             critical = true;
-        } else if (model.includes('qwen-image')) {
-            warningMsg = "Qwen-Image models are very resource intensive (~40GB RAM for 2512). This may cause system slowdowns or swapping. The process normally asks for confirmation in CLI - clicking Proceed here will auto-confirm it.";
+        } else if (model.includes('qwen')) {
+            warningMsg = "Qwen-Image models are very resource intensive (~20-40GB RAM). This may cause system slowdowns or swapping. The process normally asks for confirmation in CLI - clicking Proceed here will auto-confirm it.";
             critical = false;
         }
 
@@ -229,45 +253,77 @@ export function ImageGenerator() {
     return () => unsubscribe();
   }, [currentJobId]);
 
-  // Sort models in CLI order
-  const sortedModels = MODEL_ORDER.filter(name => 
-    availableModels.some(m => m.name === name)
-  );
+  // Sort models in CLI order and filter based on system capabilities
+  const sortedModels = MODEL_ORDER.filter(name => {
+    // Hide CUDA-only models on non-CUDA systems (like Mac/MPS)
+    const isNoCuda = systemInfo && !systemInfo.cuda_available;
+    if (isNoCuda) {
+        if (name === 'qwen-image-4bit') return false;
+        if (name === 'flux2') return false;
+    }
+
+    if (name === 'qwen-image-auto' || name === 'qwen-image-4bit' || name === 'qwen-image-lightning') {
+       return availableModels.some(m => m.name === 'qwen-image' || m.name === 'qwen-image-2512');
+    }
+    return availableModels.some(m => m.name === name);
+  });
+  
+  // Check if current model supports Negative Prompt (Lightning models don't support CFG)
+  const supportsNegativePrompt = !model.includes('turbo') && !model.includes('flux') && !model.includes('lightning') && model !== 'sdxl';
   
   const handleCloseModal = () => {
     setCurrentJobId(null);
     setIsLoading(false);
   };
 
-  return (
-    <div className="w-full max-w-none px-4 mx-auto relative">
-      <div className="card p-6 mb-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Sparkles className="text-primary-400" />
-          Image Generation
-        </h1>
-      </div>
-
-      <div className="card space-y-4">
-        {/* Prompt */}
+    return (
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
-          <div className="flex items-center justify-between mb-2">
-             <label className="label mb-0">Prompt</label>
-             <RandomPrompt type="image" onPromptSelect={setPrompt} />
-          </div>
-          <textarea
-            className="input min-h-[150px] resize-y"
-            placeholder="A majestic mountain landscape at sunset with dramatic clouds..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <Sparkles className="text-brand-400" /> Image Gen
+          </h2>
+          <p className="text-xs text-slate-500">Generate images from text descriptions</p>
         </div>
 
-        {/* Model Selector - Full list matching CLI */}
-        <div>
-          <label className="label">Model</label>
+        {/* Prompt */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className="text-sm font-medium text-slate-400">Prompt</label>
+             <RandomPrompt type="image" onPromptSelect={setPrompt} />
+           </div>
+           <textarea
+             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[100px]"
+             placeholder="A majestic mountain landscape at sunset with dramatic clouds..."
+             value={prompt}
+             onChange={(e) => setPrompt(e.target.value)}
+           />
+        </div>
+        
+        {/* Negative Prompt */}
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+             <label className={`text-sm font-medium ${supportsNegativePrompt ? 'text-slate-400' : 'text-slate-600'} flex items-center gap-1`}>
+                Negative Prompt (Optional)
+                <Tooltip content="List items to exclude (e.g., 'blur, text'). Do NOT use 'no' or 'without'. Note: For Lightning/Turbo models, using this will force standard speed (~2x slower)." />
+             </label>
+           </div>
+           <input
+             type="text"
+             className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 ${!supportsNegativePrompt ? 'opacity-50 cursor-not-allowed text-slate-500' : ''}`}
+             placeholder={supportsNegativePrompt ? "e.g. blur, text, watermark (NOT 'no text')" : "Not supported by this model"}
+             value={negativePrompt}
+             onChange={(e) => setNegativePrompt(e.target.value)}
+             disabled={!supportsNegativePrompt}
+           />
+        </div>
+
+        {/* Model Selector */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-400">Model</label>
           <select 
-            className="select" 
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
             value={model} 
             onChange={(e) => setModel(e.target.value)}
           >
@@ -281,112 +337,117 @@ export function ImageGenerator() {
             })}
           </select>
           
-          {/* Gated model warning */}
+          {/* Warnings */}
           {(model.includes('sd3.5') || model === 'stable-audio') && (
-            <div className="mt-2 flex items-center gap-2 text-yellow-400 text-sm">
-              <AlertTriangle size={16} />
-              <span>Gated model - requires Hugging Face login</span>
-               <button 
-                onClick={() => useAppStore.getState().toggleHelp()} 
-                className="underline hover:text-yellow-300 ml-1"
-              >
-                (See Help)
-              </button>
+            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Requires HF Login</span>
             </div>
           )}
-          {/* High RAM warning */}
           {model === 'flux2-full' && (
-            <div className="mt-2 flex items-center gap-2 text-red-400 text-sm">
-              <AlertTriangle size={16} />
-              <span>This model requires 128GB+ RAM!</span>
+            <div className="flex items-center gap-2 text-red-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Requires 128GB+ RAM</span>
             </div>
           )}
         </div>
 
+        {/* Resolution */}
+        <div className="space-y-2">
+           <ResolutionSelector 
+             width={width} 
+             height={height} 
+             onChange={(w, h) => { setWidth(w); setHeight(h); }} 
+           />
+        </div>
 
-        {/* Resolution Selector */}
-        <ResolutionSelector 
-           width={width} 
-           height={height} 
-           onChange={(w, h) => { setWidth(w); setHeight(h); }} 
-        />
-
-        {/* Steps/Guidance */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-           <div>
-             <label className="label flex items-center">
+        {/* Advanced Settings */}
+        <div className="grid grid-cols-2 gap-4">
+           <div className="space-y-1">
+             <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
                 Steps
                 <Tooltip content="Inference steps. SD 3.5 Turbo needs 4. Flux Schnell needs 4. Others usually 20-30." />
              </label>
              <NumberInput value={steps} onChange={setSteps} min={1} max={100} />
            </div>
-           <div>
-             <label className="label flex items-center">
+           <div className="space-y-1">
+             <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
                 Guidance
-                <Tooltip content="CFG Scale. SD 3.5 Turbo/Flux Schnell use 0 (distilled). Others use 5-7. Higher = follows prompt more strictly." />
+                <Tooltip content="CFG Scale. SD 3.5 Turbo/Flux Schnell use 0 (distilled). Others use 5-7." />
              </label>
              <NumberInput value={guidanceScale} onChange={setGuidanceScale} min={0} max={20} step={0.5} allowFloat={true} />
            </div>
         </div>
         
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
-        <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt to generate an image" : null} className="w-full">
+        {/* Generate Action */}
+        <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt" : null} className="w-full mt-auto pt-4">
           <button 
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
+            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={handleGenerate} 
             disabled={isLoading || !prompt.trim() || pendingGeneration}
           >
-            {isLoading ? (<><Loader2 className="animate-spin" size={18} />Generating...</>) : (<><Sparkles size={18} />Generate Image</>)}
+            {isLoading ? (
+               <><Loader2 className="animate-spin" size={18} /> Generating...</>
+            ) : (
+               <><Sparkles size={18} /> Generate Image</>
+            )}
           </button>
         </ValidationTooltip>
+
       </div>
 
-      <ErrorAlert error={error} onDismiss={() => setError(null)} />
-      
-      {/* Resource Warning for High-Mem models */}
+      {/* Main Preview Area */}
+      <div className="flex-1 p-6 flex items-center justify-center bg-slate-950/30">
+        {result ? (
+           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
+               <div 
+                 className="relative group rounded-lg overflow-hidden border border-brand-500/30 shadow-2xl max-h-[85vh] cursor-pointer" 
+                 onClick={() => setIsPreviewOpen(true)}
+               >
+                 <img 
+                   src={`http://localhost:8000/api/files/${result}`} 
+                   alt="Generated Image" 
+                   className="max-h-[85vh] object-contain" 
+                 />
+                 <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-xs text-white shadow-lg">Result</div>
+                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                 </div>
+               </div>
+               
+               <div className="flex gap-2">
+                 <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Screen</button>
+                 <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+               </div>
+           </div>
+        ) : (
+          <div className="text-center text-slate-500">
+            <Sparkles size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Imagine</h3>
+            <p className="text-slate-400 max-w-sm">
+                Upload an image from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start editing with AI instructions.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
       <ResourceWarningModal 
         isOpen={showWarning}
         warning={warningDetails?.message || "High resource usage warning"}
         type={warningDetails?.critical ? 'critical' : 'warning'}
         details={warningDetails?.details}
-        onConfirm={() => executeGeneration(true)} // Force execution
+        onConfirm={() => executeGeneration(true)}
         onCancel={() => {
             setShowWarning(false);
             setPendingGeneration(false);
         }}
       />
       
-      {/* Job Progress Modal */}
       {currentJobId && (
         <JobProgressModal jobId={currentJobId} onClose={handleCloseModal} />
-      )}
-
-      {/* Result Preview */}
-      {result && (
-        <div className="mt-6 card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-primary">Result</h2>
-            <div className="flex gap-2">
-               <button 
-                  className="btn-primary text-sm"
-                  onClick={() => setIsPreviewOpen(true)}
-                >
-                  Preview
-                </button>
-                <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
-            </div>
-          </div>
-          <div className="cursor-pointer group relative rounded-lg overflow-hidden border border-border" onClick={() => setIsPreviewOpen(true)}>
-            <img
-              src={`http://localhost:8000/api/files/${result}`}
-              alt="Generated image"
-              className="max-w-full rounded-lg"
-            />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-               <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
-            </div>
-          </div>
-        </div>
       )}
 
       {result && (

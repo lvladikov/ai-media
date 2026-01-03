@@ -196,6 +196,7 @@ export async function generateImage(params: {
   height?: number;
   steps?: number;
   guidance_scale?: number;
+  negative_prompt?: string;
   force?: boolean;
 }) {
   const response = await fetch(`${API_BASE}/api/generate/image`, {
