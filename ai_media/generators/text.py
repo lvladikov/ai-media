@@ -963,8 +963,11 @@ class ArticleGenerator:
         # Refined System Prompt: More concise to prevent over-reasoning/hallucination
         # DeepSeek R1 Distill is sensitive to prompt length and can over-analyze simple greetings.
         system_prompt = (
-            "You are a helpful AI assistant. Provide direct, accurate, and concise answers. "
+            "You are a helpful AI assistant. Provide direct, accurate, and concise answers."
             f"Current date and time: {current_time}. Location: {current_location}. "
+            "Use standard Markdown for all formatting (tables, lists, headers). "
+            "For color requests, use ANSI escape codes (e.g., \\033[31m for red) - our terminal interface supports them. "
+            "Avoid raw HTML unless specifically asked for a website design context. "
             "If the user says a simple greeting (like 'hi' or 'hello'), just greet them back warmly and briefly."
         )
         
