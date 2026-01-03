@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { fetchModels } from '../hooks/useApi';
 import { API_BASE_URL as API_BASE } from '../config';
-import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRight, ChevronDown, Copy, Check, Trash2, Image, AlertCircle, RefreshCw } from 'lucide-react';
+import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Trash2, Image, AlertCircle, RefreshCw } from 'lucide-react';
 import domToImage from 'dom-to-image';
 import { NumberInput } from './common/NumberInput';
 import { MarkdownWithAnsi, MarkdownWithAnsiNoHtml } from './common/AnsiRenderer';
@@ -301,10 +301,10 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
           {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
         </button>
       </div>
-      {/* Show search time if applicable */}
-      {thinkingTime && content.includes('🌍') && (
+      {/* Show timing for all responses */}
+      {thinkingTime && (
         <div className="mb-2 text-xs text-slate-500 italic">
-          Searched for {thinkingTime}
+          {content.includes('🌍') ? `Searched for ${thinkingTime}` : `Responded in ${thinkingTime}`}
         </div>
       )}
       {renderContent(content)}
@@ -471,6 +471,10 @@ export function ChatInterface() {
   // History navigation state
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyGhost, setHistoryGhost] = useState(false);
+
+  // Sidebar collapse state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showCollapseHint, setShowCollapseHint] = useState(true); // Pulsating hint animation
 
   // Fetch models on mount
   useEffect(() => {
@@ -949,21 +953,43 @@ export function ChatInterface() {
 
   return (
     <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
-      {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
-            <MessageSquare className="text-brand-400" /> Chat
-          </h2>
-          <p className="text-xs text-slate-500">Chat with AI models locally</p>
-        </div>
+      {/* Parameters Sidebar - hidden when collapsed */}
+      {!isSidebarCollapsed && (
+        <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-0 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+                <MessageSquare className="text-brand-400" /> Chat
+              </h2>
+              <p className="text-xs text-slate-500">Chat with AI models locally</p>
+            </div>
+            {/* Collapse button - only show when model is ready */}
+            {isModelReady && (
+              <button
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey) {
+                    // Easter egg: Ctrl+Click stops the animation
+                    setShowCollapseHint(false);
+                  } else {
+                    setIsSidebarCollapsed(true);
+                  }
+                }}
+                className={`p-2 rounded-lg transition-all text-slate-400 hover:text-white -mr-2 ${showCollapseHint
+                    ? 'animate-pulse bg-slate-700/30 hover:bg-slate-700/50'
+                    : 'hover:bg-slate-700/50'
+                  }`}
+                title={showCollapseHint ? "Collapse sidebar (Ctrl+Click to stop animation)" : "Collapse sidebar"}
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+          </div>
 
-        {/* Model Selector with Connect/Disconnect */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-400">Model</label>
-          <div className="flex gap-2">
+          {/* Model Selector with Connect/Disconnect */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-400">Model</label>
             <select
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               disabled={!!chatSessionId}
@@ -979,15 +1005,15 @@ export function ChatInterface() {
             </select>
             {(!chatSessionId || isConnecting) ? (
               <button
-                className="btn-primary px-4 flex items-center gap-2"
+                className="w-full btn-primary py-2.5 flex items-center justify-center gap-2"
                 onClick={connect}
                 disabled={isConnecting}
               >
-                {isConnecting ? (<><Loader2 className="animate-spin" size={16} /></>) : (<><MessageSquare size={16} /> Connect</>)}
+                {isConnecting ? (<><Loader2 className="animate-spin" size={16} /> Connecting...</>) : (<><MessageSquare size={16} /> Connect</>)}
               </button>
             ) : (
               <button
-                className="btn-secondary flex items-center gap-2 px-4"
+                className="w-full btn-secondary py-2.5 flex items-center justify-center gap-2"
                 onClick={handleClear}
                 title="Disconnect"
               >
@@ -995,74 +1021,90 @@ export function ChatInterface() {
               </button>
             )}
           </div>
-        </div>
 
-        {/* Chat Input Area */}
-        <div className="space-y-2 mt-auto">
-          {/* Action Toolbar - directly above input */}
-          <div className="flex flex-wrap gap-2 mb-2">
-            <button
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={handleReadFileClick}
+          {/* Chat Input Area */}
+          <div className="space-y-2 mt-auto">
+            {/* Action Toolbar - directly above input */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={handleReadFileClick}
+                disabled={!isModelReady}
+                title={!isModelReady ? "Connect to chat model first" : "Read a file (all text/code types)"}
+              >
+                <FileText size={14} /> <span>Read File</span>
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleFileChange}
+                accept=".txt,.md,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.scss,.xml,.yaml,.yml,.sh,.bat,.c,.cpp,.h,.java,.rs,.go,.php,.rb,.pl,.lua,.sql,.log,.ini,.conf,.env,.dockerfile,makefile,text/*"
+              />
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={() => setShowSearchModal(true)}
+                disabled={!isModelReady}
+                title={!isModelReady ? "Connect to chat model first" : "Deep Research (/search <query>)"}
+              >
+                <Globe size={14} /> <span>Search</span>
+              </button>
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={handleSaveDownload}
+                disabled={!isModelReady}
+                title={!isModelReady ? "Connect to chat model first" : "Save conversation as markdown"}
+              >
+                <Save size={14} /> <span>Save</span>
+              </button>
+            </div>
+            <textarea
+              ref={!isSidebarCollapsed ? inputRef : undefined}
+              className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
+              placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Enter to send)"}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                if (historyGhost) {
+                  setHistoryGhost(false);
+                  setHistoryIndex(null);
+                }
+              }}
+              onKeyDown={handleKeyDown}
               disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Read a file (all text/code types)"}
-            >
-              <FileText size={14} /> <span>Read File</span>
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={handleFileChange}
-              accept=".txt,.md,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.scss,.xml,.yaml,.yml,.sh,.bat,.c,.cpp,.h,.java,.rs,.go,.php,.rb,.pl,.lua,.sql,.log,.ini,.conf,.env,.dockerfile,makefile,text/*"
             />
-            <button
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={() => setShowSearchModal(true)}
-              disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Deep Research (/search <query>)"}
-            >
-              <Globe size={14} /> <span>Search</span>
-            </button>
-            <button
-              className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
-              onClick={handleSaveDownload}
-              disabled={!isModelReady}
-              title={!isModelReady ? "Connect to chat model first" : "Save conversation as markdown"}
-            >
-              <Save size={14} /> <span>Save</span>
-            </button>
           </div>
-          <textarea
-            ref={inputRef}
-            className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
-            placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Enter to send)"}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              if (historyGhost) {
-                setHistoryGhost(false);
-                setHistoryIndex(null);
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            disabled={!isModelReady}
-          />
-        </div>
 
-        {/* Send Button */}
-        <button
-          className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
-          onClick={() => sendMessage()}
-          disabled={!isModelReady || !input.trim()}
-        >
-          <Send size={18} /> Send
-        </button>
-      </div>
+          {/* Send Button */}
+          <button
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            onClick={() => sendMessage()}
+            disabled={!isModelReady || !input.trim()}
+          >
+            <Send size={18} /> Send
+          </button>
+        </div>
+      )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/30 min-h-[500px] lg:min-h-0">
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/30 min-h-[500px] lg:min-h-0 relative">
+        {/* Expand button header when collapsed */}
+        {isSidebarCollapsed && (
+          <div className="flex items-center gap-2 p-4 border-b border-slate-800">
+            <button
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-400 hover:text-white"
+              title="Expand sidebar"
+            >
+              <ChevronRight size={20} />
+            </button>
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <MessageSquare className="text-brand-400" size={18} /> Chat
+            </h2>
+          </div>
+        )}
+
+        <div className={`flex-1 overflow-y-auto p-6 space-y-4 ${isSidebarCollapsed ? 'pb-48' : ''}`}>
           {chatMessages.length === 0 && (
             <div className="text-center text-slate-500 mt-20 px-4">
 
@@ -1226,6 +1268,69 @@ export function ChatInterface() {
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Collapsed mode input bar at bottom */}
+        {isSidebarCollapsed && (
+          <div className="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 p-4">
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={handleReadFileClick}
+                disabled={!isModelReady}
+                title="Read a file"
+              >
+                <FileText size={14} /> <span>Read File</span>
+              </button>
+              <input
+                type="file"
+                ref={isSidebarCollapsed ? fileInputRef : undefined}
+                className="hidden"
+                onChange={handleFileChange}
+                accept=".txt,.md,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.scss,.xml,.yaml,.yml,.sh,.bat,.c,.cpp,.h,.java,.rs,.go,.php,.rb,.pl,.lua,.sql,.log,.ini,.conf,.env,.dockerfile,makefile,text/*"
+              />
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={() => setShowSearchModal(true)}
+                disabled={!isModelReady}
+                title="Deep Research"
+              >
+                <Globe size={14} /> <span>Search</span>
+              </button>
+              <button
+                className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
+                onClick={handleSaveDownload}
+                disabled={!isModelReady}
+                title="Save conversation"
+              >
+                <Save size={14} /> <span>Save</span>
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <textarea
+                ref={isSidebarCollapsed ? inputRef : undefined}
+                className={`flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-none min-h-[60px] max-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
+                placeholder="Type a message... (Shift+Enter for new line, Enter to send)"
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  if (historyGhost) {
+                    setHistoryGhost(false);
+                    setHistoryIndex(null);
+                  }
+                }}
+                onKeyDown={handleKeyDown}
+                disabled={!isModelReady}
+              />
+              <button
+                className="bg-gradient-to-r from-brand-600 to-cyan-600 hover:brightness-110 text-white font-bold px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                onClick={() => sendMessage()}
+                disabled={!isModelReady || !input.trim()}
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <SearchModal

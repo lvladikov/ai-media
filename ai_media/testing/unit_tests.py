@@ -2270,7 +2270,7 @@ class TestSlashCommands(unittest.TestCase):
         response = self.generator.process_command("/search AI query", [])
         
         self.assertTrue(response["handled"])
-        self.generator.deep_research.assert_called_with("AI query", iterations=3, include_images=False)
+        self.generator.deep_research.assert_called_with("AI query", iterations=3, max_images=0)
         self.assertIn("Search Summary", response["context"])
         
     def test_online_search_alias(self):

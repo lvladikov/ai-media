@@ -1070,7 +1070,7 @@ class ArticleGenerator:
             if query:
                 try:
                     # Chat search skips images
-                    search_results = self.deep_research(query, iterations=iterations, include_images=False)
+                    search_results = self.deep_research(query, iterations=iterations, max_images=0)
                     if search_results:
                         response["context"] = f"\n\n[Online Search Context: '{query}']\n{search_results}\n"
                         response["message"] = f"🌍 Added search results for: '{query}'. You can ask questions about it or ask for summary."
