@@ -16,7 +16,7 @@ from ..utils.performance import PerformanceTracker, ResourceMonitor, write_repor
 
 
 def generate_image(prompt, output_file, width, height, model_name="default", steps=30, 
-                   guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, force=False, progress_callback=None):
+                   guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, force=False, bypass_warning=False, progress_callback=None):
     """Generate image using Diffusers (Flux/SDXL).
     
     Args:
@@ -31,8 +31,9 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
         negative_prompt: Negative prompt (what to avoid)
         unsafe: Disable NSFW safety checker
         report_json: Path to write performance stats JSON
-        force: Skip resource warnings
-        
+        force: Skip confirmation prompts (overwrites and warnings)
+        bypass_warning: Specifically skip resource warning prompts
+        progress_callback: Optional callback for progress updates
     Returns:
         True on success, False on failure
     """
@@ -68,7 +69,7 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
     print("")  # Spacer
     
     # Check resources
-    if not check_resources_and_warn(model_id, width=width, height=height, force=force, 
+    if not check_resources_and_warn(model_id, width=width, height=height, force=force, bypass_warning=bypass_warning,
                                      model_requirements=MODEL_REQUIREMENTS):
         return False
     

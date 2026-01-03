@@ -21,7 +21,7 @@ async def transform_image(request: TransformRequest):
         "transform",
         prompt=request.instruction,
         model=request.model,
-        params={"input_path": request.input_path}
+        params={"input_path": request.input_path, "bypass_warning": request.bypass_warning}
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -37,6 +37,7 @@ async def transform_image(request: TransformRequest):
             request.instruction,
             output_path,
             request.model,
+            True, # Always bypass warning in server mode
         ),
     )
     

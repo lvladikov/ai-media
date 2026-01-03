@@ -1,6 +1,18 @@
+import os
+import sys
 import threading
 from typing import Any, Dict, Optional
 
+# Helper for safe emoji printing on Windows
+def _safe_print(msg):
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        try:
+            # Fallback to ascii/replacement if terminal can't handle emoji
+            print(msg.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
+        except:
+            pass
 
 class ModelCache:
     """Intelligent model caching to avoid unnecessary load/unload cycles.
@@ -64,13 +76,13 @@ class ModelCache:
                 instance = self._cache[category].get("instance")
                 # Ensure we stop any running generation
                 if instance and hasattr(instance, "stop"):
-                    print(f"🧹 Stopping {category} generator before unload...")
+                    _safe_print(f"🧹 Stopping {category} generator before unload...")
                     instance.stop()
                 elif instance and hasattr(instance, "is_cancelled"):
                      # Fallback for simple flag setting
                      instance.is_cancelled = True
             except Exception as e:
-                print(f"⚠️ Error stopping {category}: {e}")
+                _safe_print(f"⚠️ Error stopping {category}: {e}")
                 
             del self._cache[category]
             self._clear_memory()

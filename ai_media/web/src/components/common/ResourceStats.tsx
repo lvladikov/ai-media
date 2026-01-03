@@ -18,18 +18,15 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
     );
   }
 
-  const formatGb = (gb: number) => gb.toFixed(1);
-  const formatPercent = (p: number) => `${p.toFixed(0)}%`;
-  
+
   // Hiding Rules
   const isMacMPS = systemInfo?.device === 'mps';
-  // On Mac/MPS, we hide VRAM/GPU metrics for simplicity as requested
-  const showVram = !isMacMPS; 
+  const showVram = !isMacMPS;
   const showGpu = !isMacMPS;
 
   // Dynamic Process Label
   let processLabel = 'AI Model';
-  switch(activeTab) {
+  switch (activeTab) {
     case 'chat': processLabel = 'Chat Model'; break;
     case 'image': processLabel = 'Image Model'; break;
     case 'video': processLabel = 'Video Model'; break;
@@ -46,97 +43,127 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
   };
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-400 ${className}`}>
-      
-      {/* Row 1: Global Resources */}
-      <div className="flex flex-wrap items-center gap-y-1 gap-x-4">
-        <div className="flex items-center gap-1.5 shrink-0">
-           <Server size={12} className="text-slate-500" />
-           <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Global:</span>
+    <div className={`flex flex-col gap-1.5 text-xs text-slate-400 ${className}`}>
+
+      {/* --- GRID HEADER / GLOBAL --- */}
+      <div className="grid grid-cols-[125px_110px_200px_110px_200px_1fr] items-center">
+
+        {/* Label Column */}
+        <div className="flex items-center gap-2 pr-2">
+          <Server size={12} className="text-slate-500 shrink-0" />
+          <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] whitespace-nowrap">Global System</span>
         </div>
 
-        {/* Global CPU */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Cpu size={14} className="text-primary-400/70" />
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>CPU:</span>
-          <span className="text-slate-200 font-medium">{formatPercent(resources.global.cpu_percent)}</span>
+        {/* CPU */}
+        <div className="flex items-center gap-2">
+          <Cpu size={14} className="text-primary-400/70 shrink-0" />
+          <span className={variant === 'compact' ? 'hidden' : ''}>CPU</span>
+          <span className="ml-auto font-bold text-white">{resources.global.cpu_percent.toFixed(0)}%</span>
         </div>
 
-        {/* Global RAM */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <HardDrive size={14} className="text-green-400/70" />
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>RAM:</span>
-          <span className="text-slate-200 font-medium">
-            {formatGb(resources.global.ram_used_gb)}{variant === 'full' && ` / ${formatGb(resources.global.ram_total_gb)}`} GB
-          </span>
-        </div>
-
-        {/* Global Swap */}
-        {resources.global.swap_used_gb !== undefined && resources.global.swap_used_gb > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Activity size={12} className="text-orange-400/70" />
-            <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>Swap:</span>
-            <span className="text-slate-200 font-medium">{formatGb(resources.global.swap_used_gb)} GB</span>
+        {/* RAM */}
+        <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-green-400">
+          <HardDrive size={14} className="shrink-0" />
+          <span className={variant === 'compact' ? 'hidden' : ''}>RAM</span>
+          <div className="flex items-center ml-auto font-bold text-white gap-1 w-[140px] justify-between">
+            <span className="text-right flex-1">{resources.global.ram_used_gb.toFixed(1)}</span>
+            <span className="opacity-50 px-1">/</span>
+            <div className="flex items-center gap-1 justify-end flex-1">
+              <span>{resources.global.ram_total_gb.toFixed(1)}</span>
+              <span className="opacity-70 text-[10px] font-normal">GB</span>
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* Global VRAM (Hidden on Mac) */}
-        {showVram && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Gpu size={14} className="text-yellow-400/70" />
-            <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>VRAM:</span>
-            <span className="text-slate-200 font-medium">
-              {formatGb(resources.global.vram_used_gb)}{variant === 'full' && ` / ${formatGb(resources.global.vram_total_gb)}`} GB
+        {/* GPU */}
+        {showGpu ? (
+          <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-purple-400">
+            <Activity size={14} className="shrink-0" />
+            <span className={variant === 'compact' ? 'hidden' : ''}>GPU</span>
+            <span className="ml-auto font-bold text-white">{(resources.global.gpu_percent || 0).toFixed(0)}%</span>
+          </div>
+        ) : <div />}
+
+        {/* VRAM */}
+        {showVram ? (
+          <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-yellow-400">
+            <Gpu size={14} className="shrink-0" />
+            <span className={variant === 'compact' ? 'hidden' : ''}>VRAM</span>
+            <div className="flex items-center ml-auto font-bold text-white gap-1 w-[140px] justify-between">
+              <span className="text-right flex-1">{resources.global.vram_used_gb.toFixed(1)}</span>
+              <span className="opacity-50 px-1">/</span>
+              <div className="flex items-center gap-1 justify-end flex-1">
+                <span>{resources.global.vram_total_gb.toFixed(1)}</span>
+                <span className="opacity-70 text-[10px] font-normal">GB</span>
+              </div>
+            </div>
+          </div>
+        ) : <div />}
+
+        {/* Swap */}
+        {resources.global.swap_used_gb !== undefined && resources.global.swap_used_gb > 0 ? (
+          <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-orange-400">
+            <Activity size={12} className="shrink-0" />
+            <span className={variant === 'compact' ? 'hidden' : ''}>Swap</span>
+            <span className="text-white font-bold ml-auto whitespace-nowrap">
+              {resources.global.swap_used_gb.toFixed(1)} <span className="text-[10px] font-normal">GB</span>
             </span>
           </div>
-        )}
-
-         {/* Global GPU (Hidden on Mac) */}
-         {showGpu && resources.global.gpu_percent > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Activity size={14} className="text-purple-400/70" />
-            <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>GPU:</span>
-            <span className="text-slate-200 font-medium">{formatPercent(resources.global.gpu_percent)}</span>
-          </div>
-        )}
+        ) : <div />}
       </div>
 
-      {/* Row 2: Process Resources */}
-      <div className="flex flex-wrap items-center gap-y-1 gap-x-4">
-                <div className="flex items-center text-blue-400 shrink-0 gap-1.5">
-                    <Zap size={12} />
-                    <span className="font-semibold uppercase tracking-wider text-[10px] truncate max-w-[100px] sm:max-w-none" title={`PID: ${resources.process.pid}`}>
-                        {processLabel}:
-                    </span>
-                </div>
-                
-                <div className={`flex items-center gap-1.5 ${getUsageColor(resources.process.cpu_percent)} shrink-0`}>
-          <Cpu size={14} className="text-primary-400" />
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>CPU:</span>
-          <span className="text-white font-bold">{formatPercent(resources.process.cpu_percent)}</span>
-        </div>
+      {/* --- FEATURE ROW --- */}
+      <div className="grid grid-cols-[125px_110px_200px_110px_200px_1fr] items-center border-t border-slate-800/40 pt-1.5 opacity-90">
 
-        {/* Process RAM */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <HardDrive size={14} className="text-green-400" />
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>RAM:</span>
-          <span className="text-white font-bold">
-            {formatGb(resources.process.ram_used_gb)} GB
+        {/* Label Column */}
+        <div className="flex items-center text-blue-400 pr-2 gap-2">
+          <Zap size={12} className="shrink-0" />
+          <span className="font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap" title={`PID: ${resources.process.pid}`}>
+            {processLabel}
           </span>
         </div>
 
-        {/* Process VRAM (CUDA only) */}
-        {resources.process.vram_used_gb !== undefined && resources.process.vram_used_gb > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0">
-             <Gpu size={14} className="text-yellow-400" />
-             <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>VRAM:</span>
-             <span className="text-white font-bold">
-               {formatGb(resources.process.vram_used_gb)} GB
-             </span>
+        {/* CPU */}
+        <div className="flex items-center gap-2">
+          <Cpu size={14} className={`${getUsageColor(resources.process.cpu_percent)} shrink-0`} />
+          <span className={variant === 'compact' ? 'hidden' : ''}>CPU</span>
+          <span className="ml-auto font-bold text-white">{resources.process.cpu_percent.toFixed(0)}%</span>
+        </div>
+
+        {/* RAM */}
+        <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-green-400">
+          <HardDrive size={14} className="shrink-0" />
+          <span className={variant === 'compact' ? 'hidden' : ''}>RAM</span>
+          <div className="flex items-center ml-auto font-bold text-white gap-1 w-[140px] justify-end">
+            <span className="inline-block text-right">{resources.process.ram_used_gb.toFixed(1)}</span>
+            <span className="opacity-70 text-[10px] font-normal">GB</span>
           </div>
-        )}
+        </div>
+
+        {/* GPU */}
+        {showGpu ? (
+          <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-purple-400">
+            <Activity size={14} className="shrink-0" />
+            <span className={variant === 'compact' ? 'hidden' : ''}>GPU</span>
+            <span className="ml-auto font-bold text-white">{(resources.process.gpu_percent || 0).toFixed(0)}%</span>
+          </div>
+        ) : <div />}
+
+        {/* VRAM */}
+        {showVram ? (
+          <div className="flex items-center gap-2 px-4 border-l border-slate-800/30 text-yellow-400">
+            <Gpu size={14} className="shrink-0" />
+            <span className={variant === 'compact' ? 'hidden' : ''}>VRAM</span>
+            <div className="flex items-center ml-auto font-bold text-white gap-1 w-[140px] justify-end">
+              <span className="inline-block text-right">{(resources.process.vram_used_gb || 0).toFixed(1)}</span>
+              <span className="opacity-70 text-[10px] font-normal">GB</span>
+            </div>
+          </div>
+        ) : <div />}
+
+        <div />
       </div>
-      
+
     </div>
   );
 }

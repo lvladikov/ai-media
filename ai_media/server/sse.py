@@ -52,6 +52,7 @@ async def resource_stream():
                 swap_total_gb = round(swap.total / gb_divisor, 2)
                 
                 # GPU/VRAM
+                # GPU/VRAM
                 vram_used_gb = 0.0
                 vram_total_gb = 0.0
                 gpu_percent = 0.0
@@ -59,21 +60,25 @@ async def resource_stream():
                 try:
                     import torch
                     if torch.cuda.is_available():
-                        vram_used_gb = round(torch.cuda.memory_allocated() / gb_divisor, 2)
-                        vram_total_gb = round(torch.cuda.get_device_properties(0).total_memory / gb_divisor, 2)
-                        # GPU utilization via nvidia-smi
+                        # Global VRAM via nvidia-smi is more representative of system state
                         try:
                             import subprocess
                             result = subprocess.run(
-                                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                                ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"],
                                 capture_output=True, text=True, timeout=1
                             )
                             if result.returncode == 0:
-                                gpu_percent = float(result.stdout.strip().split("\n")[0])
+                                parts = result.stdout.strip().split("\n")[0].split(",")
+                                if len(parts) >= 3:
+                                    vram_used_gb = round(float(parts[0]) / 1024, 2)
+                                    vram_total_gb = round(float(parts[1]) / 1024, 2)
+                                    gpu_percent = float(parts[2])
                         except Exception:
-                            pass
+                             # Fallback to torch for if nvidia-smi fails
+                             vram_used_gb = round(torch.cuda.memory_allocated() / gb_divisor, 2)
+                             vram_total_gb = round(torch.cuda.get_device_properties(0).total_memory / gb_divisor, 2)
                     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                        # MPS doesn't have direct memory query, estimate from system
+                        # MPS doesn't have direct total VRAM query, estimate from system
                         vram_total_gb = ram_total_gb * 0.75  # Unified memory estimate
                         try:
                             vram_used_gb = round(torch.mps.current_allocated_memory() / gb_divisor, 2)
@@ -86,6 +91,7 @@ async def resource_stream():
                 proc_cpu = 0.0
                 proc_ram_gb = 0.0
                 proc_vram_gb = 0.0
+                proc_gpu_percent = 0.0
                 
                 # Dynamic Process Selection: Monitor active job if any, else server
                 from .process_manager import job_processes
@@ -131,13 +137,78 @@ async def resource_stream():
                         try:
                             import torch
                             # Mac/MPS: Unified Memory - Add Metal usage to System RAM if monitoring self (server)
-                            # If monitoring child, we can't easily see its generic Metal usage via torch calls here
-                            # unless we rely on RSS. Child process usage is mostly RSS anyway.
-                            # But for consistency, if we are monitoring THIS process (server):
                             if proc_pid == current_pid and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
                                 proc_rss += torch.mps.current_allocated_memory()
+                            
+                            # Windows/CUDA: Process-specific VRAM
+                            if torch.cuda.is_available():
+                                try:
+                                    import subprocess
+                                    # Collect PIDs of the target process and its children
+                                    try:
+                                        p_pids = {proc_pid}
+                                        try:
+                                            p_pids |= {c.pid for c in psutil.Process(proc_pid).children(recursive=True)}
+                                        except Exception:
+                                            pass
+                                    except Exception:
+                                        p_pids = {proc_pid}
+
+                                    found_vram = 0.0
+                                    # Use a single nvidia-smi call for efficiency
+                                    try:
+                                        res = subprocess.run(
+                                            ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                                            capture_output=True, text=True, timeout=0.5
+                                        )
+                                        if res.returncode == 0:
+                                            for line in res.stdout.strip().split("\n"):
+                                                if not line.strip(): continue
+                                                parts = [p.strip() for p in line.split(",")]
+                                                if len(parts) >= 2:
+                                                    try:
+                                                        chk_pid = int(parts[0])
+                                                        if chk_pid in p_pids:
+                                                            found_vram += float(parts[1])
+                                                            # If process is in nvidia-smi apps, it's using the GPU
+                                                            # We attribute global GPU load to it if it's the active generator
+                                                            proc_gpu_percent = gpu_percent
+                                                    except (ValueError, IndexError):
+                                                        continue
+                                    except Exception:
+                                        pass
+                                    
+                                    # If not in compute-apps, check graphics-apps (rare for ML but possible)
+                                    if found_vram == 0:
+                                        try:
+                                            res = subprocess.run(
+                                                ["nvidia-smi", "--query-graphics-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                                                capture_output=True, text=True, timeout=0.5
+                                            )
+                                            if res.returncode == 0:
+                                                for line in res.stdout.strip().split("\n"):
+                                                    if not line.strip(): continue
+                                                    parts = [p.strip() for p in line.split(",")]
+                                                    if len(parts) >= 2:
+                                                        try:
+                                                            chk_pid = int(parts[0])
+                                                            if chk_pid in p_pids:
+                                                                found_vram += float(parts[1])
+                                                                proc_gpu_percent = gpu_percent
+                                                        except (ValueError, IndexError):
+                                                            continue
+                                        except Exception:
+                                            pass
+                                    
+                                    # SPECIAL CASE: Persistent Chat Model often shows as the main process PID
+                                    # or one of its immediate children. If we found NO VRAM but the process is definitely
+                                    # holding onto a model, we might be hitting a timing or PID resolution issue.
+                                    if found_vram > 0:
+                                        proc_vram_gb = round(found_vram / 1024, 2)
+                                except Exception:
+                                    pass
                         except Exception:
-                            pass
+                            pass 
 
                         proc_ram_gb = round(proc_rss / gb_divisor, 2)
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -162,7 +233,8 @@ async def resource_stream():
                         "pid": proc_pid,
                         "cpu_percent": proc_cpu,
                         "ram_used_gb": proc_ram_gb,
-                        "vram_used_gb": proc_vram_gb
+                        "vram_used_gb": proc_vram_gb,
+                        "gpu_percent": proc_gpu_percent
                     },
                     "timestamp": datetime.now().isoformat(),
                 }

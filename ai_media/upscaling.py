@@ -75,8 +75,9 @@ def get_realesrgan_weights(model_name):
     return str(model_path)
 
 
-def check_resources_and_confirm(w, h, f, dev):
+def check_resources_and_confirm(w, h, f, dev, force=False, bypass_warning=False):
     """Check if target upscale resolution is safe for system resources."""
+    import sys
     try:
         import psutil
     except ImportError:
@@ -118,12 +119,30 @@ def check_resources_and_confirm(w, h, f, dev):
         elif is_huge:
             print("   🟠 WARNING: This resolution is extremely high (Billboard size).")
         
-        if os.environ.get("AI_MEDIA_FORCE", "0") == "1":
-            print("   (Proceeding due to --force flag)")
+        # Determine if we should bypass the prompt
+        can_prompt = sys.stdin.isatty()
+        env_force = os.environ.get("AI_MEDIA_FORCE", "0") == "1"
+        env_bypass = os.environ.get("AI_MEDIA_BYPASS_WARNING", "0") == "1"
+        should_bypass = force or env_force or bypass_warning or env_bypass or not can_prompt
+
+        if should_bypass:
+            if force or env_force:
+                print("   (Proceeding due to --force flag)\n")
+            elif bypass_warning or env_bypass:
+                print("   (Proceeding due to --bypass-warning flag)\n")
+            elif not can_prompt:
+                print("   (Non-interactive environment: Proceeding anyway...)\n")
             return True
              
-        confirm = input("\n   Do you want to proceed? [y/N]: ").strip().lower()
-        return confirm == 'y'
+        try:
+            confirm = input("\n   Do you want to proceed? [y/N]: ").strip().lower()
+            return confirm == 'y'
+        except EOFError:
+            print("   (EOF detected: Proceeding anyway...)\n")
+            return True
+        except KeyboardInterrupt:
+            print("\n   Operation cancelled.")
+            return False
     return True
 
 
@@ -226,7 +245,7 @@ def simple_upscale_video(video_path, output_path, factor=2.0, force=False):
         return False
 
 
-def upscale_image_fast(input_path, output_path, factor=4.0):
+def upscale_image_fast(input_path, output_path, factor=4.0, force=False, bypass_warning=False):
     """Upscale image using Real-ESRGAN (Fast, single pass)."""
     if not HAS_REALESRGAN:
         print("❌ Real-ESRGAN not installed. Cannot run fast upscale.")
@@ -245,11 +264,9 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
             print(f"❌ Input file not found: {input_path}")
             return False
 
-        should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=os.environ.get("AI_MEDIA_FORCE") == "1")
+        should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=force)
         if not should_write:
             return False
-
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Pre-calculate Device and Estimate
         device, _ = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
@@ -257,15 +274,20 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
         
         # Estimate Performance
         tracker = PerformanceTracker()
-        # Need target dimensions for estimate
-        # We need to read image first to get dimensions...
-        # Wait, if we read image, we delay printing. 
-        # But we need dims for estimate.
+        
+        # Need target dimensions for estimate and resource check
+        import cv2
         img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
         if img is None:
             print(f"❌ Failed to load image: {input_path}")
             return False
+            
         orig_h, orig_w = img.shape[:2]
+        
+        # Resource Check
+        if not check_resources_and_confirm(orig_w, orig_h, factor, device.type, force=force, bypass_warning=bypass_warning):
+            print("❌ Aborted by user.")
+            return False
         target_w = int(orig_w * factor)
         target_h = int(orig_h * factor)
         
@@ -325,7 +347,7 @@ def upscale_image_fast(input_path, output_path, factor=4.0):
         return False
 
 
-def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
+def upscale_video_fast(video_path, output_path, factor=4.0, codec=None, force=False, bypass_warning=False):
     """Upscale video using Real-ESRGAN (Fast, single pass per frame)."""
     if not HAS_REALESRGAN:
         print("❌ Real-ESRGAN not installed. Cannot run fast upscale.")
@@ -342,7 +364,7 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
             print(f"❌ Input file not found: {video_path}")
             return False
 
-        should_write, output_path, _, _ = check_overwrite(str(output_path), always_overwrite=os.environ.get("AI_MEDIA_FORCE") == "1")
+        should_write, output_path, _, _ = check_overwrite(str(output_path), always_overwrite=force)
         if not should_write:
             return False
 
@@ -363,6 +385,12 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total_frames / fps if fps > 0 else 0
+        
+        # Resource Check
+        if not check_resources_and_confirm(width, height, factor, device.type, force=force, bypass_warning=bypass_warning):
+            print("❌ Aborted by user.")
+            cap.release()
+            return False
         
         target_w = int(width * factor)
         target_h = int(height * factor)
@@ -571,7 +599,7 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None):
         return False
 
 
-def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progress_callback=None):
+def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progress_callback=None, force=False, bypass_warning=False):
     """Upscale an image using smart multi-stage AI upscaling.
        
     Uses optimal combination of x4, x2 AI passes + final Lanczos resize.
@@ -644,7 +672,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         else:
             print(f"   Noise Level: {noise_level} (faithful to original)")
         
-        if not check_resources_and_confirm(orig_w, orig_h, factor, device.type):
+        if not check_resources_and_confirm(orig_w, orig_h, factor, device.type, force=force, bypass_warning=bypass_warning):
             print("❌ Aborted by user.")
             return False
         
@@ -803,7 +831,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         return False
 
 
-def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
+def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=False, bypass_warning=False):
     """Upscale video by extracting frames, upscaling them (recursively if needed), and stitching back."""
     import cv2
     import shutil
@@ -815,7 +843,7 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
     print(f"🚀 Upscaling Video: {video_path}")
     print(f"   Factor: {factor}x")
     
-    should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=os.environ.get("AI_MEDIA_FORCE") == "1")
+    should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=force)
     if not should_write:
         return False
     
@@ -827,7 +855,7 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0):
             cap_chk.release()
              
             device, _ = get_optimal_device_and_dtype(prefer_bfloat16=True)
-            if not check_resources_and_confirm(v_w, v_h, factor, device.type):
+            if not check_resources_and_confirm(v_w, v_h, factor, device.type, force=force, bypass_warning=bypass_warning):
                 return False
         
         temp_dir = Path("temp_upscale_frames")

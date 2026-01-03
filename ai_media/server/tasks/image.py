@@ -16,6 +16,7 @@ def run_image_generation(
     guidance_scale: float,
     negative_prompt: str = "",
     force: bool = False,
+    bypass_warning: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for image generation. Runs in child process."""
@@ -56,6 +57,7 @@ def run_image_generation(
             guidance_scale=guidance_scale,
             negative_prompt=negative_prompt,
             force=force,
+            bypass_warning=bypass_warning,
             progress_callback=on_progress,
         )
         

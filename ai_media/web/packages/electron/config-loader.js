@@ -13,8 +13,8 @@ function getConfigPath() {
     // Production Windows/Linux: config.json is next to the executable
     return path.join(path.dirname(app.getPath('exe')), 'config.json');
   } else {
-    // Development: use project root
-    return path.join(__dirname, '..', '..', '..', 'config.json');
+    // Development: use project root (electron -> packages -> web -> ai_media -> root)
+    return path.join(__dirname, '..', '..', '..', '..', 'config.json');
   }
 }
 
@@ -40,7 +40,7 @@ function getDefaultConfig() {
 
 function loadConfig() {
   const configPath = getConfigPath();
-  
+
   try {
     if (fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, 'utf-8');
@@ -51,13 +51,13 @@ function loadConfig() {
   } catch (error) {
     console.error('Failed to load config:', error);
   }
-  
+
   return getDefaultConfig();
 }
 
 function saveConfig(config) {
   const configPath = getConfigPath();
-  
+
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     return true;

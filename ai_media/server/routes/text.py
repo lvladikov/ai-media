@@ -26,6 +26,7 @@ async def generate_article(request: ArticleGenerateRequest):
             "format": request.format,
             "length": request.length,
             "online": request.online,
+            "bypass_warning": request.bypass_warning,
         }
     )
     
@@ -46,6 +47,7 @@ async def generate_article(request: ArticleGenerateRequest):
             request.online,
             request.research_iterations,
             request.max_images,
+            True, # Always bypass warning in server mode
         ),
     )
     
@@ -67,7 +69,7 @@ async def generate_code(request: CodeGenerateRequest):
         "code",
         prompt=request.prompt,
         model=request.model,
-        params={"output_name": output_name}
+        params={"output_name": output_name, "bypass_warning": request.bypass_warning}
     )
     
     spawn_job_process(
@@ -78,6 +80,7 @@ async def generate_code(request: CodeGenerateRequest):
             request.prompt,
             output_path,
             request.model,
+            True, # Always bypass warning in server mode
         ),
     )
     

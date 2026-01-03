@@ -254,6 +254,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | `-o, --output` | Output filename/path. **Optional**: auto-generated if omitted (the folder where files are generated is configured in `config.json` under `paths.media_output`). |
 | `-f, --format` | Explicit file format. **Image**: jpg, png (default: jpg). **Video**: mp4 (default: mp4). **Audio**: mp3, wav (default: mp3). |
 | `--force` | Skip all confirmation prompts (overwrites existing files and ignores resource warnings). |
+| `--bypass-warning` | Specifically skip resource warning prompts (avoids hanging in non-interactive environments). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
 | `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](docs/performance-tracking.md). |
 

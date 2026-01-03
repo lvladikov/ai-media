@@ -527,7 +527,8 @@ Supported Models (Code : Download Size | Description):
     common_group = parser.add_argument_group("Common Parameters")
     common_group.add_argument("-p", "--prompt", required=False, help="Text prompt description (Required for generation modes)")
     common_group.add_argument("-o", "--output", help="Output file path. Auto-generated from prompt if omitted.")
-    common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files, ignores resource warnings).")
+    common_group.add_argument("--force", action="store_true", help="Skip all confirmation prompts (overwrites files and ignores resource warnings).")
+    common_group.add_argument("--bypass-warning", action="store_true", help="Specifically skip resource warning prompts (safe for web client).")
     common_group.add_argument("-f", "--format", help="File format. Image: jpg/png (default: jpg). Video: mp4. Audio: mp3/wav (default: mp3). Article: md/pdf/doc/html.")
     common_group.add_argument("-s", "--size", help="Resolution: '720p', '1080p', '4k', '1280x720', '1536' (square). For zeroscope: triggers dynamic upscaling (XL + Real-ESRGAN) for targets > 576x320. Default: 720p")
     common_group.add_argument("-npt", "--no-performance-tracking", action="store_true", help="Disable performance tracking (performance.json).")
@@ -708,16 +709,54 @@ Supported Models (Code : Download Size | Description):
             env["VITE_API_PORT"] = str(server_port)
             env["VITE_WEB_PORT"] = str(web_port)
             
-            if start_web:
-                procs.append(start_client("npm run dev:client", "Web", env=env))
-            if start_electron:
-                procs.append(start_client("npm run electron", "Electron", env=env))
+            if start_web or start_electron:
+                def delayed_launch():
+                    # Wait for server to be ready (smart polling)
+                    import socket
+                    print("⏳ Waiting for server to start...", end="", flush=True)
+                    
+                    retries = 30 # Wait up to 30 seconds
+                    server_ready = False
+                    
+                    while retries > 0:
+                        try:
+                            with socket.create_connection((host, server_port), timeout=1):
+                                server_ready = True
+                                break
+                        except (OSError, ConnectionRefusedError):
+                            time.sleep(1)
+                            print(".", end="", flush=True)
+                            retries -= 1
+                    
+                    print(f"\n{'✅ Server ready!' if server_ready else '⚠️ Server wait timed out (proceeding anyway)'}")
+                    
+                    # Helper nested here to capture procs list
+                    def start_client(cmd, name, env=None):
+                        print(f"🚀 Launching {name} client...")
+                        web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_media", "web")
+                        return subprocess.Popen(cmd, shell=True, cwd=web_dir, env=env)
+
+                    if start_web:
+                        procs.append(start_client("npm run dev:client", "Web", env=env))
+                    if start_electron:
+                        # Small delay for Electron just to ensure Web/Vite bundler starts its own output first
+                        # (Purely cosmetic to keep logs clean)
+                        time.sleep(1)
+                        procs.append(start_client("npm run electron", "Electron", env=env))
+
+                # Start the launch thread
+                import threading
+                launch_thread = threading.Thread(target=delayed_launch)
+                launch_thread.daemon = True
+                launch_thread.start()
             
             from ai_media.server import main as server_main
             
             # Restrict watcher to source code only to avoid loops with generated content in media-output/
             reload_dirs = ["ai_media", "ai-media.py"] if reload_enabled else None
             
+            # Print newline before server starts to separate it from any background thread output
+            print() 
             server_main(host=host, port=server_port, reload=reload_enabled, reload_dirs=reload_dirs)
         finally:
             # Cleanup background processes
@@ -741,6 +780,8 @@ Supported Models (Code : Download Size | Description):
     # Set AI_MEDIA_FORCE env var so all internal functions respect --force flag
     if args.force:
         os.environ["AI_MEDIA_FORCE"] = "1"
+    if args.bypass_warning:
+        os.environ["AI_MEDIA_BYPASS_WARNING"] = "1"
 
     # Test Triggers (Priority over generation)
     if args.test is not None:

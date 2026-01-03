@@ -9,7 +9,7 @@ import re
 import time
 
 from ..models import AUDIO_MODELS, get_model_id
-from ..utils.system import get_optimal_device_and_dtype
+from ..utils.system import get_optimal_device_and_dtype, check_resources_and_warn
 from ..utils.parsers import format_time
 from ..utils.performance import PerformanceTracker, ResourceMonitor, write_report_json
 from .description import generate_caption
@@ -83,7 +83,7 @@ def generate_long_bark(prompt, processor, model, device, voice_preset, sample_ra
 
 def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", 
                    image_input=None, caption_model="florence", voice_preset="v2/en_speaker_6",
-                   report_json=None):
+                   report_json=None, force=False, bypass_warning=False):
     """Generate audio using MusicGen, AudioLDM2, Stable Audio, or Bark.
     
     Args:
@@ -96,11 +96,19 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
         caption_model: Caption model for image input ('florence' or 'blip')
         voice_preset: Voice preset for Bark TTS
         report_json: Path to write performance stats JSON
+        force: Skip confirmation prompts (overwrites and warnings)
+        bypass_warning: Specifically skip resource warning prompts
         
     Returns:
         True on success, False on failure
     """
     model_id = get_model_id(model_name, AUDIO_MODELS)
+    
+    # Check resources
+    from ..models import MODEL_REQUIREMENTS
+    if not check_resources_and_warn(model_id, duration=duration, force=force, bypass_warning=bypass_warning,
+                                     model_requirements=MODEL_REQUIREMENTS):
+        return False
     
     import sys
     sys.setrecursionlimit(50000)  # Fix for Stable Audio / torchsde recursion on MPS

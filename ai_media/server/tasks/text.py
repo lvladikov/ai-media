@@ -18,6 +18,8 @@ def run_article_generation(
     online: bool,
     research_iterations: int,
     max_images: int = 0,
+    force: bool = False,
+    bypass_warning: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for article generation. Runs in child process."""
@@ -38,7 +40,7 @@ def run_article_generation(
             send_update(status=status, progress=progress, message=message, phase=status)
         
         # Create generator fresh (no caching in multiprocessing)
-        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback)
+        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback, force=force, bypass_warning=bypass_warning)
         
         # Update job with resolved model name  
         send_update(model=generator.model_name)
@@ -90,6 +92,8 @@ def run_code_generation(
     prompt: str,
     output_path: str,
     model: str,
+    force: bool = False,
+    bypass_warning: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for code generation. Runs in child process."""
@@ -113,7 +117,7 @@ def run_code_generation(
             send_update(status=status, progress=progress, message=message, phase=status)
         
         # Create generator fresh (no caching in multiprocessing)
-        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback)
+        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback, force=force, bypass_warning=bypass_warning)
         
         # Update job with resolved model name
         send_update(model=generator.model_name)

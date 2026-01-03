@@ -11,6 +11,8 @@ def run_audio_generation(
     output_path: str,
     duration: float,
     model: str,
+    force: bool = False,
+    bypass_warning: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for audio generation. Runs in child process."""
@@ -38,6 +40,8 @@ def run_audio_generation(
             duration=duration,
             sampling_rate=44100,  # Default sampling rate
             model_name=model,
+            force=force,
+            bypass_warning=bypass_warning,
         )
         
         if success:

@@ -11,6 +11,8 @@ def run_transform(
     instruction: str,
     output_path: str,
     model: str,
+    bypass_warning: bool = False,
+    force: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for image transformation. Runs in child process."""
@@ -32,7 +34,7 @@ def run_transform(
         if model == "remove-bg" or instruction.lower() == "remove-bg":
             from ai_media.generators.transform import remove_background
             send_update(status="generating", phase="generating", progress=30, message="Removing background...")
-            success = remove_background(input_path, output_path)
+            success = remove_background(input_path, output_path, force=force, bypass_warning=bypass_warning)
         else:
             from ai_media.generators.transform import generate_edit
             
@@ -45,7 +47,9 @@ def run_transform(
                 prompt=instruction,
                 output_path=output_path,
                 model_name=model,
-                progress_callback=on_progress
+                progress_callback=on_progress,
+                force=force,
+                bypass_warning=bypass_warning,
             )
         
         if success:

@@ -71,7 +71,8 @@ class CancelStopCriteria(StoppingCriteria):
 class ArticleGenerator:
     """Text generation for articles, code, research, and chat using LLMs."""
     
-    def __init__(self, model_name="llama-3.1-8b", device=None, args=None, progress_callback=None):
+    def __init__(self, model_name="llama-3.1-8b", device=None, args=None, 
+                 force=False, bypass_warning=False, progress_callback=None):
         """Initialize the article generator.
         
         Args:
@@ -87,6 +88,8 @@ class ArticleGenerator:
         self.device = device or get_optimal_device_and_dtype(quiet=True)[0]
         self.pipeline = None
         self.args = args
+        self.force = force
+        self.bypass_warning = bypass_warning
         self.progress_callback = progress_callback
         
         # Import DDGS for web search
@@ -228,6 +231,21 @@ class ArticleGenerator:
         if self.progress_callback:
             self.progress_callback("loading", 10, f"Loading Text Model: {self.model_name}...")
         print(f"📚 Loading Text Model: {self.model_name}...")
+        
+        # Check resources before loading
+        from ..utils.system import check_resources_and_warn
+        from ..models import MODEL_REQUIREMENTS
+        
+        # Determine effective flags (either explicit or from args)
+        eff_force = self.force or (self.args.force if self.args and hasattr(self.args, 'force') else False)
+        eff_bypass = self.bypass_warning or (self.args.bypass_warning if self.args and hasattr(self.args, 'bypass_warning') else False)
+        
+        if not check_resources_and_warn(self.model_name, force=eff_force, bypass_warning=eff_bypass, 
+                                         model_requirements=MODEL_REQUIREMENTS):
+            if self.progress_callback:
+                self.progress_callback("error", 0, "Aborted: System resource check failed.")
+            return False
+
         try:
             # Use bfloat16 on CUDA if supported (Ampere+), otherwise float16
             from ..utils.system import is_bfloat16_supported

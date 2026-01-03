@@ -35,7 +35,7 @@ function createWindow() {
   if (isDev) {
     const webPort = process.env.VITE_WEB_PORT || '5173';
     mainWindow.loadURL(`http://localhost:${webPort}`);
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   } else {
     const appPath = path.join(process.resourcesPath, 'app', 'index.html');
     mainWindow.loadFile(appPath);
@@ -189,8 +189,11 @@ app.whenReady().then(async () => {
   }
 
   // Auto-start server if configured
-  if (config.server?.auto_start !== false) {
+  // BUT skip if we are in dev mode and parent process provided API port (meaning it's managing the server)
+  if (config.server?.auto_start !== false && !process.env.VITE_API_PORT) {
     await startPythonServer(config);
+  } else if (process.env.VITE_API_PORT) {
+    // Main process managing server (VITE_API_PORT set), skipping internal start.
   }
 
   createWindow();

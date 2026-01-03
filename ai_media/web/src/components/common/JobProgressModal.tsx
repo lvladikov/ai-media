@@ -14,7 +14,7 @@ interface JobProgressModalProps {
 
 const getFriendlyModelName = (modelName: string | undefined | null) => {
   if (!modelName) return 'Model';
-  
+
   // Map common HF IDs to friendly names
   if (modelName.includes('Meta-Llama-3.1-8B')) return 'Llama 3.1 8B (Fast & Stable)';
   if (modelName.includes('Mistral-Nemo-Instruct')) return 'Mistral Nemo 12B';
@@ -23,7 +23,7 @@ const getFriendlyModelName = (modelName: string | undefined | null) => {
   if (modelName.includes('DeepSeek-R1-Distill-Qwen-7B')) return 'DeepSeek R1 7B';
   if (modelName.includes('DeepSeek-R1-Distill-Qwen-14B')) return 'DeepSeek R1 14B';
   if (modelName.includes('DeepSeek-R1-Distill-Qwen-32B')) return 'DeepSeek R1 32B';
-  
+
   // Fallback: Use clean name or original
   if (modelName.includes('/')) return modelName.split('/')[1];
   return modelName;
@@ -39,14 +39,14 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
   useEffect(() => {
     const interval = setInterval(() => {
       setDots(prev => prev.length >= 3 ? '' : prev + '.');
-      
+
       const job = jobs.find(j => j.job_id === jobId);
       if (job && job.phase === 'generating' && job.generation_started_at) {
-          const startTime = new Date(job.generation_started_at).getTime();
-          const now = new Date().getTime();
-          setElapsed(Math.max(0, Math.round((now - startTime) / 1000)));
+        const startTime = new Date(job.generation_started_at).getTime();
+        const now = new Date().getTime();
+        setElapsed(Math.max(0, Math.round((now - startTime) / 1000)));
       } else {
-          setElapsed(0);
+        setElapsed(0);
       }
     }, 1000); // 1s interval for timer
     return () => clearInterval(interval);
@@ -55,17 +55,17 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
   if (!jobId) return null;
 
   const job = jobs.find(j => j.job_id === jobId);
-  
+
   // If job not found in store yet (race condition), just show loading
   if (!job) {
-     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-         <div className="bg-secondary border border-border p-6 rounded-xl shadow-2xl max-w-md w-full flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin text-brand-400" size={32} />
-            <p className="text-secondary">Initializing job{dots}</p>
-         </div>
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-secondary border border-border p-6 rounded-xl shadow-2xl max-w-md w-full flex flex-col items-center gap-4">
+          <Loader2 className="animate-spin text-brand-400" size={32} />
+          <p className="text-secondary">Initializing job{dots}</p>
         </div>
-     );
+      </div>
+    );
   }
 
   const isComplete = job.status === 'complete';
@@ -92,21 +92,21 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-secondary border border-border rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
+      <div className="bg-secondary border border-border rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
         {/* Header */}
         <div className="bg-primary/50 p-4 border-b border-border flex justify-between items-center">
           <h3 className="font-semibold text-lg flex items-center gap-2">
-            {isComplete ? <CheckCircle className="text-green-400" size={20}/> : 
-             isFailed ? <AlertOctagon className="text-red-400" size={20}/> :
-             isCancelled ? <XCircle className="text-yellow-400" size={20}/> :
-             <Loader2 className="animate-spin text-brand-400" size={20}/>}
-            
+            {isComplete ? <CheckCircle className="text-green-400" size={20} /> :
+              isFailed ? <AlertOctagon className="text-red-400" size={20} /> :
+                isCancelled ? <XCircle className="text-yellow-400" size={20} /> :
+                  <Loader2 className="animate-spin text-brand-400" size={20} />}
+
             <span className="capitalize text-primary">
-              {isComplete ? 'Generation Complete' : 
-               isFailed ? 'Generation Failed' : 
-               isCancelled ? 'Generation Cancelled' :
-               job.type + ' Generation'}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
+              {isComplete ? 'Generation Complete' :
+                isFailed ? 'Generation Failed' :
+                  isCancelled ? 'Generation Cancelled' :
+                    job.type + ' Generation'}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
             </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}
@@ -119,19 +119,19 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
 
         {/* Body */}
         <div className="p-4 md:p-6 space-y-4">
-          
+
           {/* Status Header - Compact */}
           <div className="text-center">
-             <p className="text-lg font-medium text-primary">
-                {job.phase === 'loading' ? `Loading ${getFriendlyModelName(job.model)}...` : 
-                 job.phase === 'generating' ? (job.message || 'Generating...') :
-                 job.phase === 'complete' ? 'Complete!' :
-                 job.phase === 'failed' ? 'Failed' :
-                 'Processing...'}
-             </p>
-             <p className="text-xs text-secondary uppercase tracking-wider mt-1">
-                {job.phase}
-             </p>
+            <p className="text-lg font-medium text-primary">
+              {job.phase === 'loading' ? `Loading ${getFriendlyModelName(job.model)}...` :
+                job.phase === 'generating' ? (job.message || 'Generating...') :
+                  job.phase === 'complete' ? 'Complete!' :
+                    job.phase === 'failed' ? 'Failed' :
+                      'Processing...'}
+            </p>
+            <p className="text-xs text-secondary uppercase tracking-wider mt-1">
+              {job.phase}
+            </p>
           </div>
 
           {/* Server Logs Panel - Like Chat */}
@@ -139,7 +139,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-slate-500 uppercase tracking-wider">Server Logs</span>
-                <button 
+                <button
                   onClick={() => {
                     // Clear logs locally - they'll repopulate
                     if (job) job.logs = [];
@@ -165,7 +165,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                 {(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (
                   <div className="h-full bg-brand-500 w-1/3 absolute rounded-full animate-progress-bounce" />
                 ) : (
-                  <div 
+                  <div
                     className="h-full bg-brand-500 transition-all duration-300 ease-out relative"
                     style={{ width: `${percent}%` }}
                   >
@@ -174,8 +174,8 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                 )}
               </div>
               <div className="flex justify-between text-xs text-secondary">
-                 <span>{(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
-                 {percent < 100 && <span>Please wait...</span>}
+                <span>{(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
+                {percent < 100 && <span>Please wait...</span>}
               </div>
             </div>
           )}
@@ -186,37 +186,37 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
               {job.error}
             </div>
           )}
-          
+
           {/* Success Actions */}
           {isComplete && (
-             <button 
-               onClick={() => {
-                 if (onViewResult) onViewResult();
-                 if (onClose) onClose();
-               }}
-               className="btn-primary w-full"
-             >
-                View Result
-             </button>
+            <button
+              onClick={() => {
+                if (onViewResult) onViewResult();
+                if (onClose) onClose();
+              }}
+              className="btn-primary w-full"
+            >
+              View Result
+            </button>
           )}
-          
-           {/* Failed Actions */}
+
+          {/* Failed Actions */}
           {isFailed && (
-             <button onClick={onClose} className="btn-secondary w-full">
-                Close
-             </button>
+            <button onClick={onClose} className="btn-secondary w-full">
+              Close
+            </button>
           )}
 
           {/* Cancelled Actions */}
           {isCancelled && (
-             <button onClick={onClose} className="btn-secondary w-full">
-                Close
-             </button>
+            <button onClick={onClose} className="btn-secondary w-full">
+              Close
+            </button>
           )}
-          
+
           {/* Cancel Button for Ongoing Jobs */}
           {isOngoing && (
-            <button 
+            <button
               onClick={handleCancel}
               disabled={isCancelling}
               className="btn-secondary w-full flex items-center justify-center gap-2 text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/50"

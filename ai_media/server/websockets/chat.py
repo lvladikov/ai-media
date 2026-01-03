@@ -30,7 +30,7 @@ def generate_chat_response(message: str, history: List[Dict], model: str, is_mod
         # Use cached model if same, otherwise load new
         generator = model_cache.get("text", model)
         if generator is None:
-            generator = ArticleGenerator(model_name=model)
+            generator = ArticleGenerator(model_name=model, bypass_warning=True)
             model_cache.set("text", model, generator)
         
         response = generator.chat_single(message, history[:-1])  # Exclude current message from history
@@ -91,7 +91,7 @@ async def websocket_chat(websocket: WebSocket):
                                     loop
                                 )
                         
-                        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback)
+                        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback, bypass_warning=True)
                         # Explicitly trigger heavy load
                         success = generator._load_model()
                         if success:
@@ -117,7 +117,7 @@ async def websocket_chat(websocket: WebSocket):
                     # Ensure generator is loaded for commands
                     generator = model_cache.get("text", model)
                     if generator is None:
-                        generator = ArticleGenerator(model_name=model)
+                        generator = ArticleGenerator(model_name=model, bypass_warning=True)
                         model_cache.set("text", model, generator)
                     
                     cmd_result = generator.process_command(user_message, chat_sessions[session_id])

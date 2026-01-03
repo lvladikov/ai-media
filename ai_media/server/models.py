@@ -71,7 +71,8 @@ class ImageGenerateRequest(BaseModel):
     guidance_scale: float = Field(7.5, description="Guidance scale for generation")
     negative_prompt: Optional[str] = Field("", description="Negative prompt (what to avoid)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
-    force: bool = Field(False, description="Force execution, skipping confirmations")
+    force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class VideoGenerateRequest(BaseModel):
@@ -84,6 +85,8 @@ class VideoGenerateRequest(BaseModel):
     fps: int = Field(8, description="Frames per second")
     input_image: Optional[str] = Field(None, description="Path to input image for img2vid")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class AudioGenerateRequest(BaseModel):
@@ -92,6 +95,8 @@ class AudioGenerateRequest(BaseModel):
     model: str = Field("default", description="Model name")
     duration: float = Field(10.0, description="Duration in seconds")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class ArticleGenerateRequest(BaseModel):
@@ -104,6 +109,7 @@ class ArticleGenerateRequest(BaseModel):
     research_iterations: int = Field(3, description="Number of research iterations (if online)")
     max_images: int = Field(5, description="Maximum number of images to fetch (if online)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class CodeGenerateRequest(BaseModel):
@@ -111,6 +117,7 @@ class CodeGenerateRequest(BaseModel):
     prompt: str = Field(..., description="Code generation prompt")
     model: str = Field("default", description="LLM model name")
     output_name: str = Field("", description="Output name (optional). Empty = auto-generated. Multi-file = zip filename")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class TransformRequest(BaseModel):
@@ -119,6 +126,7 @@ class TransformRequest(BaseModel):
     instruction: str = Field(..., description="Transformation instruction (or 'remove-bg')")
     model: str = Field("default", description="Model name (e.g., 'instruct-pix2pix', 'remove-bg')")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class ConvertRequest(BaseModel):
@@ -135,6 +143,8 @@ class UpscaleRequest(BaseModel):
     method: str = Field("fast", description="Method: 'fast' (Real-ESRGAN), 'ai' (Latent), 'simple' (Lanczos)")
     strength: float = Field(0.3, description="Denoising strength for AI upscale (0.0-1.0)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
+    bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
 
 class TextExportRequest(BaseModel):

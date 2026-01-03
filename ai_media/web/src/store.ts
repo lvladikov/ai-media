@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 // --- Types ---
 
-export type TabId = 
+export type TabId =
   | 'image' | 'video' | 'audio' | 'article' | 'code' | 'chat'
   | 'transform' | 'convert' | 'upscale' | 'jobs' | 'settings';
 
@@ -45,6 +45,7 @@ export interface ResourceStats {
     cpu_percent: number;
     ram_used_gb: number;
     vram_used_gb?: number;
+    gpu_percent?: number;
   };
   timestamp: string;
 }
@@ -75,38 +76,38 @@ interface AppState {
   // Navigation
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
-  
+
   // System
   systemInfo: SystemInfo | null;
   setSystemInfo: (info: SystemInfo) => void;
-  
+
   // Resources
   resources: ResourceStats | null;
   setResources: (stats: ResourceStats) => void;
-  
+
   // Jobs
   jobs: Job[];
   setJobs: (jobs: Job[]) => void;
   addJob: (job: Job) => void;
   updateJob: (jobId: string, updates: Partial<Job>) => void;
   removeJob: (jobId: string) => void;
-  
+
   // Chat
   chatMessages: ChatMessage[];
   chatSessionId: string | null;
   addChatMessage: (message: ChatMessage) => void;
   setChatSessionId: (id: string) => void;
   clearChat: () => void;
-  
+
   // Help
   isHelpOpen: boolean;
   toggleHelp: () => void;
-  
+
   // Mobile Menu
   isMobileMenuOpen: boolean;
   toggleMobileMenu: () => void;
   setMobileMenuOpen: (isOpen: boolean) => void;
-  
+
   // Server connection
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
@@ -128,15 +129,15 @@ export const useAppStore = create<AppState>((set) => ({
   // Navigation
   activeTab: getInitialTab(),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  
+
   // System
   systemInfo: null,
   setSystemInfo: (info) => set({ systemInfo: info }),
-  
+
   // Resources
   resources: null,
   setResources: (stats) => set({ resources: stats }),
-  
+
   // Jobs
   // Jobs
   jobs: [],
@@ -151,7 +152,7 @@ export const useAppStore = create<AppState>((set) => ({
   removeJob: (jobId) => set((state) => ({
     jobs: state.jobs.filter((j) => j.job_id !== jobId),
   })),
-  
+
   // Chat
   chatMessages: [],
   chatSessionId: null,
@@ -160,16 +161,16 @@ export const useAppStore = create<AppState>((set) => ({
   })),
   setChatSessionId: (id) => set({ chatSessionId: id }),
   clearChat: () => set({ chatMessages: [], chatSessionId: null }),
-  
+
   // Help
   isHelpOpen: false,
   toggleHelp: () => set((state) => ({ isHelpOpen: !state.isHelpOpen })),
-  
+
   // Mobile Menu
   isMobileMenuOpen: false,
   toggleMobileMenu: () => set((state) => ({ isMobileMenuOpen: !state.isMobileMenuOpen })),
   setMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
-  
+
   // Server connection
   isConnected: false,
   setConnected: (connected) => set({ isConnected: connected }),

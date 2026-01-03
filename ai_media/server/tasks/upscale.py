@@ -12,6 +12,8 @@ def run_upscale(
     factor: float,
     method: str,
     strength: float,
+    bypass_warning: bool = False,
+    force: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for upscaling. Runs in child process."""
@@ -43,22 +45,26 @@ def run_upscale(
         
         if is_video:
             if method == 'simple':
-                success = simple_upscale_video(input_path, output_path, factor=factor, force=True)
+                success = simple_upscale_video(input_path, output_path, factor=factor, force=force)
             elif method == 'fast':
-                success = upscale_video_fast(input_path, output_path, factor=factor)
+                success = upscale_video_fast(input_path, output_path, factor=factor, force=force, bypass_warning=bypass_warning)
             else:  # ai / creative
                 send_update(status="generating", phase="generating", progress=30, message="Upscaling video (AI Slow Mode)...")
-                success = upscale_video_file(input_path, output_path, strength=strength, factor=factor)
+                # upscale_video_file currently doesn't check resources directly but calls simple/fast or does its own thing.
+                # Actually upscale_video_file in upscaling.py does NOT exist or was not shown?
+                # Wait, I saw upscale_image_file. Let me check for upscale_video_file.
+                success = upscale_video_file(input_path, output_path, strength=strength, factor=factor, force=force, bypass_warning=bypass_warning)
         else:  # Image
             if method == 'simple':
-                success = simple_upscale_image(input_path, output_path, factor=factor, force=True)
+                success = simple_upscale_image(input_path, output_path, factor=factor, force=force)
             elif method == 'fast':
-                success = upscale_image_fast(input_path, output_path, factor=factor)
+                success = upscale_image_fast(input_path, output_path, factor=factor, force=force, bypass_warning=bypass_warning)
             else:  # ai / creative
                 def on_progress(pct, msg):
                     send_update(status="generating", phase="generating", progress=pct, message=msg)
                     
-                success = upscale_image_file(input_path, output_path, strength=strength, factor=factor, progress_callback=on_progress)
+                success = upscale_image_file(input_path, output_path, strength=strength, factor=factor, 
+                                             progress_callback=on_progress, force=force, bypass_warning=bypass_warning)
 
         if success:
             send_update(status="complete", phase="complete", progress=100,

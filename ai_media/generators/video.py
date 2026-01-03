@@ -9,7 +9,7 @@ import os
 import time
 
 from ..models import VIDEO_MODELS, AUDIO_MODELS, get_model_id
-from ..utils.system import get_optimal_device_and_dtype, clear_gpu_memory
+from ..utils.system import get_optimal_device_and_dtype, clear_gpu_memory, check_resources_and_warn
 from ..utils.parsers import format_time
 from ..utils.performance import PerformanceTracker, ResourceMonitor, write_report_json
 from ..utils.ffmpeg import get_video_encoding_params, ffmpeg_resize_video
@@ -114,7 +114,8 @@ def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, st
 
 
 def generate_video(prompt, output_path, duration, width, height, model_name="default", 
-                   image_input=None, audio_prompt=None, audio_model="default", report_json=None):
+                   image_input=None, audio_prompt=None, audio_model="default", report_json=None,
+                   force=False, bypass_warning=False):
     """Generate video (Text-to-Video or Image-to-Video) with optional Audio.
     
     For Zeroscope: Implements dynamic upscaling pipeline when target resolution
@@ -132,6 +133,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         audio_prompt: Optional text for audio generation to mux with video
         audio_model: Audio model for audio_prompt
         report_json: Path to write performance stats JSON
+        force: Skip confirmation prompts (overwrites and warnings)
+        bypass_warning: Specifically skip resource warning prompts
         
     Returns:
         True on success, False on failure
@@ -139,6 +142,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     # Resolve Model ID
     base_model = get_model_id(model_name, VIDEO_MODELS)
     model_id = base_model # Default, updated later for I2V
+
+    # Check resources
+    from ..models import MODEL_REQUIREMENTS
+    if not check_resources_and_warn(model_id, width=width, height=height, duration=duration, 
+                                     force=force, bypass_warning=bypass_warning,
+                                     model_requirements=MODEL_REQUIREMENTS):
+        return False
     
     # Pre-calculate Device and Estimate
     try:

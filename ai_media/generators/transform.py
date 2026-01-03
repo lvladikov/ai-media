@@ -8,11 +8,12 @@ import PIL.Image
 import PIL.ImageOps
 
 from ..models import EDIT_MODELS, get_model_id
-from ..utils.system import get_optimal_device_and_dtype
+from ..utils.system import get_optimal_device_and_dtype, check_resources_and_warn
 
 
 def generate_edit(input_path, prompt, output_path, model_name="default", 
-                  guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False, progress_callback=None):
+                  guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False, 
+                  force=False, bypass_warning=False, progress_callback=None):
     """
     Edit an existing image based on instructions using InstructPix2Pix.
     Args:
@@ -24,6 +25,8 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
         image_guidance_scale: Image guidance strength
         steps: Number of inference steps
         unsafe: Disable NSFW safety checker
+        force: Skip confirmation prompts (overwrites and warnings)
+        bypass_warning: Specifically skip resource warning prompts
         
     Returns:
         True on success, False on failure
@@ -70,6 +73,12 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
     print(f"   Instruct:  '{prompt}'")
     print(f"   Output:    {output_path}")
     print("") 
+    
+    # Check resources
+    from ..models import MODEL_REQUIREMENTS
+    if not check_resources_and_warn(model_id, force=force, bypass_warning=bypass_warning, 
+                                     model_requirements=MODEL_REQUIREMENTS):
+        return False
 
     try:
         device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
@@ -284,7 +293,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
         return False
 
 
-def remove_background(input_path, output_path, model_name="remove-bg", silhouette=False):
+def remove_background(input_path, output_path, model_name="remove-bg", silhouette=False, force=False, bypass_warning=False):
     """
     Remove background using RMBG-1.4 (Transformer based).
     
@@ -293,6 +302,8 @@ def remove_background(input_path, output_path, model_name="remove-bg", silhouett
         output_path: Path to save result (PNG with transparency)
         model_name: Model short code (default: 'remove-bg')
         silhouette: If True, create black silhouette instead of transparent
+        force: Skip confirmation prompts (overwrites and warnings)
+        bypass_warning: Specifically skip resource warning prompts
         
     Returns:
         True on success, False on failure
@@ -308,6 +319,12 @@ def remove_background(input_path, output_path, model_name="remove-bg", silhouett
     if silhouette:
         print(f"   Mode:   Silhouette Maker")
     print("")
+
+    # Check resources
+    from ..models import MODEL_REQUIREMENTS
+    if not check_resources_and_warn("remove-bg", force=force, bypass_warning=bypass_warning,
+                                     model_requirements=MODEL_REQUIREMENTS):
+        return False
 
     try:
         device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)

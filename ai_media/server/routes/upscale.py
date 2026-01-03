@@ -23,7 +23,7 @@ async def upscale_media(request: UpscaleRequest):
         "upscale",
         prompt=None,
         model=request.method,
-        params={"factor": request.factor, "strength": request.strength}
+        params={"factor": request.factor, "strength": request.strength, "bypass_warning": request.bypass_warning, "force": request.force}
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -42,6 +42,8 @@ async def upscale_media(request: UpscaleRequest):
             request.factor,
             request.method,
             request.strength,
+            True, # Always bypass warning in server mode
+            request.force,
         ),
     )
     

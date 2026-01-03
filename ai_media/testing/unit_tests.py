@@ -120,12 +120,21 @@ sys.modules['PIL'] = MagicMock(__version__='10.0.0')
 sys.modules['PIL.Image'] = MagicMock()
 sys.modules['PIL.ImageOps'] = MagicMock()
 
-
 # Import the package and submodules
 import ai_media
 from ai_media.utils import parsers, system, performance, ffmpeg, interaction
+# Save original resource checks for specific utility tests
+_ORIGINAL_CHECK_WARN = system.check_resources_and_warn
+
+# Mock resource checks globally for tests to avoid hanging on input()
+# This must happen before generators are imported to affect their local references
+system.check_resources_and_warn = MagicMock(return_value=True)
+
 from ai_media.generators import text, image, video, audio, transform, description
 from ai_media import upscaling, interactive, models
+_ORIGINAL_CHECK_CONFIRM = upscaling.check_resources_and_confirm
+upscaling.check_resources_and_confirm = MagicMock(return_value=True)
+
 import ai_media.server.state as server_state
 from ai_media.server.cache import ModelCache
 from ai_media.server.jobs import create_job, update_job, is_job_cancelled
@@ -148,6 +157,7 @@ ai_media.write_report_json = performance.write_report_json
 ai_media.clear_gpu_memory = system.clear_gpu_memory
 ai_media.get_optimal_device_and_dtype = system.get_optimal_device_and_dtype
 ai_media.is_bfloat16_supported = system.is_bfloat16_supported
+# Store original reference but keep global mock active
 ai_media.check_resources_and_warn = system.check_resources_and_warn
 ai_media.get_system_resources = system.get_system_resources
 ai_media.signal_handler = system.signal_handler
@@ -817,20 +827,21 @@ class TestClearScreen(unittest.TestCase):
     @patch('os.system')
     def test_calls_os_system(self, mock_system):
         """Test clear_screen calls os.system."""
-        ai_media.clear_screen()
-        mock_system.assert_called_once()
+        with patch('sys.stdout.isatty', return_value=True):
+            ai_media.clear_screen()
+            mock_system.assert_called_once()
     
     @patch('os.system')
     def test_uses_cls_on_windows(self, mock_system):
         """Test uses 'cls' command on Windows."""
-        with patch('os.name', 'nt'):
+        with patch('os.name', 'nt'), patch('sys.stdout.isatty', return_value=True):
             ai_media.clear_screen()
             mock_system.assert_called_with('cls')
     
     @patch('os.system')
     def test_uses_clear_on_unix(self, mock_system):
         """Test uses 'clear' command on Unix."""
-        with patch('os.name', 'posix'):
+        with patch('os.name', 'posix'), patch('sys.stdout.isatty', return_value=True):
             ai_media.clear_screen()
             mock_system.assert_called_with('clear')
 
@@ -1222,9 +1233,19 @@ class TestResourceHelpers(unittest.TestCase):
     def setUp(self):
         self.orig_psutil = getattr(ai_media, 'psutil', None)
         ai_media.psutil = MagicMock()
+        # Use real resource check functions for these specific tests
+        system.check_resources_and_warn = _ORIGINAL_CHECK_WARN
+        ai_media.check_resources_and_warn = _ORIGINAL_CHECK_WARN
+        upscaling.check_resources_and_confirm = _ORIGINAL_CHECK_CONFIRM
+        ai_media.check_resources_and_confirm = _ORIGINAL_CHECK_CONFIRM
         
     def tearDown(self):
         ai_media.psutil = self.orig_psutil
+        # Re-mock to avoid hangs in other tests
+        system.check_resources_and_warn = MagicMock(return_value=True)
+        ai_media.check_resources_and_warn = system.check_resources_and_warn
+        upscaling.check_resources_and_confirm = MagicMock(return_value=True)
+        ai_media.check_resources_and_confirm = upscaling.check_resources_and_confirm
 
     def test_get_system_resources(self):
         """Test RAM and VRAM detection."""
@@ -1242,20 +1263,22 @@ class TestResourceHelpers(unittest.TestCase):
             
             with patch.dict('sys.modules', {'torch': mock_torch}):
                 # Run
-                ram, vram = ai_media.get_system_resources()
+                ram, vram, ram_total = ai_media.get_system_resources()
                 
                 # Verify
                 self.assertEqual(ram, 16.0)
                 self.assertEqual(vram, 6.0) # 8 - 2
+                self.assertEqual(ram_total, 16.0)
     
     @patch('ai_media.utils.system.get_system_resources')
     def test_check_resources_strict_warnings(self, mock_get_resources):
         """Test strict warnings for low resources."""
         # Low RAM/VRAM
-        mock_get_resources.return_value = (4.0, 2.0)
+        mock_get_resources.return_value = (4.0, 2.0, 16.0)
         
-        # Redirect stdout
-        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+        # Redirect stdout and mock isatty to force interactive logic
+        with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout, \
+             patch('sys.stdin.isatty', return_value=True):
             # Simulate user saying 'n' (abort)
             with patch('builtins.input', return_value='n'):
                 # Pass requirements explicitly since it's not imported/defined in system.py
@@ -1378,7 +1401,9 @@ class TestGenerationWrappers(unittest.TestCase):
                             monitor_instance.get_averages.return_value = (10.0, 4.0, 2.0, 50.0)
                             
                             with patch('sys.stdout', new_callable=io.StringIO):
-                                result = ai_media.generate_image("prompt", "out.png", 512, 512, model_name="sdxl", negative_prompt="bad quality")
+                                # Use sd-1.5 to hit the generic path that supports negative prompts
+                                # sdxl points to sdxl-turbo which may skip negative_prompt in some pipeline versions
+                                result = ai_media.generate_image("prompt", "out.png", 512, 512, model_name="sd-1.5", negative_prompt="bad quality")
                                 self.assertTrue(result)
                                 # Verify negative_prompt was passed to pipeline call
                                 _, kwargs = mock_pipeline.call_args

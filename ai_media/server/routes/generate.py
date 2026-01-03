@@ -29,6 +29,7 @@ async def generate_image(request: ImageGenerateRequest):
             "steps": request.steps,
             "guidance_scale": request.guidance_scale,
             "negative_prompt": request.negative_prompt,
+            "bypass_warning": request.bypass_warning,
         }
     )
     
@@ -50,6 +51,7 @@ async def generate_image(request: ImageGenerateRequest):
             request.guidance_scale,
             request.negative_prompt,
             request.force,
+            True, # Always bypass warning in server mode
         ),
     )
     
@@ -68,6 +70,7 @@ async def generate_video(request: VideoGenerateRequest):
             "height": request.height,
             "duration": request.duration,
             "fps": request.fps,
+            "bypass_warning": request.bypass_warning,
         }
     )
     
@@ -88,6 +91,8 @@ async def generate_video(request: VideoGenerateRequest):
             request.fps,
             request.model,
             request.input_image,
+            request.force,
+            True, # Always bypass warning in server mode
         ),
     )
     
@@ -101,7 +106,7 @@ async def generate_audio(request: AudioGenerateRequest):
         "audio",
         prompt=request.prompt,
         model=request.model,
-        params={"duration": request.duration}
+        params={"duration": request.duration, "bypass_warning": request.bypass_warning}
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -117,6 +122,8 @@ async def generate_audio(request: AudioGenerateRequest):
             output_path,
             request.duration,
             request.model,
+            request.force,
+            True, # Always bypass warning in server mode
         ),
     )
     

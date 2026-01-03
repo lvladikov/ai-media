@@ -16,6 +16,8 @@ def run_video_generation(
     fps: int,
     model: str,
     input_image: Optional[str],
+    force: bool = False,
+    bypass_warning: bool = False,
     progress_queue: Queue = None,
 ):
     """Background task for video generation. Runs in child process."""
@@ -45,6 +47,8 @@ def run_video_generation(
             height=height,
             model_name=model,
             image_input=input_image,
+            force=force,
+            bypass_warning=bypass_warning,
         )
         
         if success:

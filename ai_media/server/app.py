@@ -136,7 +136,7 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
                 print(f"   (Excludes sample: {', '.join(reload_excludes[:3])}...)")
         if reload_dirs:
             reload_kwargs["reload_dirs"] = reload_dirs
-            print(f"📂 Reload directories: {', '.join(reload_dirs)}")
+            print(f"📡 Code changes watching: {', '.join(reload_dirs)}")
     
     print(f"🌐 Starting AI-Media Server on http://{host}:{port}")
     print(f"📚 API docs: http://{host}:{port}/docs")

@@ -131,7 +131,7 @@ def get_system_resources():
     return ram_available, vram_available, ram_total
 
 
-def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None):
+def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None, bypass_warning=False):
     """
     Check if system resources are sufficient for the requested task.
     Returns True to proceed, False to abort.
@@ -141,8 +141,9 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         width: Target width (optional)
         height: Target height (optional)
         duration: Target duration in seconds (optional)
-        force: Skip confirmation prompts
+        force: Skip confirmation prompts (overwrites and warnings)
         model_requirements: Dict of model requirements (from models.py)
+        bypass_warning: Specifically skip resource warning prompts
     """
     if model_requirements is None:
         return True  # Can't check without requirements
@@ -177,7 +178,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         if ram_total > 0:
             warnings.append(f"RAM: {ram_available:.1f}GB available / {ram_total:.1f}GB Total, {req_ram:.1f}GB recommended ({dtype_label})")
         else:
-             warnings.append(f"RAM: {ram_available:.1f}GB available, {req_ram:.1f}GB recommended ({dtype_label})")
+            warnings.append(f"RAM: {ram_available:.1f}GB available, {req_ram:.1f}GB recommended ({dtype_label})")
     
     # Check VRAM (if available)
     if vram_available > 0 and vram_available < req_vram:
@@ -203,6 +204,10 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     if not warnings:
         return True
     
+    # Determine if we should bypass the prompt
+    can_prompt = sys.stdin.isatty()
+    should_bypass = force or bypass_warning or not can_prompt
+
     # Display warnings - use different style for zeroscope upscaling info
     if is_zeroscope and len(warnings) == 1 and "Dynamic Upscaling" in warnings[0]:
         # Zeroscope-specific informational message (not a scary warning)
@@ -219,7 +224,9 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         print(f"\n   Model: {model_id}")
         print(f"   ℹ️  This is the optimal workflow for high-res zeroscope output.\n")
         
-        if force:
+        if should_bypass:
+            if not can_prompt and not (force or bypass_warning):
+                print("   (Non-interactive environment: Proceeding with dynamic upscaling...)\n")
             return True
         
         try:
@@ -262,8 +269,13 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         
     print(f"   This job may cause slowdowns, swapping, or crashes.\n")
     
-    if force:
-        print("   (Proceeding due to --force flag)\n")
+    if should_bypass:
+        if force:
+            print("   (Proceeding due to --force flag)\n")
+        elif bypass_warning:
+            print("   (Proceeding due to --bypass-warning flag)\n")
+        elif not can_prompt:
+            print("   (Non-interactive environment: Proceeding anyway...)\n")
         return True
     
     try:
@@ -276,6 +288,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     except KeyboardInterrupt:
         print("\n❌ Operation cancelled.\n")
         sys.exit(0)
+
 
 
 # --- Signal Handling ---
