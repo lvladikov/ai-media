@@ -231,7 +231,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
         {/* Footer / Resource Monitor */}
         {!isComplete && !isFailed && (
           <div className="bg-primary/30 p-4 border-t border-border">
-            <ResourceStats />
+            <ResourceStats variant="modal" />
           </div>
         )}
       </div>
