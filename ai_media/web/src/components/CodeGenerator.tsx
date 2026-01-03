@@ -64,25 +64,25 @@ export function CodeGenerator() {
       .then((data) => {
         if (data.text) {
           setAvailableModels(data.text);
-          
+
           // Find default model based on backend flag
           let initialModel = '';
           const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
-          
+
           if (defaultModel) {
-             initialModel = defaultModel.name;
+            initialModel = defaultModel.name;
           } else if (data.text.length > 0) {
-             initialModel = data.text[0].name;
+            initialModel = data.text[0].name;
           }
-          
+
           setModel(initialModel);
         }
       })
       .catch((err) => console.error('Failed to fetch models:', err));
-    
+
     // Connect to a lightweight endpoint for cleanup on disconnect (like Chat)
     const ws = new WebSocket(`ws://localhost:8000/ws/code`);
-    
+
     // Cleanup: Close socket when navigating away - server unloads model on disconnect
     return () => {
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -101,14 +101,14 @@ export function CodeGenerator() {
     setError(null);
 
     try {
-      const response = await generateCode({ 
-        prompt, 
-        model, 
+      const response = await generateCode({
+        prompt,
+        model,
         output_name: outputName || undefined,
       });
-      
+
       setCurrentJobId(response.job_id);
-      
+
       addJob({
         job_id: response.job_id,
         type: 'code',
@@ -131,48 +131,48 @@ export function CodeGenerator() {
   // Watch for job completion
   useEffect(() => {
     if (!currentJobId) return;
-    
+
     const unsubscribe = useAppStore.subscribe((state) => {
-        const job = state.jobs.find(j => j.job_id === currentJobId);
-        if (job) {
-            if (job.status === 'complete') {
-                setResult(job.result_path);
-                
-                // Calculate duration
-                if (job.generation_started_at && job.updated_at) {
-                    const start = new Date(job.generation_started_at).getTime();
-                    const end = new Date(job.updated_at).getTime();
-                    const seconds = Math.round((end - start) / 1000);
-                    setDuration(seconds > 0 ? seconds : 1);
-                } else if (job.created_at && job.updated_at) {
-                    // Fallback to total time if start time missing
-                    const start = new Date(job.created_at).getTime();
-                    const end = new Date(job.updated_at).getTime();
-                    setDuration(Math.round((end - start) / 1000));
-                }
-                
-                // Check if multi-file by looking at is_multi_file flag
-                const multiFile = job.is_multi_file || false;
-                setIsMultiFile(multiFile);
-                setGeneratedFiles(job.generated_files || []);
-                setReasoning(job.reasoning || null);
-                setIsLoading(false);
-            } else if (job.status === 'failed' || job.status === 'cancelled') {
-                setIsLoading(false);
-                
-                const msg = job.status === 'cancelled' 
-                    ? "Job cancelled." 
-                    : (job.error || job.message || "Generation failed");
-                setError(msg);
-                
-                // Auto-dismiss after 6 seconds
-                setTimeout(() => setError(null), 6000);
-            }
-        } else {
-            // Job not found in store (removed on cancellation)
-            setIsLoading(false);
-            setCurrentJobId(null);
+      const job = state.jobs.find(j => j.job_id === currentJobId);
+      if (job) {
+        if (job.status === 'complete') {
+          setResult(job.result_path);
+
+          // Calculate duration
+          if (job.generation_started_at && job.updated_at) {
+            const start = new Date(job.generation_started_at).getTime();
+            const end = new Date(job.updated_at).getTime();
+            const seconds = Math.round((end - start) / 1000);
+            setDuration(seconds > 0 ? seconds : 1);
+          } else if (job.created_at && job.updated_at) {
+            // Fallback to total time if start time missing
+            const start = new Date(job.created_at).getTime();
+            const end = new Date(job.updated_at).getTime();
+            setDuration(Math.round((end - start) / 1000));
+          }
+
+          // Check if multi-file by looking at is_multi_file flag
+          const multiFile = job.is_multi_file || false;
+          setIsMultiFile(multiFile);
+          setGeneratedFiles(job.generated_files || []);
+          setReasoning(job.reasoning || null);
+          setIsLoading(false);
+        } else if (job.status === 'failed' || job.status === 'cancelled') {
+          setIsLoading(false);
+
+          const msg = job.status === 'cancelled'
+            ? "Job cancelled."
+            : (job.error || job.message || "Generation failed");
+          setError(msg);
+
+          // Auto-dismiss after 6 seconds
+          setTimeout(() => setError(null), 6000);
         }
+      } else {
+        // Job not found in store (removed on cancellation)
+        setIsLoading(false);
+        setCurrentJobId(null);
+      }
     });
 
     return () => unsubscribe();
@@ -184,7 +184,7 @@ export function CodeGenerator() {
   };
 
   // Sort models based on fixed order, filtering valid ones from API
-  const sortedModels = MODEL_ORDER.filter(name => 
+  const sortedModels = MODEL_ORDER.filter(name =>
     availableModels.some(m => m.name === name)
   );
 
@@ -195,7 +195,7 @@ export function CodeGenerator() {
 
   const handleViewResult = () => {
     setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
 
@@ -212,70 +212,70 @@ export function CodeGenerator() {
 
         {/* Instructions */}
         <div className="space-y-2">
-           <div className="flex items-center justify-between">
-             <label className="text-sm font-medium text-slate-400">Instructions</label>
-             <RandomPrompt type="code" onPromptSelect={setPrompt} />
-           </div>
-           <textarea
-             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
-             placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
-             value={prompt}
-             onChange={(e) => setPrompt(e.target.value)}
-           />
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-400">Instructions</label>
+            <RandomPrompt type="code" onPromptSelect={setPrompt} />
+          </div>
+          <textarea
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
+            placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+          />
         </div>
 
         {/* Model Selector */}
         <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Model</label>
-            <select 
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
-              value={model} 
-              onChange={(e) => setModel(e.target.value)}
-            >
-               {!model && <option value="">Loading...</option>}
-               {sortedModels.map((name) => {
-                const info = MODEL_DISPLAY_INFO[name];
-                return (
-                  <option key={name} value={name}>
-                    {info ? `${info.label} ${info.vram}` : name}
-                  </option>
-                );
-              })}
-            </select>
-            {model === 'deepseek-r1-llama-70b' && (
-              <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
-                <AlertTriangle size={12} />
-                <span>Requires 40GB+ VRAM</span>
-              </div>
-            )}
-             {/* Recommendation for Code */}
-             {(model.includes('deepseek') || model.includes('qwen')) && (
-              <div className="text-green-500 text-xs text-right mt-1">
-                Recommended for coding
-              </div>
-            )}
+          <label className="text-sm font-medium text-slate-400">Model</label>
+          <select
+            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {!model && <option value="">Loading...</option>}
+            {sortedModels.map((name) => {
+              const info = MODEL_DISPLAY_INFO[name];
+              return (
+                <option key={name} value={name}>
+                  {info ? `${info.label} ${info.vram}` : name}
+                </option>
+              );
+            })}
+          </select>
+          {model === 'deepseek-r1-llama-70b' && (
+            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Requires 40GB+ VRAM</span>
+            </div>
+          )}
+          {/* Recommendation for Code */}
+          {(model.includes('deepseek') || model.includes('qwen')) && (
+            <div className="text-green-500 text-xs text-right mt-1">
+              Recommended for coding
+            </div>
+          )}
         </div>
 
         {/* Output Name */}
         <div className="space-y-2">
-           <label className="text-xs font-medium text-slate-400">
-              Output Name (Optional)
-           </label>
-           <input
-             type="text"
-             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
-             placeholder="Auto-generated if empty"
-             value={outputName}
-             onChange={(e) => setOutputName(e.target.value)}
-           />
+          <label className="text-xs font-medium text-slate-400">
+            Output Name (Optional)
+          </label>
+          <input
+            type="text"
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            placeholder="Auto-generated if empty"
+            value={outputName}
+            onChange={(e) => setOutputName(e.target.value)}
+          />
         </div>
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
         <ValidationTooltip error={!prompt.trim() ? "Please enter instructions" : null} className="w-full mt-auto pt-4">
-          <button 
-            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
-            onClick={handleGenerate} 
+          <button
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            onClick={handleGenerate}
             disabled={isLoading || !prompt.trim()}
           >
             {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><Code size={18} /> Generate Code</>)}
@@ -286,76 +286,76 @@ export function CodeGenerator() {
       {/* Main Result Area */}
       <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
         {result ? (
-           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
-                <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
-                   <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
-                      <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
-                            {isMultiFile ? <FolderArchive size={24} /> : <Code size={24} />}
-                         </div>
-                         <div className="overflow-hidden">
-                            <h3 className="font-medium text-slate-200 truncate max-w-md">{resultDisplayName}{isMultiFile && '.zip'}</h3>
-                            {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
-                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                         {!isMultiFile ? (
-                           <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
-                         ) : (
-                           <button className="btn-secondary text-sm" onClick={() => setShowProjectPreview(true)}>Preview Project</button>
-                         )}
-                         
-                         <a 
-                           href={isMultiFile 
-                             ? `${API_BASE_URL}/api/files/zip?path=${encodeURIComponent(result)}` 
-                             : `${API_BASE_URL}/api/files/${result}`
-                           } 
-                           target="_blank" 
-                           rel="noreferrer" 
-                           className="btn-secondary text-sm flex items-center gap-1"
-                         >
-                           <Download size={14} />
-                           {isMultiFile ? 'Download ZIP' : 'Download'}
-                         </a>
-                      </div>
-                   </div>
-
-                   {/* Multi-file project explanation */}
-                   {isMultiFile && (
-                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                       <div className="flex items-start gap-3">
-                         <FolderArchive size={20} className="text-brand-400 mt-0.5 shrink-0" />
-                         <div className="flex-1">
-                           <p className="text-sm text-slate-300 font-medium mb-1">
-                             Multi-File Project ({generatedFiles.length} files)
-                           </p>
-                           <p className="text-xs text-slate-500">
-                              Click "Preview Project" above to browse the file structure.
-                           </p>
-                         </div>
-                       </div>
-                     </div>
-                   )}
-
-                   {/* Reasoning / Thinking Block */}
-                   {reasoning && (
-                      <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
-                        <div className="flex items-center gap-2 mb-2 text-brand-400">
-                           <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
-                        </div>
-                        <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
-                           {reasoning}
-                        </div>
-                      </div>
-                   )}
-                   
-                   {!reasoning && (
-                       <div className="text-center py-12 text-slate-500">
-                          <p>Code generated successfully.</p>
-                       </div>
-                   )}
+          <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
+            <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
+                    {isMultiFile ? <FolderArchive size={24} /> : <Code size={24} />}
+                  </div>
+                  <div className="overflow-hidden">
+                    <h3 className="font-medium text-slate-200 truncate max-w-md">{resultDisplayName}{isMultiFile && '.zip'}</h3>
+                    {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                  </div>
                 </div>
-           </div>
+                <div className="flex gap-2">
+                  {!isMultiFile ? (
+                    <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
+                  ) : (
+                    <button className="btn-secondary text-sm" onClick={() => setShowProjectPreview(true)}>Preview Project</button>
+                  )}
+
+                  <a
+                    href={isMultiFile
+                      ? `${API_BASE_URL}/api/files/zip?path=${encodeURIComponent(result)}`
+                      : `${API_BASE_URL}/api/files/${result}`
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-secondary text-sm flex items-center gap-1"
+                  >
+                    <Download size={14} />
+                    {isMultiFile ? 'Download ZIP' : 'Download'}
+                  </a>
+                </div>
+              </div>
+
+              {/* Multi-file project explanation */}
+              {isMultiFile && (
+                <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                  <div className="flex items-start gap-3">
+                    <FolderArchive size={20} className="text-brand-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-300 font-medium mb-1">
+                        Multi-File Project ({generatedFiles.length} files)
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Click "Preview Project" above to browse the file structure.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Reasoning / Thinking Block */}
+              {reasoning && (
+                <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                  <div className="flex items-center gap-2 mb-2 text-brand-400">
+                    <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
+                  </div>
+                  <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                    {reasoning}
+                  </div>
+                </div>
+              )}
+
+              {!reasoning && (
+                <div className="text-center py-12 text-slate-500">
+                  <p>Code generated successfully.</p>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="text-center text-slate-500">
             <Code size={48} className="mx-auto mb-4 opacity-20" />
@@ -366,29 +366,29 @@ export function CodeGenerator() {
       </div>
 
       {currentJobId && (
-        <JobProgressModal 
-          jobId={currentJobId} 
+        <JobProgressModal
+          jobId={currentJobId}
           onClose={() => {
             handleCloseModal();
             if (result) {
               if (isMultiFile) setShowProjectPreview(true);
               else setIsPreviewOpen(true);
             }
-          }} 
+          }}
           onViewResult={handleViewResult}
         />
       )}
       {result && isMultiFile && (
         <ProjectPreviewModal
-            isOpen={showProjectPreview}
-            onClose={() => setShowProjectPreview(false)}
-            resultPath={result}
-            sidebarWidth={sidebarWidth}
-            onSidebarWidthChange={setSidebarWidth}
+          isOpen={showProjectPreview}
+          onClose={() => setShowProjectPreview(false)}
+          resultPath={result}
+          sidebarWidth={sidebarWidth}
+          onSidebarWidthChange={setSidebarWidth}
         />
       )}
       {result && !isMultiFile && (
-        <PreviewModal 
+        <PreviewModal
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
           filePath={result || ''}

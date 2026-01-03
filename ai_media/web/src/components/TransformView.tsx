@@ -351,7 +351,7 @@ export function TransformView() {
                 <select
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-primary-500"
+                  className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-primary-500"
                 >
                   <option value="instruct-pix2pix">InstructPix2Pix (Creative)</option>
                   <option value="qwen-image-edit">Qwen-Image-Edit (Base 2511, Precise)</option>

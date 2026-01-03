@@ -59,17 +59,17 @@ export function ArticleGenerator() {
       .then((data) => {
         if (data.text) {
           setAvailableModels(data.text);
-          
+
           // Find default model based on backend flag
           let initialModel = '';
           const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
-          
+
           if (defaultModel) {
-             initialModel = defaultModel.name;
+            initialModel = defaultModel.name;
           } else if (data.text.length > 0) {
-             initialModel = data.text[0].name;
+            initialModel = data.text[0].name;
           }
-          
+
           setModel(initialModel);
         }
       })
@@ -85,19 +85,19 @@ export function ArticleGenerator() {
     setError(null);
 
     try {
-      const response = await generateArticle({ 
-        topic, 
-        model: model || undefined, 
-        format, 
-        online, 
+      const response = await generateArticle({
+        topic,
+        model: model || undefined,
+        format,
+        online,
         length,
         research_iterations: researchIterations,
         max_images: maxImages,
         output_filename: filename || undefined
       });
-      
+
       setCurrentJobId(response.job_id);
-      
+
       addJob({
         job_id: response.job_id,
         type: 'article',
@@ -110,7 +110,7 @@ export function ArticleGenerator() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      
+
       // Monitoring handled by WebSocket via JobProgressModal
     } catch (err) {
       console.error('Generation failed:', err);
@@ -122,42 +122,42 @@ export function ArticleGenerator() {
   // Watch for job completion to show result inline after modal closes
   useEffect(() => {
     if (!currentJobId) return;
-    
+
     const unsubscribe = useAppStore.subscribe((state) => {
-        const job = state.jobs.find(j => j.job_id === currentJobId);
-        if (job) {
-            if (job.status === 'complete') {
-                setResult(job.result_path);
-                
-                // Calculate duration
-                if (job.generation_started_at && job.updated_at) {
-                    const start = new Date(job.generation_started_at).getTime();
-                    const end = new Date(job.updated_at).getTime();
-                    const seconds = Math.round((end - start) / 1000);
-                    setDuration(seconds > 0 ? seconds : 1);
-                } else if (job.created_at && job.updated_at) {
-                    // Fallback
-                    const start = new Date(job.created_at).getTime();
-                    const end = new Date(job.updated_at).getTime();
-                    setDuration(Math.round((end - start) / 1000));
-                }
-                
-                setReasoning(job.reasoning || null);
-                setIsLoading(false);
-            } else if (job.status === 'failed') {
-                setIsLoading(false);
-            } else if (job.status === 'cancelled') {
-                setIsLoading(false);
-                setError("Job cancelled.");
-                
-                // Auto-dismiss after 6 seconds
-                setTimeout(() => setError(null), 6000);
-            }
-        } else {
-            // Job not found in store (removed on cancellation)
-            setIsLoading(false);
-            setCurrentJobId(null);
+      const job = state.jobs.find(j => j.job_id === currentJobId);
+      if (job) {
+        if (job.status === 'complete') {
+          setResult(job.result_path);
+
+          // Calculate duration
+          if (job.generation_started_at && job.updated_at) {
+            const start = new Date(job.generation_started_at).getTime();
+            const end = new Date(job.updated_at).getTime();
+            const seconds = Math.round((end - start) / 1000);
+            setDuration(seconds > 0 ? seconds : 1);
+          } else if (job.created_at && job.updated_at) {
+            // Fallback
+            const start = new Date(job.created_at).getTime();
+            const end = new Date(job.updated_at).getTime();
+            setDuration(Math.round((end - start) / 1000));
+          }
+
+          setReasoning(job.reasoning || null);
+          setIsLoading(false);
+        } else if (job.status === 'failed') {
+          setIsLoading(false);
+        } else if (job.status === 'cancelled') {
+          setIsLoading(false);
+          setError("Job cancelled.");
+
+          // Auto-dismiss after 6 seconds
+          setTimeout(() => setError(null), 6000);
         }
+      } else {
+        // Job not found in store (removed on cancellation)
+        setIsLoading(false);
+        setCurrentJobId(null);
+      }
     });
 
     return () => unsubscribe();
@@ -169,7 +169,7 @@ export function ArticleGenerator() {
   };
 
   // Sort models based on fixed order, filtering valid ones from API
-  const sortedModels = MODEL_ORDER.filter(name => 
+  const sortedModels = MODEL_ORDER.filter(name =>
     availableModels.some(m => m.name === name)
   );
 
@@ -177,7 +177,7 @@ export function ArticleGenerator() {
 
   const handleViewResult = () => {
     setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
 
@@ -194,136 +194,136 @@ export function ArticleGenerator() {
 
         {/* Topic */}
         <div className="space-y-2">
-           <div className="flex items-center justify-between">
-             <label className="text-sm font-medium text-slate-400">Topic</label>
-             <RandomPrompt type="article" onPromptSelect={setTopic} />
-           </div>
-           <textarea
-             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
-             placeholder="The future of renewable energy technologies..."
-             value={topic}
-             onChange={(e) => setTopic(e.target.value)}
-           />
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-400">Topic</label>
+            <RandomPrompt type="article" onPromptSelect={setTopic} />
+          </div>
+          <textarea
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+            placeholder="The future of renewable energy technologies..."
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          />
         </div>
 
         {/* Filename */}
         <div className="space-y-2">
-           <label className="text-xs font-medium text-slate-400">
-              Filename (Optional)
-           </label>
-           <input
-             type="text"
-             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
-             placeholder="Auto-generated if empty"
-             value={filename}
-             onChange={(e) => setFilename(e.target.value)}
-           />
+          <label className="text-xs font-medium text-slate-400">
+            Filename (Optional)
+          </label>
+          <input
+            type="text"
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            placeholder="Auto-generated if empty"
+            value={filename}
+            onChange={(e) => setFilename(e.target.value)}
+          />
         </div>
 
         {/* Model Selector */}
         <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Model</label>
-            <select 
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
-              value={model} 
-              onChange={(e) => setModel(e.target.value)}
-            >
-               {!model && <option value="">Loading...</option>}
-               {sortedModels.map((name) => {
-                const info = MODEL_DISPLAY_INFO[name];
-                return (
-                  <option key={name} value={name}>
-                    {info ? `${info.label} ${info.vram}` : name}
-                  </option>
-                );
-              })}
-            </select>
-            {model === 'deepseek-r1-llama-70b' && (
-              <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
-                <AlertTriangle size={12} />
-                <span>Requires 40GB+ VRAM</span>
-              </div>
-            )}
+          <label className="text-sm font-medium text-slate-400">Model</label>
+          <select
+            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {!model && <option value="">Loading...</option>}
+            {sortedModels.map((name) => {
+              const info = MODEL_DISPLAY_INFO[name];
+              return (
+                <option key={name} value={name}>
+                  {info ? `${info.label} ${info.vram}` : name}
+                </option>
+              );
+            })}
+          </select>
+          {model === 'deepseek-r1-llama-70b' && (
+            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+              <AlertTriangle size={12} />
+              <span>Requires 40GB+ VRAM</span>
+            </div>
+          )}
         </div>
 
         {/* Format & Length */}
         <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-400">Format</label>
-              <select 
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
-                value={format} 
-                onChange={(e) => setFormat(e.target.value)}
-              >
-                <option value="md">Markdown</option>
-                <option value="html">HTML</option>
-                <option value="pdf">PDF</option>
-                <option value="docx">Word</option>
-                <option value="txt">Text</option>
-                <option value="json">JSON</option>
-              </select>
-            </div>
-             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-400">Length</label>
-              <select 
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500" 
-                value={length} 
-                onChange={(e) => setLength(e.target.value)}
-              >
-                <option value="quick">Quick</option>
-                <option value="standard">Standard</option>
-                <option value="detailed">Detailed</option>
-              </select>
-            </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Format</label>
+            <select
+              className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+            >
+              <option value="md">Markdown</option>
+              <option value="html">HTML</option>
+              <option value="pdf">PDF</option>
+              <option value="docx">Word</option>
+              <option value="txt">Text</option>
+              <option value="json">JSON</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-400">Length</label>
+            <select
+              className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+              value={length}
+              onChange={(e) => setLength(e.target.value)}
+            >
+              <option value="quick">Quick</option>
+              <option value="standard">Standard</option>
+              <option value="detailed">Detailed</option>
+            </select>
+          </div>
         </div>
 
         {/* Online Research */}
-         <div className="space-y-3 pt-2 border-t border-slate-800">
-            <label className="flex items-center gap-2 cursor-pointer">
-               <input 
-                 type="checkbox" 
-                 className="checkbox checkbox-xs checkbox-primary"
-                 checked={online}
-                 onChange={(e) => setOnline(e.target.checked)}
-               />
-               <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                 <Globe size={14} className="text-brand-400" />
-                 Online Research
-               </span>
-            </label>
+        <div className="space-y-3 pt-2 border-t border-slate-800">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-xs checkbox-primary"
+              checked={online}
+              onChange={(e) => setOnline(e.target.checked)}
+            />
+            <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
+              <Globe size={14} className="text-brand-400" />
+              Online Research
+            </span>
+          </label>
 
-            {online && (
-              <div className="grid grid-cols-2 gap-4 pl-6">
-                <div>
-                  <label className="text-xs text-slate-400">Sources</label>
-                  <NumberInput
-                    value={researchIterations}
-                    onChange={setResearchIterations}
-                    min={1}
-                    max={10}
-                    className="w-full h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400">Max Images</label>
-                  <NumberInput
-                    value={maxImages}
-                    onChange={setMaxImages}
-                    min={0}
-                    max={20}
-                    className="w-full h-8 text-sm"
-                  />
-                </div>
+          {online && (
+            <div className="grid grid-cols-2 gap-4 pl-6">
+              <div>
+                <label className="text-xs text-slate-400">Sources</label>
+                <NumberInput
+                  value={researchIterations}
+                  onChange={setResearchIterations}
+                  min={1}
+                  max={10}
+                  className="w-full h-8 text-sm"
+                />
               </div>
-            )}
+              <div>
+                <label className="text-xs text-slate-400">Max Images</label>
+                <NumberInput
+                  value={maxImages}
+                  onChange={setMaxImages}
+                  min={0}
+                  max={20}
+                  className="w-full h-8 text-sm"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
         <ValidationTooltip error={!topic.trim() ? "Please enter a topic" : null} className="w-full mt-auto pt-4">
-          <button 
-            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all" 
-            onClick={handleGenerate} 
+          <button
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            onClick={handleGenerate}
             disabled={isLoading || !topic.trim()}
           >
             {isLoading ? (<><Loader2 className="animate-spin" size={18} /> Generating...</>) : (<><FileText size={18} /> Generate Article</>)}
@@ -334,43 +334,43 @@ export function ArticleGenerator() {
       {/* Main Result Area */}
       <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
         {result ? (
-           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
-                <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
-                   <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
-                      <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
-                            <FileText size={24} />
-                         </div>
-                         <div>
-                            <h3 className="font-medium text-slate-200">{result?.split('/').pop()}</h3>
-                            {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
-                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                         <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
-                         <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
-                      </div>
-                   </div>
-
-                   {/* Reasoning / Thinking Block */}
-                   {reasoning && (
-                      <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
-                        <div className="flex items-center gap-2 mb-2 text-brand-400">
-                           <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
-                        </div>
-                        <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
-                           {reasoning}
-                        </div>
-                      </div>
-                   )}
-                   
-                   {!reasoning && (
-                       <div className="text-center py-12 text-slate-500">
-                          <p>Article generated successfully.</p>
-                       </div>
-                   )}
+          <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
+            <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-slate-200">{result?.split('/').pop()}</h3>
+                    {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                  </div>
                 </div>
-           </div>
+                <div className="flex gap-2">
+                  <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
+                  <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+                </div>
+              </div>
+
+              {/* Reasoning / Thinking Block */}
+              {reasoning && (
+                <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                  <div className="flex items-center gap-2 mb-2 text-brand-400">
+                    <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
+                  </div>
+                  <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                    {reasoning}
+                  </div>
+                </div>
+              )}
+
+              {!reasoning && (
+                <div className="text-center py-12 text-slate-500">
+                  <p>Article generated successfully.</p>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="text-center text-slate-500">
             <FileText size={48} className="mx-auto mb-4 opacity-20" />
@@ -381,17 +381,17 @@ export function ArticleGenerator() {
       </div>
 
       {currentJobId && (
-        <JobProgressModal 
-          jobId={currentJobId} 
+        <JobProgressModal
+          jobId={currentJobId}
           onClose={() => {
             handleCloseModal();
             if (result) setIsPreviewOpen(true);
-          }} 
+          }}
           onViewResult={handleViewResult}
         />
       )}
       {result && (
-        <PreviewModal 
+        <PreviewModal
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
           filePath={result}

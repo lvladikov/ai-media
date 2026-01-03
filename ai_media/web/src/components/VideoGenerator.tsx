@@ -211,7 +211,7 @@ export function VideoGenerator() {
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-400">Model</label>
           <select
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
