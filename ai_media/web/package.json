@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "dev:client": "vite",
@@ -22,7 +25,8 @@
     "electron:build:linux:x64": "npm run --prefix packages/electron build:linux:x64",
     "electron:build:linux:arm64": "npm run --prefix packages/electron build:linux:arm64",
     "electron:build:linux:all": "npm run --prefix packages/electron build:linux:all",
-    "electron:build:all": "npm run --prefix packages/electron build:all"
+    "electron:build:all": "npm run --prefix packages/electron build:all",
+    "version:sync": "npm version patch --workspaces --no-git-tag-version"
   },
   "dependencies": {
     "@types/dom-to-image": "^2.6.7",

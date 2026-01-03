@@ -81,6 +81,18 @@ npm run dev:server   # Python server only
 npm run dev          # Alias for dev:client
 ```
 
+## Monorepo Setup
+
+This project uses **npm workspaces** for unified dependency management. A single `npm install` installs dependencies for both the web client and electron package.
+
+### Version Management
+
+Bump versions across all packages simultaneously:
+
+```bash
+npm run version:sync   # Bumps patch version in all workspace packages
+```
+
 ## Desktop Application (Electron)
 
 The desktop app bundles the web client for native experience on:
@@ -166,15 +178,71 @@ If you are unsure where to find these paths, use these commands in your terminal
 
 ### Electron Deployment
 
-When building and distributing the Electron application, `config.json` is **not bundled** inside the app to keep the package small and allow for local configuration.
+When building the Electron application, the following are **bundled inside** the app:
+- ✅ Web client (React app)
+- ✅ Python server source (`ai-media.py` + `ai_media/`)
+- ✅ `requirements.txt` for venv setup
+
+The following are **not bundled** (external to the app):
+- `config.json` - User configuration
+- `.venv/` - Python virtual environment
+- Models - Downloaded to `hf_home` on first use
+
+#### Prerequisites
+
+The target system must have:
+- **Python 3.10+** available on PATH
+- **ffmpeg** available on PATH
+
+#### Setup Steps
+
+1. **Place the app** in your desired folder
+
+2. **Create a virtual environment** next to the executable:
+   ```bash
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\pip install -r resources\requirements.txt
+   
+   # macOS/Linux
+   python -m venv .venv
+   .venv/bin/pip install -r resources/requirements.txt
+   ```
+
+3. **Create `config.json`** next to the executable:
+   ```json
+   {
+     "paths": {
+       "hf_home": "~/.cache/huggingface",
+       "media_output": "./output"
+     },
+     "server": {
+       "host": "127.0.0.1",
+       "port": 8000,
+       "auto_start": true
+     }
+   }
+   ```
+
+4. **Run the app** - it will automatically start the bundled Python server
+
+#### Production Folder Structure
+
+This is where the produced Windows/Linux/Mac app will be placed (in a folder, for example MyFolder/ with the below structure):
+
+```
+MyFolder/
+├── AI-Media.exe          # Built app (bundled source inside)
+├── .venv/                # Python virtual environment
+├── config.json           # Configuration
+└── media_output/         # Generated media (auto-created on first run)
+```
 
 > [!TIP]
-> **File Placement**: For the built application to function correctly, `config.json` must be placed in the **same directory** as the application executable:
-> - **macOS**: Next to the **AI-Media.app** bundle (one level above the `.app` folder).
+> **File Placement**: `config.json` must be placed in the **same directory** as the executable:
+> - **macOS**: Next to the **AI-Media.app** bundle.
 > - **Windows**: Next to **AI-Media.exe**.
 > - **Linux**: Next to the AppImage or binary.
-
-If `config.json` is missing on the first run, the application will attempt to guide you through a setup wizard to generate it.
 
 ## Static Web Build
 

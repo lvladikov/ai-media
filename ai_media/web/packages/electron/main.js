@@ -57,16 +57,44 @@ function createWindow() {
 }
 
 async function startPythonServer(config) {
-  if (!config.paths.python_venv || !config.paths.ai_media) {
-    console.log('Python paths not configured, skipping server start');
+  let pythonPath, serverScript, serverCwd;
+
+  if (app.isPackaged) {
+    // Production: use bundled server source
+    const venvPath = config.paths.python_venv || path.join(path.dirname(app.getPath('exe')), '.venv');
+
+    if (process.platform === 'win32') {
+      pythonPath = path.join(venvPath, 'Scripts', 'python.exe');
+    } else {
+      pythonPath = path.join(venvPath, 'bin', 'python');
+    }
+
+    serverScript = path.join(process.resourcesPath, 'server', 'ai-media.py');
+    serverCwd = path.join(process.resourcesPath, 'server');
+  } else {
+    // Development: use config paths
+    if (!config.paths.python_venv || !config.paths.ai_media) {
+      console.log('Python paths not configured, skipping server start');
+      return;
+    }
+
+    if (process.platform === 'win32') {
+      pythonPath = path.join(config.paths.python_venv, 'Scripts', 'python.exe');
+    } else {
+      pythonPath = path.join(config.paths.python_venv, 'bin', 'python');
+    }
+
+    serverScript = path.join(config.paths.ai_media, 'ai-media.py');
+    serverCwd = config.paths.ai_media;
+  }
+
+  if (!fs.existsSync(pythonPath)) {
+    console.error('Python not found at:', pythonPath);
     return;
   }
 
-  const pythonPath = path.join(config.paths.python_venv, 'bin', 'python');
-  const serverScript = path.join(config.paths.ai_media, 'ai-media.py');
-
-  if (!fs.existsSync(pythonPath) || !fs.existsSync(serverScript)) {
-    console.error('Python or server script not found');
+  if (!fs.existsSync(serverScript)) {
+    console.error('Server script not found at:', serverScript);
     return;
   }
 
@@ -74,7 +102,7 @@ async function startPythonServer(config) {
   const port = config.server?.port || 8000;
 
   serverProcess = spawn(pythonPath, [serverScript, '--serve-no-client', '--host', host, '--port', String(port)], {
-    cwd: config.paths.ai_media,
+    cwd: serverCwd,
     env: {
       ...process.env,
       HF_HOME: config.paths.hf_home || '',
@@ -129,11 +157,35 @@ ipcMain.handle('select-directory', async () => {
 // App lifecycle
 app.whenReady().then(async () => {
   const config = loadConfig();
-  
+
   // Check if first run (config doesn't exist or is incomplete)
   if (!config.paths.python_venv || !config.paths.ai_media) {
     // Will show setup wizard in React app
     console.log('First run - setup wizard will be shown');
+  }
+
+  // Ensure media_output directory exists
+  if (config.paths.media_output) {
+    let mediaOutputPath = config.paths.media_output;
+
+    // Resolve relative paths based on app location
+    if (!path.isAbsolute(mediaOutputPath)) {
+      if (app.isPackaged) {
+        mediaOutputPath = path.join(path.dirname(app.getPath('exe')), mediaOutputPath);
+      } else {
+        // Dev: resolve relative to project root
+        mediaOutputPath = path.resolve(mediaOutputPath);
+      }
+    }
+
+    if (!fs.existsSync(mediaOutputPath)) {
+      try {
+        fs.mkdirSync(mediaOutputPath, { recursive: true });
+        console.log('Created media_output directory:', mediaOutputPath);
+      } catch (error) {
+        console.error('Failed to create media_output directory:', error);
+      }
+    }
   }
 
   // Auto-start server if configured
