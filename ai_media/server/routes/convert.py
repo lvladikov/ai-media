@@ -37,6 +37,8 @@ async def convert_media(request: ConvertRequest):
             request.input_path,
             request.target_format,
             output_path,
+            request.ocr_enabled,
+            request.ocr_model,
         ),
     )
     

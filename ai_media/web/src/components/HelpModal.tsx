@@ -421,15 +421,37 @@ function HelpMultimedia() {
 
        <SectionTitle icon={<FileType size={20}/>}>Document Conversion Matrix</SectionTitle>
        <Table
-        headers={['From ▼ | To ▶', 'MD', 'HTML', 'PDF', 'DOCX', 'TXT', 'JSON']}
+        headers={['From ▼ | To ▶', 'MD', 'HTML', 'PDF', 'DOCX', 'TXT', 'JSON', 'Image']}
         rows={[
-          ['MD', '-', '✅', '✅', '✅', '✅', '✅'],
-          ['HTML', '✅', '-', '✅', '✅', '✅', '✅'],
-          ['PDF', '⚠️', '⚠️', '-', '⚠️', '✅', '⚠️'],
-          ['DOCX', '✅', '✅', '✅', '-', '✅', '✅']
+          ['MD', '-', '✅', '✅', '✅', '✅', '✅', '✅'],
+          ['HTML', '✅', '-', '✅', '✅', '✅', '✅', '✅'],
+          ['PDF', '⚠️', '⚠️', '-', '⚠️', '✅', '⚠️', '✅'],
+          ['DOCX', '✅', '✅', '✅', '-', '✅', '✅', '✅'],
+          ['Image', '📷', '📷', '📷', '📷', '📷', '📷', '📷']
         ]}
        />
-       <p className="text-xs text-slate-500">⚠️ = Text extraction only (formatting/images may be lost).</p>
+       <p className="text-xs text-slate-500 mt-2">
+          📷 = <strong>OCR (Optical Character Recognition)</strong>: Extract text from images/scans.
+       </p>
+       <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800 mt-2">
+         <h4 className="text-xs font-bold text-slate-200 mb-2 uppercase tracking-tight">OCR Model Options</h4>
+         <div className="space-y-3">
+           <div>
+             <div className="flex justify-between items-center mb-1">
+               <span className="text-xs font-bold text-white">Qwen-VL (Default)</span>
+               <span className="text-[10px] text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">PRECISE</span>
+             </div>
+             <p className="text-[11px] text-slate-400">~30GB RAM usage. High-precision extraction of code, paths, and 🐍 emojis.</p>
+           </div>
+           <div className="pt-2 border-t border-slate-800">
+             <div className="flex justify-between items-center mb-1">
+               <span className="text-xs font-bold text-white">Florence-2 (Fast Choice)</span>
+               <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded border border-green-400/20">FAST</span>
+             </div>
+             <p className="text-[11px] text-slate-400 italic">Lightweight (~1.5GB RAM). Best for quick scans and general text drafts.</p>
+           </div>
+         </div>
+       </div>
     </div>
   )
 }

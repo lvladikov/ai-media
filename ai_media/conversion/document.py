@@ -14,7 +14,7 @@ from ..utils.interaction import check_overwrite
 SUPPORTED_FORMATS = ["md", "html", "pdf", "docx", "rtf", "txt", "json", "xhtml"]
 
 
-def _read_to_markdown(input_path, input_format):
+def _read_to_markdown(input_path, input_format, ocr_model="florence"):
     """Read input file and convert to Markdown."""
     markdown_content = ""
     
@@ -74,9 +74,77 @@ def _read_to_markdown(input_path, input_format):
             markdown_content = "\n\n".join(text_parts)
             
             if not markdown_content.strip():
-                raise ValueError("No text found in PDF. The file might be a scanned image (OCR not supported).")
+                print(f"   ⚠️ No text layer found. Attempting OCR ({ocr_model})...")
+                try:
+                    from .ocr import image_to_text
+                    from PIL import Image
+                    import io
+                    import tempfile
+                    
+                    ocr_texts = []
+                    
+                    # Extract images from each page
+                    for page_num, page in enumerate(reader.pages):
+                        page_images = []
+                        
+                        # Try to extract images from the page
+                        if "/XObject" in page["/Resources"]:
+                            x_objects = page["/Resources"]["/XObject"].get_object()
+                            for obj_name in x_objects:
+                                obj = x_objects[obj_name]
+                                if obj["/Subtype"] == "/Image":
+                                    try:
+                                        # Get image data
+                                        if "/Filter" in obj:
+                                            if obj["/Filter"] == "/DCTDecode":
+                                                # JPEG
+                                                img_data = obj._data
+                                                img = Image.open(io.BytesIO(img_data))
+                                            elif obj["/Filter"] == "/FlateDecode":
+                                                # Raw image data
+                                                width = obj["/Width"]
+                                                height = obj["/Height"]
+                                                color_space = obj.get("/ColorSpace", "/DeviceRGB")
+                                                mode = "RGB" if "RGB" in str(color_space) else "L"
+                                                img = Image.frombytes(mode, (width, height), obj._data)
+                                            else:
+                                                continue
+                                            page_images.append(img)
+                                    except Exception:
+                                        continue
+                        
+                        if page_images:
+                            # OCR each image from the page
+                            for img_idx, img in enumerate(page_images):
+                                print(f"      Scanning page {page_num+1}, image {img_idx+1}...")
+                                
+                                # Resize large images to prevent GPU OOM
+                                max_dim = 2048
+                                if img.width > max_dim or img.height > max_dim:
+                                    ratio = min(max_dim / img.width, max_dim / img.height)
+                                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+                                    print(f"         (Resized to {new_size[0]}x{new_size[1]} for OCR)")
+                                
+                                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                                    # Convert to RGB if needed (JPEG doesn't support RGBA)
+                                    if img.mode in ('RGBA', 'P'):
+                                        img = img.convert('RGB')
+                                    img.save(tmp.name, "JPEG", quality=90)
+                                    text = image_to_text(tmp.name, model_type=ocr_model)
+                                    if text:
+                                        ocr_texts.append(text)
+                                    os.unlink(tmp.name)
+                    
+                    if ocr_texts:
+                        markdown_content = "\n\n".join(ocr_texts)
+                    else:
+                        raise ValueError("No extractable images found in PDF for OCR")
+                        
+                except Exception as e:
+                    raise ValueError(f"No text found and OCR failed: {e}")
                 
-            print("   ⚠️ PDF conversion extracts text only (formatting/images lost)")
+            print("   ⚠️ PDF conversion extract text (native or OCR)")
         except ImportError:
             raise ImportError("pypdf required for PDF reading. Install: pip install pypdf")
     
@@ -239,26 +307,28 @@ def _write_from_markdown(markdown_content, output_path, output_format):
             f.write('\n'.join(rtf_lines))
 
 
-def convert_document(input_path, target):
-    """Convert document format using MD as intermediate hub.
+def convert_document(input_path, output_path, target_format=None, ocr_enabled=False, ocr_model="qwen-vl"):
+    """
+    Convert a document or image to another format.
     
     Args:
-        input_path: Source document file
-        target: Output path or format
+        input_path (str): Path to input file
+        output_path (str): Path to output file
+        target_format (str, optional): Target format extension
+        ocr_enabled (bool): Whether to use OCR for images/scanned PDFs
+        ocr_model (str): OCR model to use ('florence', 'qwen-vl')
         
-    Supported formats: md, html, pdf, docx, rtf, txt, json
+    Returns:
+        bool: True if successful
     """
-    # Determine output path and format
-    target = target.strip().lower()
-    if '/' in target or '\\' in target:
-        output_path = target
-        output_format = Path(target).suffix.lstrip('.').lower()
-    elif target.startswith('.'):
-        output_path = f"{Path(input_path).stem}{target}"
-        output_format = target.lstrip('.').lower()
+    # Determine output format
+    if target_format:
+        output_format = target_format.strip().lower()
+    elif output_path and ('/' not in output_path and '\\' not in output_path and len(output_path) <= 6):
+        # output_path is just a format string like "md" or "pdf"
+        output_format = output_path.strip().lstrip('.').lower()
     else:
-        output_path = f"{Path(input_path).stem}.{target}"
-        output_format = target.lower()
+        output_format = Path(output_path).suffix.lstrip('.').lower()
     
     if output_format not in SUPPORTED_FORMATS:
         print(f"❌ Unsupported output format: {output_format}")
@@ -267,7 +337,15 @@ def convert_document(input_path, target):
     
     # Determine input format
     input_format = Path(input_path).suffix.lstrip('.').lower()
-    if input_format not in SUPPORTED_FORMATS:
+    
+    # Allow image formats if OCR is enabled
+    image_exts = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'gif']
+    if input_format in image_exts:
+        ocr_enabled = True # Use OCR for images
+    
+    if input_format in image_exts and ocr_enabled:
+        pass # Valid for OCR
+    elif input_format not in SUPPORTED_FORMATS:
         print(f"❌ Unsupported input format: {input_format}")
         print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
         return False
@@ -275,13 +353,54 @@ def convert_document(input_path, target):
     print(f"📄 Converting Document: {input_path}")
     print(f"   {input_format.upper()} → {output_format.upper()}")
     
+    # Generate output path if only format string was provided
+    if output_path and ('/' not in output_path and '\\' not in output_path and len(output_path) <= 6):
+        output_path = f"{Path(input_path).stem}.{output_format}"
+    
     should_write, output_path, _, _ = check_overwrite(output_path, always_overwrite=os.environ.get("AI_MEDIA_FORCE") == "1")
     if not should_write:
         return False
     
     try:
         # Step 1: Read to Markdown
-        markdown_content = _read_to_markdown(input_path, input_format)
+        # Check if input is an image and OCR is enabled
+        image_exts = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'gif']
+        if input_format in image_exts and ocr_enabled:
+            print(f"   📷 Image input detected. Using OCR ({ocr_model})...")
+            from .ocr import image_to_text
+            from PIL import Image
+            import tempfile
+            
+            # Temporarily disable PIL's decompression bomb limit for large images
+            # (we'll resize them down anyway)
+            original_max = Image.MAX_IMAGE_PIXELS
+            Image.MAX_IMAGE_PIXELS = None
+            
+            try:
+                # Load and resize if needed to prevent GPU OOM
+                img = Image.open(input_path)
+                max_dim = 2048
+                needs_resize = img.width > max_dim or img.height > max_dim
+                
+                if needs_resize:
+                    ratio = min(max_dim / img.width, max_dim / img.height)
+                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+                    print(f"      (Resized to {new_size[0]}x{new_size[1]} for OCR)")
+                    
+                    # Save resized image to temp file
+                    if img.mode in ('RGBA', 'P'):
+                        img = img.convert('RGB')
+                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                        img.save(tmp.name, "JPEG", quality=90)
+                        markdown_content = image_to_text(tmp.name, model_type=ocr_model)
+                        os.unlink(tmp.name)
+                else:
+                    markdown_content = image_to_text(input_path, model_type=ocr_model)
+            finally:
+                Image.MAX_IMAGE_PIXELS = original_max
+        else:
+            markdown_content = _read_to_markdown(input_path, input_format, ocr_model=ocr_model)
         
         # Determine output format early for writing
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

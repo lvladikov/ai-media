@@ -133,6 +133,8 @@ class ConvertRequest(BaseModel):
     """Media conversion request."""
     input_path: str = Field(..., description="Path to input file")
     target_format: str = Field(..., description="Target format (e.g., 'mp4', 'gif', 'pdf')")
+    ocr_enabled: bool = Field(False, description="Enable OCR for images/scanned PDFs")
+    ocr_model: str = Field("qwen-vl", description="OCR model to use ('qwen-vl', 'florence')")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
 
 

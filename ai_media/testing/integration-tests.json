@@ -1797,6 +1797,28 @@
         "Research"
       ],
       "description": "Test interactive menu jump to research (deep web search)"
+    },
+    {
+      "name": "Document - OCR (Florence-2)",
+      "command": "-cd ai_media/testing/data/inputs/sample.jpg -cdt txt -om florence --force",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/sample.txt"
+      ],
+      "description": "Extract text from image using Florence-2 (Default)"
+    },
+    {
+      "name": "Document - OCR (Qwen-VL)",
+      "command": "-cd ai_media/testing/data/inputs/sample.jpg -cdt txt -om qwen-vl --force",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/sample_qwen.txt"
+      ],
+      "description": "Extract text from image using Qwen-VL (High Precision)"
     }
   ]
 }

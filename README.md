@@ -1,6 +1,6 @@
 # AI-Media
 
-Generate images, videos, and audio locally using state-of-the-art open source AI models. Write articles, chat interactively, and generate code—all powered by local LLMs running entirely on your machine. Optionally enable live web search for deep research and real-time context in chat. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert media and documents between formats instantly.
+Generate images, videos, and audio locally using state-of-the-art open source AI models. Write articles, chat interactively, and generate code—all powered by local LLMs running entirely on your machine. Optionally enable live web search for deep research and real-time context in chat. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert media and documents between formats instantly, including **extracting text from images using OCR**.
 
 AI-Media provides **three ways to interact** with these powerful local models:
 - **CLI** — Direct command-line execution for scripting and automation
@@ -297,9 +297,6 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 🛡️ **Safety & Resources** | [docs/safety-and-resources.md](docs/safety-and-resources.md) |
 
 
-
-
-
 ## Dependencies
  
 This project uses the following open-source libraries:
@@ -355,7 +352,6 @@ This project uses the following open-source libraries:
 - **Qwen-Image-Edit** (Image editing) - [Qwen/Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)
 - **Qwen-Image-Edit-Lightning** (Fast 2512 Edit) - [lightx2v/Qwen-Image-Edit-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2512-Lightning)
 - **Qwen-Coder** (Code Generation) - [Qwen/Qwen2.5-Coder-32B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct)
-- **Qwen3-VL** (Vision Language) - [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct)
 - **MusicGen** by Meta AI - [facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
 - **AudioLDM 2** by Haohe Liu etc. - [haoheliu/AudioLDM2](https://github.com/haoheliu/AudioLDM2)
 - **Stable Audio Open** by Stability AI - [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0)
@@ -370,7 +366,8 @@ This project uses the following open-source libraries:
 - **Stable Video Diffusion** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
 - **Stable Diffusion x2 Latent Upscaler** by Stability AI - [stabilityai/sd-x2-latent-upscaler](https://huggingface.co/stabilityai/sd-x2-latent-upscaler)
 - **Stable Diffusion x4 Upscaler** by Stability AI - [stabilityai/stable-diffusion-x4-upscaler](https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler)
-- **Florence-2** by Microsoft - [microsoft/Florence-2-large](https://huggingface.co/microsoft/Florence-2-large)
+- **Qwen3-VL** (High Precision OCR & Vision) - [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct)
+- **Florence-2** by Microsoft (OCR & Captioning) - [microsoft/Florence-2-large](https://huggingface.co/microsoft/Florence-2-large)
 - **BLIP** by Salesforce - [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large)
 - **InstructPix2Pix** by Tim Brooks et al. - [timbrooks/instruct-pix2pix](https://github.com/timathy/instruct-pix2pix)
 - **RMBG-1.4** by BRIA AI - [briaai/RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4)

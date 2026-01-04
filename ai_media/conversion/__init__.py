@@ -8,6 +8,7 @@ Contains modules for converting media and document formats:
 
 from .media import convert_image, convert_image_ffmpeg, convert_video, convert_audio
 from .document import convert_document, SUPPORTED_FORMATS
+from .ocr import image_to_text
 
 __all__ = [
     'convert_image',

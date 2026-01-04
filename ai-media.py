@@ -420,6 +420,7 @@ Examples:
   python ai-media.py -ci photo.gif -cit png
   python ai-media.py -cv clip.mov -cvt mp4
   python ai-media.py -ca song.wav -cat mp3
+  python ai-media.py -cd image.jpg -cdt txt (Extract Text / OCR)
   
   -- AI Upscaling --
   python ai-media.py -ui input.jpg -uf 2x
@@ -486,9 +487,9 @@ Supported Models (Code : Download Size | Description):
     - qwen3-coder-30b            : ~10GB | MoE (3.3B active). Efficient SOTA.
 
   Description Generation:
-    - florence (default)         : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene.
-    - blip                       : ~1GB   | Simple, concise captions. Faster but less detailed.
-    - qwen-vl                    : ~16GB  | Qwen3-VL 8B. Vision-Language captioning.
+    - florence (default)         : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene. Fast.
+    - qwen-vl                    : ~30GB  | Qwen3-VL 8B. High precision OCR & captioning.
+    - blip                       : ~1GB   | Simple, concise captions. Faster but less detailed. (Not for OCR)
     - qwen3-vl-8b                : ~16GB  | Qwen3-VL 8B (explicit).
     - qwen3-vl-4b                : ~8GB   | Qwen3-VL 4B. Balanced.
     - qwen3-vl-2b                : ~4GB   | Qwen3-VL 2B. Lightweight.
@@ -600,8 +601,10 @@ Supported Models (Code : Download Size | Description):
     
     # Document Conversion
     doc_conv_group = parser.add_argument_group("Document Conversion Options")
-    doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document format (e.g., report.docx->pdf)")
-    doc_conv_group.add_argument("-cdt", "--convert-document-to", metavar="FMT", help="Output format: md, html, pdf, docx, rtf, txt, json")
+    doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document (e.g., docx->pdf) or extract text from image (ocr).")
+    doc_conv_group.add_argument("-cdt", "--convert-document-to", metavar="FMT", help="Output format: md, html, pdf, docx, rtf, txt, json. Use 'txt' or 'md' for images to trigger OCR.")
+    doc_conv_group.add_argument("-om", "--ocr-model", default="qwen-vl", choices=["florence", "qwen-vl"],
+                               help="OCR Model: 'qwen-vl' (default, high precision) or 'florence' (fast, ~1.5GB RAM).")
     
     # AI Upscaling (Standalone Mode)
     upscale_mode_group = parser.add_argument_group("AI Upscaling Options")

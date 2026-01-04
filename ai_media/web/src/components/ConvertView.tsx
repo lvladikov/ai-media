@@ -9,6 +9,12 @@ import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { formatDuration } from '../utils/formatTime';
 
+// Check if a file extension can't be previewed in browsers
+const isNonPreviewableFormat = (filename: string): boolean => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ['tiff', 'tif', 'psd', 'raw'].includes(ext || '');
+};
+
 export function ConvertView() {
   const { addJob } = useAppStore();
   const [file, setFile] = useState<File | null>(null);
@@ -22,6 +28,7 @@ export function ConvertView() {
   const [genDuration, setGenDuration] = useState<number | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
+  const [ocrModel, setOcrModel] = useState('qwen-vl');
 
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -31,8 +38,8 @@ export function ConvertView() {
     const ext = file.name.split('.').pop()?.toLowerCase();
 
     // Logic mirroring server capabilities
-    if (['jpg', 'jpeg', 'png', 'webp', 'bmp'].includes(ext || '')) {
-      return ['png', 'jpg', 'webp'];
+    if (['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'tiff', 'tif'].includes(ext || '')) {
+      return ['png', 'jpg', 'webp', 'gif', 'tiff', 'bmp', 'txt (OCR)', 'md (OCR)', 'pdf (OCR)', 'docx (OCR)', 'html (OCR)'];
     }
     if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext || '')) {
       return ['mp4', 'gif', 'mov', 'webm'];
@@ -50,7 +57,7 @@ export function ConvertView() {
       return ['md', 'html', 'pdf', 'txt'];
     }
     if (ext === 'pdf') {
-      return ['md', 'txt']; // Extraction only usually
+      return ['md', 'txt', 'docx', 'html', 'rtf', 'json'];
     }
 
     return [];
@@ -61,8 +68,8 @@ export function ConvertView() {
       setTargetFormat(''); // Reset format selection
       setResult(null); // Reset previous result
 
-      // Create local preview if it's an image
-      if (selectedFile.type.startsWith('image/')) {
+      // Create local preview if it's an image and not a non-previewable format
+      if (selectedFile.type.startsWith('image/') && !isNonPreviewableFormat(selectedFile.name)) {
         if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
         setInputPreviewUrl(URL.createObjectURL(selectedFile));
       } else {
@@ -107,7 +114,9 @@ export function ConvertView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input_path: serverFilePath,
-          target_format: targetFormat,
+          target_format: targetFormat.includes('(OCR)') ? targetFormat.split(' ')[0] : targetFormat,
+          ocr_enabled: targetFormat.includes('(OCR)'),
+          ocr_model: ocrModel,
         }),
       });
 
@@ -200,6 +209,13 @@ export function ConvertView() {
           <p className="text-xs text-slate-500">Convert images, video, audio, and documents</p>
         </div>
 
+        {/* Info Block */}
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <p className="text-[11px] leading-relaxed text-blue-300">
+            <span className="font-bold">💡 Pro Tip:</span> You can also upload <span className="text-white font-medium">Images</span> or <span className="text-white font-medium">Scanned PDFs</span> to extract text using <span className="text-green-400 font-bold">High-Precision OCR</span>.
+          </p>
+        </div>
+
         {/* File Upload */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-400">Input File</label>
@@ -216,13 +232,18 @@ export function ConvertView() {
                <>
                  {file ? (
                    <div className={`flex flex-col items-center justify-center gap-2 ${isDragging ? 'opacity-50' : ''}`}>
-                      {inputPreviewUrl ? (
+                       {inputPreviewUrl ? (
                         <div className="relative h-20 w-auto min-w-[5rem] mb-1 rounded overflow-hidden border border-slate-700 bg-slate-950 shadow-sm group-hover:border-slate-500 transition-colors">
                            <img src={inputPreviewUrl} alt="Preview" className="h-full w-full object-contain" />
                         </div>
                       ) : (
-                         <div className="w-10 h-10 bg-slate-800 rounded flex items-center justify-center text-primary-400 mb-1">
-                           <FileType size={20} />
+                         <div className="flex flex-col items-center gap-1">
+                            <div className="w-10 h-10 bg-slate-800 rounded flex items-center justify-center text-primary-400 mb-1">
+                              <FileType size={20} />
+                            </div>
+                            {file && isNonPreviewableFormat(file.name) && (
+                              <span className="text-[9px] text-slate-500 font-mono uppercase bg-slate-950 px-1 py-0.5 rounded border border-slate-800 mt.05">No Preview</span>
+                            )}
                          </div>
                       )}
                      <div className="text-center w-full">
@@ -279,6 +300,45 @@ export function ConvertView() {
             </div>
           )}
         </div>
+        
+        {/* OCR Model Selection */}
+        {targetFormat.includes('(OCR)') && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            <label className="text-sm font-medium text-slate-400 flex justify-between items-center">
+              OCR Model
+              <span className="text-[10px] text-slate-500 font-normal italic">
+                {ocrModel === 'qwen-vl' ? '~30GB RAM usage' : 'Fast & lightweight'}
+              </span>
+            </label>
+            <div className="flex gap-2 p-1 bg-slate-950 rounded-lg border border-slate-800">
+              <button
+                onClick={() => setOcrModel('qwen-vl')}
+                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${
+                  ocrModel === 'qwen-vl'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Qwen-VL
+              </button>
+              <button
+                onClick={() => setOcrModel('florence')}
+                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${
+                  ocrModel === 'florence'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Florence-2
+              </button>
+            </div>
+            {ocrModel === 'qwen-vl' && (
+              <p className="text-[10px] text-indigo-400 bg-indigo-500/5 p-2 rounded border border-indigo-500/20 italic">
+                Best for high-precision code, paths, and emojis.
+              </p>
+            )}
+          </div>
+        )}
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
@@ -311,37 +371,47 @@ export function ConvertView() {
         )}
 
         {!result && file && inputPreviewUrl && (
-             <div className="flex flex-col items-center justify-center max-w-full h-full gap-4 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
-                <div className="relative rounded-lg overflow-hidden border border-slate-700 shadow-xl max-h-[60vh]">
-                    <img src={inputPreviewUrl} alt="Input Preview" className="max-h-[60vh] object-contain" />
-                    <div className="absolute top-2 left-2 bg-slate-800/80 px-2 py-1 rounded text-xs text-white">Input Preview</div>
-                </div>
-                 <p className="text-sm text-slate-400">Select a format and click convert to process this file.</p>
+          <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
+            <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl max-h-[70vh]">
+              <img src={inputPreviewUrl} alt="Original" className="max-h-[70vh] object-contain" />
+              <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                Original
+              </div>
             </div>
+            <p className="text-sm text-slate-400">Select a format and click convert to process this file.</p>
+          </div>
         )}
         
         {!result && file && !inputPreviewUrl && (
-            <div className="text-center text-slate-500">
-                <FileType size={64} className="mx-auto mb-4 opacity-20" />
-                <h3 className="text-lg font-medium mb-1">{file.name}</h3>
-                <p className="text-slate-400">Preview not available for this file type.</p>
+          <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-slate-900/50 min-w-[280px] min-h-[320px]">
+            <FileType size={64} className="text-slate-600 mb-4" />
+            <div className="flex flex-col items-center text-center">
+              <span className="text-lg font-bold text-slate-300">{file.name.split('.').pop()?.toUpperCase()} File</span>
+              <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
             </div>
+            <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+              Original
+            </div>
+          </div>
         )}
 
         {result && (
            <div className="flex flex-col items-center justify-center max-w-full h-full gap-6 animate-in fade-in zoom-in duration-300">
-             <div className="relative group rounded-lg overflow-hidden border border-blue-500/30 shadow-2xl max-h-[70vh] cursor-pointer bg-slate-900" onClick={() => setIsPreviewOpen(true)}>
-               {/* Result Preview Logic */}
-               {['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
-                 <img src={`${API_BASE_URL}/api/files/${result}`} alt="Converted Result" className="max-h-[70vh] object-contain" />
-               ) : ['mp4', 'webm', 'mov'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
-                 <video src={`${API_BASE_URL}/api/files/${result}`} controls className="max-h-[70vh]" />
-               ) : (
-                 <div className="w-64 h-64 flex flex-col items-center justify-center bg-slate-800 text-slate-400">
-                   <FileType size={64} className="mb-4" />
-                   <span className="font-mono text-lg">{result.split('.').pop()?.toUpperCase()} CONTENT</span>
-                 </div>
-               )}
+              <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-slate-900/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+                {/* Result Preview Logic */}
+                {['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                  <img src={`${API_BASE_URL}/api/files/${result}`} alt="Converted Result" className="max-h-[70vh] object-contain" />
+                ) : ['mp4', 'webm', 'mov', 'mkv'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                  <video src={`${API_BASE_URL}/api/files/${result}`} controls className="max-h-[70vh]" />
+                ) : (
+                  <>
+                    <FileType size={64} className="text-slate-600 mb-4" />
+                    <div className="flex flex-col items-center text-center">
+                      <span className="text-lg font-bold text-slate-300">{result.split('.').pop()?.toUpperCase()} File</span>
+                      <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                    </div>
+                  </>
+                )}
 
                <div className="absolute top-2 left-2 bg-blue-600 px-2 py-1 rounded text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
                    <span className="font-bold uppercase tracking-wider">Converted</span>
@@ -370,14 +440,16 @@ export function ConvertView() {
       )}
 
       {result && (isPreviewOpen || isSubmitting) && (
-        ['jpg', 'jpeg', 'png', 'webp'].includes(result.split('.').pop()?.toLowerCase() || '') && inputPreviewUrl ? (
+        ['jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif', 'bmp'].includes(result.split('.').pop()?.toLowerCase() || '') && (inputPreviewUrl || serverFilePath) ? (
           <ComparisonPreviewModal
             isOpen={isPreviewOpen}
             onClose={() => setIsPreviewOpen(false)}
-            originalPath={inputPreviewUrl}
+            originalPath={inputPreviewUrl || serverFilePath || ''}
             resultPath={result}
             fileName={result.split('/').pop() || 'converted-file'}
             resultLabel="Converted"
+            originalFormat={file?.name.split('.').pop()}
+            resultFormat={result.split('.').pop()}
           />
         ) : (
           <PreviewModal

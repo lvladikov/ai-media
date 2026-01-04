@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { TrendingUp, TrendingDown, Zap, Loader2, Wand2, Image as ImageIcon, ArrowRight, ChevronsUp, ChevronsDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, Loader2, Wand2, Image as ImageIcon, ArrowRight, ChevronsUp, ChevronsDown, Upload } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
@@ -8,7 +8,14 @@ import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { ResourceWarningModal } from './common/ResourceWarningModal';
 import { NumberInput } from './common/NumberInput';
+import { DragDropZone } from './common/DragDropZone';
 import { formatDuration } from '../utils/formatTime';
+
+// Check if a file extension can't be previewed in browsers
+const isNonPreviewableFormat = (filename: string): boolean => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ['tiff', 'tif', 'psd', 'raw'].includes(ext || '');
+};
 
 export function UpscaleView() {
   const { addJob } = useAppStore();
@@ -79,7 +86,45 @@ export function UpscaleView() {
     }
   };
 
+  // Handler for DragDropZone - converts File to ChangeEvent-like structure
+  const handleFileDrop = async (droppedFile: File) => {
+    setFile(droppedFile);
+    setResult(null);
+    setError(null);
+    setCurrentJobId(null);
+    setShowResourceWarning(false);
 
+    // Preview if image and not non-previewable
+    if (droppedFile.type.startsWith('image/') && !isNonPreviewableFormat(droppedFile.name)) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setInputPreview(ev.target?.result as string);
+      reader.readAsDataURL(droppedFile);
+    } else {
+      setInputPreview(null);
+    }
+
+    // Upload
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', droppedFile);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      setServerFilePath(data.path);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload file");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const startUpscaleJob = async () => {
     setIsSubmitting(true);
@@ -218,23 +263,35 @@ export function UpscaleView() {
         </div>
 
         {/* Upload */}
-        <div
+        <DragDropZone
           className="border-2 border-dashed border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-emerald-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer relative"
-          onClick={() => fileInputRef.current?.click()}
+          draggingClassName="border-emerald-500 bg-emerald-500/10"
+          onFileDrop={handleFileDrop}
+          accept="image/*,video/*,.tiff,.tif"
         >
           <input
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept="image/*,video/*"
+            accept="image/*,video/*,.tiff,.tif"
             onChange={handleFileSelect}
           />
 
-          {inputPreview ? (
+          {file && isNonPreviewableFormat(file.name) ? (
+            <div className="flex flex-col items-center gap-2 py-2">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-lg flex items-center justify-center border border-slate-600">
+                <ImageIcon size={28} className="text-slate-500" />
+              </div>
+              <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+                {file.name.split('.').pop()?.toUpperCase()} - No Preview
+              </span>
+            </div>
+          ) : inputPreview ? (
             <img src={inputPreview} alt="Preview" className="max-h-32 object-contain rounded" />
           ) : (
-            <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
-              <ImageIcon size={24} />
+            <div className="flex flex-col items-center gap-2">
+              <Upload size={28} className="text-slate-400" />
+              <span className="text-sm text-slate-400">Click or Drag & Drop</span>
             </div>
           )}
 
@@ -248,7 +305,7 @@ export function UpscaleView() {
               <Loader2 className="animate-spin text-emerald-400" />
             </div>
           )}
-        </div>
+        </DragDropZone>
 
         {/* Controls */}
         <div className="space-y-6">
@@ -415,12 +472,55 @@ export function UpscaleView() {
       </div>
 
       <div className="flex-1 p-8 flex items-center justify-center bg-slate-950/30">
-        {inputPreview ? (
+        {file && isNonPreviewableFormat(file.name) ? (
+          /* TIFF/Non-Previewable File Placeholder */
+          <div className="flex flex-col md:flex-row items-stretch gap-6 max-w-full">
+            <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-slate-900/50 min-w-[280px] min-h-[320px]">
+              <ImageIcon size={64} className="text-slate-600 mb-4" />
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-slate-300">{file.name.split('.').pop()?.toUpperCase()} File</span>
+                <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+              </div>
+              <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                Original
+              </div>
+            </div>
+
+            {/* Arrow */}
+            {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+
+            {/* Upscaled Result */}
+            {result && (
+              <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-slate-900/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+                {isNonPreviewableFormat(result) ? (
+                  <>
+                    <ImageIcon size={64} className="text-slate-600 mb-4" />
+                    <div className="flex flex-col items-center text-center">
+                      <span className="text-lg font-bold text-slate-300">{result.split('.').pop()?.toUpperCase()} File</span>
+                      <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                    </div>
+                  </>
+                ) : (
+                  <img src={`http://localhost:8000/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
+                )}
+                <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-1">
+                  <span className="text-[10px] font-mono text-white uppercase tracking-tighter">
+                    {isResultDownscale ? "Downscaled" : "Upscaled"} {processedFactor}x
+                  </span>
+                  {genDuration && <span className="text-[9px] text-brand-200 font-medium opacity-80 uppercase tracking-widest">in {formatDuration(genDuration * 1000)}</span>}
+                </div>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : inputPreview ? (
           <div className="flex flex-col md:flex-row items-center gap-6 max-w-full">
             {/* Original */}
             <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl max-w-full">
               <img src={inputPreview} className="max-w-full max-h-[70vh] object-contain" />
-              <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-mono text-white border border-white/10">
+              <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
                 Original
               </div>
             </div>
@@ -433,10 +533,10 @@ export function UpscaleView() {
               <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl max-w-full cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
                 <img src={`http://localhost:8000/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
                 <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-1">
-                  <span className="text-xs font-mono text-white">
+                  <span className="text-[10px] font-mono text-white uppercase tracking-tighter">
                     {isResultDownscale ? "Downscaled" : "Upscaled"} {processedFactor}x
                   </span>
-                  {genDuration && <span className="text-[10px] text-brand-200 font-medium opacity-80">in {formatDuration(genDuration * 1000)}</span>}
+                  {genDuration && <span className="text-[9px] text-brand-200 font-medium opacity-80 uppercase tracking-widest">in {formatDuration(genDuration * 1000)}</span>}
                 </div>
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                   <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
@@ -466,15 +566,17 @@ export function UpscaleView() {
       )}
 
       {result && (isPreviewOpen || isSubmitting) && (
-        ['jpg', 'jpeg', 'png', 'webp'].includes(result.split('.').pop()?.toLowerCase() || '') && inputPreview ? (
+        ['jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif', 'bmp'].includes(result.split('.').pop()?.toLowerCase() || '') && (inputPreview || serverFilePath) ? (
           <ComparisonPreviewModal
             isOpen={isPreviewOpen}
             onClose={() => setIsPreviewOpen(false)}
-            originalPath={inputPreview}
+            originalPath={inputPreview || serverFilePath || ''}
             resultPath={result}
             fileName={result.split('/').pop() || (isResultDownscale ? 'downscaled-file' : 'upscaled-file')}
             resultLabel={`${isResultDownscale ? "Downscaled" : "Upscaled"} ${processedFactor || factor}x`}
             factor={processedFactor || factor}
+            originalFormat={file?.name.split('.').pop()}
+            resultFormat={result.split('.').pop()}
           />
         ) : (
           <PreviewModal

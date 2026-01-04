@@ -7,7 +7,14 @@ import { JobProgressModal } from './common/JobProgressModal';
 import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { Tooltip } from './common/Tooltip';
+import { DragDropZone } from './common/DragDropZone';
 import { formatDuration } from '../utils/formatTime';
+
+// Check if a file extension can't be previewed in browsers
+const isNonPreviewableFormat = (filename: string): boolean => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ['tiff', 'tif', 'psd', 'raw'].includes(ext || '');
+};
 
 // Preset transformation recipes
 const TRANSFORM_RECIPES = [
@@ -40,6 +47,7 @@ export function TransformView() {
   const [showRecipes, setShowRecipes] = useState(false);
 
   const [inputImage, setInputImage] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [serverFilePath, setServerFilePath] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,24 +73,29 @@ export function TransformView() {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
       setResult(null);
       setError(null);
       setCurrentJobId(null);
 
       // Local preview
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result) {
-          setInputImage(ev.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      if (selectedFile.type.startsWith('image/') && !isNonPreviewableFormat(selectedFile.name)) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ev.target?.result) {
+            setInputImage(ev.target.result as string);
+          }
+        };
+        reader.readAsDataURL(selectedFile);
+      } else {
+        setInputImage(null);
+      }
 
       // Upload to server
       setIsUploading(true);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', selectedFile);
 
       try {
         const response = await fetch(`${API_BASE_URL}/api/upload`, {
@@ -100,6 +113,48 @@ export function TransformView() {
       } finally {
         setIsUploading(false);
       }
+    }
+  };
+
+  const handleFileDrop = async (droppedFile: File) => {
+    setFile(droppedFile);
+    setResult(null);
+    setError(null);
+    setCurrentJobId(null);
+
+    // Local preview
+    if (droppedFile.type.startsWith('image/') && !isNonPreviewableFormat(droppedFile.name)) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setInputImage(ev.target.result as string);
+        }
+      };
+      reader.readAsDataURL(droppedFile);
+    } else {
+      setInputImage(null);
+    }
+
+    // Upload
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', droppedFile);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      setServerFilePath(data.path);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload image");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -221,19 +276,31 @@ export function TransformView() {
         </div>
 
         {/* Upload Area */}
-        <div
+        <DragDropZone
           className="border-2 border-dashed border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-primary-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer relative group"
-          onClick={() => fileInputRef.current?.click()}
+          draggingClassName="border-primary-500 bg-primary-500/10"
+          onFileDrop={handleFileDrop}
+          accept="image/*,.tiff,.tif"
         >
           <input
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept="image/*"
+            accept="image/*,.tiff,.tif"
             onChange={handleFileSelect}
           />
 
-          {inputImage ? (
+          {file && isNonPreviewableFormat(file.name) ? (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <div className="w-20 h-20 bg-slate-900 rounded overflow-hidden flex items-center justify-center border border-slate-700">
+                <ImageIcon size={32} className="text-slate-600" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-slate-400">{file.name.split('.').pop()?.toUpperCase()}</p>
+                <p className="text-[10px] text-slate-500 uppercase">No Preview</p>
+              </div>
+            </div>
+          ) : inputImage ? (
             <div className="relative w-full aspect-square bg-slate-950 rounded overflow-hidden">
               <img src={inputImage} alt="Input" className="w-full h-full object-contain" />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -245,8 +312,8 @@ export function TransformView() {
               <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
                 <ImageIcon size={24} />
               </div>
-              <p className="text-sm font-medium">Click to Upload Image</p>
-              <p className="text-xs text-slate-500">JPG, PNG, WEBP</p>
+              <p className="text-sm font-medium">Click or Drag & Drop</p>
+              <p className="text-xs text-slate-500">JPG, PNG, WEBP, TIFF</p>
             </>
           )}
 
@@ -255,7 +322,7 @@ export function TransformView() {
               <Loader2 className="animate-spin text-primary-400" />
             </div>
           )}
-        </div>
+        </DragDropZone>
 
         {/* Options */}
         <div className="space-y-4">
@@ -407,13 +474,19 @@ export function TransformView() {
 
       {/* Main Preview Area */}
       <div className="flex-1 p-6 flex items-center justify-center bg-slate-950/30">
-        {inputImage ? (
+        {file && isNonPreviewableFormat(file.name) ? (
           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
-            <div className="flex flex-col md:flex-row items-center gap-4">
-              {/* Input */}
-              <div className="relative group rounded-lg overflow-hidden border border-slate-800 shadow-xl max-h-[70vh]">
-                <img src={inputImage} alt="Original" className="max-h-[70vh] object-contain" />
-                <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-xs backdrop-blur-sm">Original</div>
+            <div className="flex flex-col md:flex-row items-stretch gap-4">
+              {/* TIFF/Non-Previewable Placeholder */}
+              <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-slate-900/50 min-w-[280px] min-h-[320px]">
+                <ImageIcon size={64} className="text-slate-600 mb-4" />
+                <div className="flex flex-col items-center text-center">
+                  <span className="text-lg font-bold text-slate-300">{file.name.split('.').pop()?.toUpperCase()} File</span>
+                  <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                </div>
+                <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                  Original
+                </div>
               </div>
 
               {/* Arrow if result available */}
@@ -421,8 +494,18 @@ export function TransformView() {
 
               {/* Result Preview */}
               {result && (
-                <div className="relative group rounded-lg overflow-hidden border border-brand-500/30 shadow-2xl max-h-[70vh] cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
-                  <img src={`http://localhost:8000/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
+                <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-slate-900/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+                  {isNonPreviewableFormat(result) ? (
+                    <>
+                      <ImageIcon size={64} className="text-slate-600 mb-4" />
+                      <div className="flex flex-col items-center text-center">
+                        <span className="text-lg font-bold text-slate-300">{result.split('.').pop()?.toUpperCase()} File</span>
+                        <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                      </div>
+                    </>
+                  ) : (
+                    <img src={`http://localhost:8000/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
+                  )}
                   <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-[10px] sm:text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
                     <span className="font-bold uppercase tracking-wider">Result</span>
                     {genDuration && <span className="opacity-80 font-medium">in {formatDuration(genDuration * 1000)}</span>}
@@ -433,11 +516,35 @@ export function TransformView() {
                 </div>
               )}
             </div>
-            {!result && (
-              <p className="text-sm text-slate-500 text-center max-w-md">
-                The transformed image will appear here when complete.
-              </p>
-            )}
+          </div>
+        ) : inputImage ? (
+          <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              {/* Input */}
+              <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-xl max-h-[70vh]">
+                <img src={inputImage} alt="Original" className="max-h-[70vh] object-contain" />
+                <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                  Original
+                </div>
+              </div>
+
+              {/* Arrow if result available */}
+              {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+
+              {/* Result Preview */}
+              {result && (
+                <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl max-h-[70vh] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+                  <img src={`http://localhost:8000/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
+                  <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-0.5">
+                    <span className="text-[10px] font-mono text-white uppercase tracking-tighter">Result</span>
+                    {genDuration && <span className="text-[9px] opacity-80 font-medium uppercase tracking-widest">in {formatDuration(genDuration * 1000)}</span>}
+                  </div>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="text-center text-slate-500">
@@ -460,14 +567,16 @@ export function TransformView() {
         />
       )}
 
-      {result && inputImage && (
+      {result && (inputImage || serverFilePath) && (
         <ComparisonPreviewModal
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
-          originalPath={inputImage}
+          originalPath={inputImage || serverFilePath || ''}
           resultPath={result}
           fileName={result.split('/').pop() || 'transformed.png'}
           resultLabel="Transformed"
+          originalFormat={file?.name.split('.').pop()}
+          resultFormat={result.split('.').pop()}
         />
       )}
     </div>

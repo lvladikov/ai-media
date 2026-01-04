@@ -10,6 +10,8 @@ def run_convert(
     input_path: str,
     target_format: str,
     output_path: str,
+    ocr_enabled: bool = False,
+    ocr_model: str = "qwen-vl",
     progress_queue: Queue = None,
 ):
     """Background task for media conversion. Runs in child process."""
@@ -39,14 +41,14 @@ def run_convert(
         success = False
         
         # Determine conversion type
-        if target_format in ['jpg', 'png', 'webp']:
+        if target_format in ['jpg', 'png', 'webp', 'gif', 'tiff', 'bmp']:
             success = convert_image(input_path, output_path)
-        elif target_format in ['mp4', 'gif', 'mov', 'webm']:
+        elif target_format in ['mp4', 'mov', 'webm', 'avi']:
             success = convert_video(input_path, output_path)
         elif target_format in ['mp3', 'wav', 'aac', 'flac']:
             success = convert_audio(input_path, output_path)
-        elif target_format in ['md', 'html', 'pdf', 'docx', 'txt']:
-            success = convert_document(input_path, output_path)
+        elif target_format in ['md', 'html', 'pdf', 'docx', 'txt', 'rtf', 'json', 'xhtml']:
+            success = convert_document(input_path, output_path, ocr_enabled=ocr_enabled, ocr_model=ocr_model)
         else:
             raise ValueError(f"Unsupported target format: {target_format}")
 

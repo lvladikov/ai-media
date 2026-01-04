@@ -110,6 +110,7 @@ mock_torch.cuda.is_bf16_supported.return_value = False
 mock_torch.backends.mps.is_available.return_value = False
 
 sys.modules['diffusers'] = MagicMock()
+sys.modules['diffusers.utils'] = MagicMock()
 sys.modules['transformers'] = MagicMock()
 sys.modules['accelerate'] = MagicMock()
 sys.modules['scipy'] = MagicMock()
@@ -2738,6 +2739,88 @@ class TestServerApp(unittest.TestCase):
         self.assertIn("/api/system", routes)
         self.assertIn("/api/jobs", routes)
         self.assertIn("/sse/resources", routes)
+
+
+
+# =============================================================================
+# OCR Tests
+# =============================================================================
+
+class TestOCR(unittest.TestCase):
+    """Tests for OCR functionality (Florence-2)."""
+    
+    def setUp(self):
+        # Clear cache before each test
+        from ai_media.conversion import ocr
+        if hasattr(ocr, '_processor'):
+             ocr._processor = None
+             ocr._model = None
+    
+    @patch('ai_media.conversion.ocr.AutoProcessor')
+    @patch('ai_media.conversion.ocr.AutoModelForCausalLM')
+    @patch('ai_media.conversion.ocr.load_image')
+    def test_image_to_text_success(self, mock_load_image, mock_model_cls, mock_processor_cls):
+        """Test successful text extraction from image using Florence-2."""
+        # Setup mocks
+        mock_processor = MagicMock()
+        mock_model = MagicMock()
+        mock_model.device = MagicMock(type="cpu")
+        mock_model.dtype = "float32"
+        mock_model.to.return_value = mock_model # Crucial: .to() must return self
+        
+        mock_processor_cls.from_pretrained.return_value = mock_processor
+        mock_model_cls.from_pretrained.return_value = mock_model
+        
+        # Mock inputs preparation
+        mock_inputs = {
+            "input_ids": MagicMock(),
+            "pixel_values": MagicMock()
+        }
+        mock_processor.return_value = mock_inputs
+        
+        # Mock generation
+        mock_model.generate.return_value = [1, 2, 3] # Fake tokens
+        mock_processor.batch_decode.return_value = ["Raw Generated Text"]
+        
+        # Mock post-processing (Crucial for Florence-2)
+        mock_processor.post_process_generation.return_value = {"<OCR>": "Detected Text Content"}
+        
+        from ai_media.conversion import ocr
+        
+        # execution - explicitly test Florence-2 path
+        result = ocr.image_to_text("fake_image.jpg", model_type="florence")
+        
+        # Verification
+        self.assertEqual(result, "Detected Text Content")
+        mock_load_image.assert_called_with("fake_image.jpg")
+        mock_model.generate.assert_called()
+        mock_processor.batch_decode.assert_called()
+        mock_processor.post_process_generation.assert_called()
+        
+    @patch('ai_media.conversion.ocr.AutoProcessor')
+    @patch('ai_media.conversion.ocr.AutoModelForCausalLM')
+    def test_model_caching(self, mock_model_cls, mock_processor_cls):
+        """Test that model and processor are cached."""
+        from ai_media.conversion import ocr
+        
+        # Setup mock
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model_cls.from_pretrained.return_value = mock_model
+        mock_processor_cls.from_pretrained.return_value = MagicMock()
+        
+        # Reset cache
+        ocr._model = None
+        ocr._processor = None
+        ocr._current_model_type = None
+        
+        # First call - explicit florence model
+        ocr.load_ocr_model(model_type="florence")
+        self.assertEqual(mock_model_cls.from_pretrained.call_count, 1)
+        
+        # Second call - should use cache
+        ocr.load_ocr_model(model_type="florence")
+        self.assertEqual(mock_model_cls.from_pretrained.call_count, 1) # Should not increase
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

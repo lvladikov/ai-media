@@ -8,6 +8,12 @@ Supports arrow-key navigation, mouse clicks (on supported terminals), and pagina
 import os
 import sys
 import json
+from pathlib import Path
+
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
 
 
 from .utils.interaction import (
@@ -895,6 +901,14 @@ def run_interactive(jump_point=None):
                 ("PNG", "png"),
                 ("JPG", "jpg"),
                 ("WebP", "webp"),
+                ("GIF", "gif"),
+                ("TIFF", "tiff"),
+                ("BMP", "bmp"),
+                ("TXT (OCR)", "txt"),
+                ("MD (OCR)", "md"),
+                ("PDF (OCR)", "pdf"),
+                ("DOCX (OCR)", "docx"),
+                ("HTML (OCR)", "html"),
             ]
         elif media_type == "video":
             format_options = [
@@ -913,7 +927,19 @@ def run_interactive(jump_point=None):
             return
         
         # Build command
-        if media_type == "image":
+        doc_formats = ['txt', 'md', 'pdf', 'docx', 'html']
+        if media_type == "image" and target_format in doc_formats:
+            # Image to document (OCR) - prompt for OCR model
+            print("\n📦 Select OCR Model:\n")
+            ocr_options = [
+                ("Qwen-VL (High Precision, ~30GB RAM) [Default]", "qwen-vl"),
+                ("Florence-2 (Fast, Lightweight)", "florence")
+            ]
+            ocr_model = prompt_choice("OCR Model", ocr_options)
+            if ocr_model is None:
+                return
+            cmd = f"-cd \"{input_file}\" -cdt {target_format} -om {ocr_model}"
+        elif media_type == "image":
             cmd = f"-ci \"{input_file}\" -cit {target_format}"
         elif media_type == "video":
             cmd = f"-cv \"{input_file}\" -cvt {target_format}"
@@ -927,6 +953,15 @@ def run_interactive(jump_point=None):
         """Convert document format submenu."""
         clear_screen()
         show_header("Convert Document")
+        
+        # Info Block
+        console.print(Panel(
+            "[bold cyan]💡 Pro Tip:[/bold cyan] You can also convert [bold yellow]Images[/bold yellow] or [bold yellow]Scanned PDFs[/bold yellow] "
+            "to extract text using [bold green]High-Precision OCR[/bold green] (Qwen-VL).",
+            border_style="blue",
+            padding=(0, 2)
+        ))
+        print()
         
         # Input file
         print("📂 Select input document:\n")
@@ -951,6 +986,22 @@ def run_interactive(jump_point=None):
         
         # Build command
         cmd = f"-cd \"{input_file}\" -cdt {target_format}"
+        
+        # Determine if OCR model selection is needed
+        input_ext = Path(input_file).suffix.lower().lstrip('.')
+        image_exts = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff']
+        
+        # Scanned PDF or Image input triggers OCR model choice
+        if input_ext in image_exts or (input_ext == 'pdf' and target_format in ['txt', 'md', 'docx']):
+            print("\n📦 Select OCR Model:\n")
+            ocr_options = [
+                ("Qwen-VL (High Precision, ~30GB RAM) [Default]", "qwen-vl"),
+                ("Florence-2 (Fast, Lightweight)", "florence")
+            ]
+            ocr_model = prompt_choice("OCR Model", ocr_options)
+            if ocr_model is None:
+                return
+            cmd += f" -om {ocr_model}"
         
         run_self_command(cmd)
         wait_for_back()

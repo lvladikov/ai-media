@@ -48,18 +48,25 @@ def convert_image(input_path, target):
         return False
     
     try:
-        img = Image.open(input_path)
+        # Temporarily disable PIL's decompression bomb limit for large images
+        original_max = Image.MAX_IMAGE_PIXELS
+        Image.MAX_IMAGE_PIXELS = None
         
-        # Handle transparency for formats that don't support it
-        output_ext = Path(output_path).suffix.lower()
-        if output_ext in ['.jpg', '.jpeg'] and img.mode in ['RGBA', 'P']:
-            print(f"   ℹ️  Converting RGBA → RGB (JPEG doesn't support transparency)")
-            img = img.convert('RGB')
-        
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        img.save(output_path)
-        print(f"✅ Converted image saved to {output_path}")
-        return True
+        try:
+            img = Image.open(input_path)
+            
+            # Handle transparency for formats that don't support it
+            output_ext = Path(output_path).suffix.lower()
+            if output_ext in ['.jpg', '.jpeg'] and img.mode in ['RGBA', 'P']:
+                print(f"   ℹ️  Converting RGBA → RGB (JPEG doesn't support transparency)")
+                img = img.convert('RGB')
+            
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            img.save(output_path)
+            print(f"✅ Converted image saved to {output_path}")
+            return True
+        finally:
+            Image.MAX_IMAGE_PIXELS = original_max
     except Exception as e:
         print(f"❌ Conversion failed: {e}")
         return False

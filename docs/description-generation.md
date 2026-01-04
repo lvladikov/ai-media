@@ -7,7 +7,12 @@ Generate a detailed text description of any image file.
 *   **Uses**: Auto-generating alt-text, organizing photo libraries, or getting prompts for "remixing" an image.
 *   **Models**: **Florence-2** (Detailed, spatial awareness) or **BLIP** (Short, concise captions).
 
-### 2. Video Analysis
+### 2. Extracting Text (OCR)
+If you need to extract *text content* from an image or scanned document rather than describing the visual scene, use the conversion module.
+*   **Uses**: Digitizing documents, extracting text from screenshots or photos.
+*   **See**: [Media & Document Conversion > OCR](media-conversion.md#document--ocr-conversion)
+
+### 3. Video Analysis
 Summarize the content of a video file.
 *   **How it works**: The script intelligently samples 10 evenly-spaced frames from the video, analyzes each one, and synthesizes a summary of the action, setting, and characters.
 *   **Uses**: summarizing meeting recordings, analyzing security footage, or generating metadata for video archives.
