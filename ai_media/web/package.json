@@ -1,7 +1,7 @@
 {
   "name": "ai-media-web",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -26,9 +26,9 @@
     "electron:build:linux:arm64": "npm run --prefix packages/electron build:linux:arm64",
     "electron:build:linux:all": "npm run --prefix packages/electron build:linux:all",
     "electron:build:all": "npm run --prefix packages/electron build:all",
-    "version:patch": "npm version patch --workspaces --no-git-tag-version",
-    "version:minor": "npm version minor --workspaces --no-git-tag-version",
-    "version:major": "npm version major --workspaces --no-git-tag-version"
+    "version:patch": "npm version patch --workspaces --include-workspace-root --no-git-tag-version",
+    "version:minor": "npm version minor --workspaces --include-workspace-root --no-git-tag-version",
+    "version:major": "npm version major --workspaces --include-workspace-root --no-git-tag-version"
   },
   "dependencies": {
     "@types/dom-to-image": "^2.6.7",
