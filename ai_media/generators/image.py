@@ -66,6 +66,8 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
     print(f"   Prompt: '{prompt}'")
     print(f"   Size:   {width}x{height}")
     print(f"   Output: {output_file}")
+    print(f"   Steps:  {steps}")
+    print(f"   CFG:    {guidance_scale}")
     print("")  # Spacer
     
     # Check resources
@@ -291,16 +293,16 @@ def generate_image(prompt, output_file, width, height, model_name="default", ste
                 use_offload = True
             
             # Qwen-Image parameters: Lightning/4-bit uses 4-8 steps
+            # Qwen-Image parameters: Lightning uses strict settings
             is_lightning = "lightning" in model_name.lower()
-            steps = 4 if is_lightning else (8 if "4bit" in model_id.lower() else 30)
             
-            # Lightning models are NOT guidance-distilled, so CFG/negative prompts are ignored.
-            # Always use guidance_scale=0 for Lightning (model ignores it anyway).
             if is_lightning:
+                steps = 4
                 target_guidance = 0
             else:
-                # Standard robust guidance for base models
-                target_guidance = 5.0
+                # Use user provided values for standard/4bit models
+                # (steps argument is already set)
+                target_guidance = guidance_scale
 
             extra_kwargs = {
                 "true_cfg_scale": 4.0 if not is_lightning else target_guidance, 
