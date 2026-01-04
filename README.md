@@ -64,7 +64,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
     - **imageio-ffmpeg**: FFmpeg bindings for video export (used by diffusers)
     - **ddgs**: Deep research (free web search)
-    - **markdown**, **python-docx**, **xhtml2pdf**: Document format conversion
+    - **markdown**, **python-docx**, **xhtml2pdf**, **pypdf**, **striprtf**: Document format conversion
     - **rich**: Beautiful terminal formatting, syntax highlighting, and progress spinners
     - **prompt_toolkit**: Interactive command line features (history, arrow keys, tab autocomplete)
     - **peft**: Parameter-Efficient Fine-Tuning for LoRA model loading
@@ -327,6 +327,8 @@ This project uses the following open-source libraries:
 | [markdown](https://github.com/Python-Markdown/markdown) | Markdown to HTML conversion | [Python-Markdown/markdown](https://github.com/Python-Markdown/markdown) |
 | [python-docx](https://github.com/python-openxml/python-docx) | DOCX document creation | [python-openxml/python-docx](https://github.com/python-openxml/python-docx) |
 | [xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) | HTML to PDF conversion | [xhtml2pdf/xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) |
+| [pypdf](https://github.com/py-pdf/pypdf) | PDF document reading & processing | [py-pdf/pypdf](https://github.com/py-pdf/pypdf) |
+| [striprtf](https://github.com/joshy/striprtf) | RTF document text extraction | [joshy/striprtf](https://github.com/joshy/striprtf) |
 | [psutil](https://github.com/giampaolo/psutil) | System resource monitoring | [giampaolo/psutil](https://github.com/giampaolo/psutil) |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |

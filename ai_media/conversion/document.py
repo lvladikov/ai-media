@@ -66,7 +66,7 @@ def _read_to_markdown(input_path, input_format):
     
     elif input_format == "pdf":
         try:
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
             reader = PdfReader(input_path)
             text_parts = []
             for page in reader.pages:
@@ -74,7 +74,7 @@ def _read_to_markdown(input_path, input_format):
             markdown_content = "\n\n".join(text_parts)
             print("   ⚠️ PDF conversion extracts text only (formatting/images lost)")
         except ImportError:
-            raise ImportError("PyPDF2 required for PDF reading. Install: pip install PyPDF2")
+            raise ImportError("pypdf required for PDF reading. Install: pip install pypdf")
     
     elif input_format == "rtf":
         try:
@@ -83,7 +83,83 @@ def _read_to_markdown(input_path, input_format):
                 markdown_content = rtf_to_text(f.read())
             print("   ⚠️ RTF conversion extracts text only (formatting lost)")
         except ImportError:
-            raise ImportError("striprtf required for RTF reading. Install: pip install striprtf")
+            # Fallback for when striprtf is not available
+            import re
+            def fallback_rtf_to_text(rtf_str):
+                # Very basic RTF stripper
+                pattern = re.compile(r"\\([a-z]{1,32})(-?\d{1,10})?[ ]?|\\'([0-9a-f]{2})|\\([^a-z])|([{}])|[\r\n]+|(.)", re.I)
+                destinations = frozenset((
+                    'ftnid','ftnsep','ftnsepc','annotation','atnid','atnref','atntime','atrfend','atrfstart',
+                    'author','background','bkmkend','bkmkstart','blipuid','buptim','category','colorschememapping',
+                    'colortbl','comment','company','creatim','datafield','datastore','defchp','defpap','do',
+                    'doccomm','docvar','dptxbxtext','ebcend','ebcstart','factoidname','falt','fchars','ffdeftext',
+                    'ffentrymcr','ffexitmcr','ffformat','ffhelptext','ffl','ffname','ffstattext','field',
+                    'filetbl','fldinst','fldrslt','fldtype','fname','fontemb','fontfile','fonttbl','footer',
+                    'footerf','footerl','footerr','footnote','formfield','generator','gridtbl','header',
+                    'headerf','headerl','headerr','hl','hlfr','hllink','hlsrc','hsv','htmltag','info',
+                    'keycode','keywords','latency','lchars','levelnumbers','leveltext','list','listlevel',
+                    'listname','listoverride','listoverridetable','listpicture','liststylename','listtable',
+                    'listtext','lsdlockedexcept','macc','maccPr','mailmerge','malformed','margins','mati',
+                    'matn','mhtmltag','mmath','mmathPr','mnum','mpocket','mtype','mxml','nesttableprops',
+                    'nextfile','nonesttables','obj','objalias','objclass','objdata','object','objname',
+                    'objsect','objtime','oldcprops','oldpprops','oldsprops','oldtprops','oleclsid','operator',
+                    'panose','password','passwordhash','pgp','pgptbl','picprop','pict','pn','pnseclvl',
+                    'pntext','pntxta','pntxtb','printim','private','propname','protend','protstart','protusertbl',
+                    'pxe','result','revtbl','revtim','rsidtbl','rxe','shp','shpgrp','shpinst','shppict',
+                    'shprslt','shptxt','sn','sp','staticval','stylesheet','subject','sv','svb','tc',
+                    'template','themedata','title','txe','ud','upr','userprops','wgrffmtfilter','windowcaption',
+                    'writereservation','writereservhash','xe','xform','xmlattrname','xmlattrvalue','xmlclose',
+                    'xmlname','xmlnstbl','xmlopen',
+                ))
+                stack = []
+                ignorable = False       # Whether this group (and all inside it) are "ignorable".
+                ucskip = 1              # Number of ASCII characters to skip after a unicode character.
+                curskip = 0             # Number of ASCII characters left to skip
+                out = []                # Output buffer.
+
+                for match in pattern.finditer(rtf_str):
+                    word,arg,hex,char,brace,tchar = match.groups()
+                    if brace:
+                        curskip = 0
+                        if brace == '{':
+                            stack.append((ucskip,ignorable))
+                        elif brace == '}':
+                            if stack:
+                                ucskip,ignorable = stack.pop()
+                    elif char: # \x (not a letter)
+                        curskip = 0
+                        if char == '~':
+                            if not ignorable: out.append('\xA0')
+                        elif char in '{}\\':
+                            if not ignorable: out.append(char)
+                        elif char == '*':
+                            ignorable = True
+                    elif word: # \foo
+                        curskip = 0
+                        if word in destinations:
+                            ignorable = True
+                        elif ignorable:
+                            pass
+                        elif word == 'par' or word == 'line' or word == 'row':
+                            out.append('\n')
+                        elif word == 'tab':
+                            out.append('\t')
+                    elif hex: # \'xx
+                        if curskip > 0:
+                            curskip -= 1
+                        elif not ignorable:
+                            out.append(chr(int(hex,16)))
+                    elif tchar:
+                        if curskip > 0:
+                            curskip -= 1
+                        elif not ignorable:
+                            out.append(tchar)
+                return "".join(out)
+            
+            with open(input_path, "r", encoding="utf-8", errors="ignore") as f:
+                markdown_content = fallback_rtf_to_text(f.read())
+            print("   ⚠️ RTF conversion using fallback regex parser (formatting lost)")
+
     
     return markdown_content
 
