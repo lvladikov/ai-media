@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { Upload, RefreshCw, FileType, Loader2 } from 'lucide-react';
+import { Upload, RefreshCw, FileType, Loader2, Zap } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
@@ -23,6 +23,7 @@ export function ConvertView() {
   const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const availableFormats = useMemo(() => {
     if (!file) return [];
@@ -60,6 +61,7 @@ export function ConvertView() {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       setTargetFormat(''); // Reset format selection
+      setResult(null); // Reset previous result
 
       // Create local preview if it's an image
       if (selectedFile.type.startsWith('image/')) {
@@ -179,21 +181,33 @@ export function ConvertView() {
     return () => unsubscribe();
   }, [currentJobId]);
 
+  const handleCloseModal = () => {
+    setCurrentJobId(null);
+    if (result) setIsPreviewOpen(true);
+  };
+  
+  const handleViewResult = () => {
+    setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
   return (
-    <div className="flex h-full bg-slate-900 text-slate-200 items-center justify-center p-8">
-      <div className="w-full max-w-2xl bg-slate-950/50 border border-slate-800 rounded-xl p-8 shadow-2xl">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-500/10 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
-            <RefreshCw size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Media Converter</h2>
-          <p className="text-slate-400">Convert images, video, audio, and documents instantly.</p>
+    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+      {/* Parameters Sidebar */}
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
+            <RefreshCw className="text-blue-400" /> Media Converter
+          </h2>
+          <p className="text-xs text-slate-500">Convert images, video, audio, and documents</p>
         </div>
 
-        <div className="space-y-6">
-          {/* Input Phase */}
+        {/* File Upload */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-400">Input File</label>
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${file ? 'border-primary-500/50 bg-primary-500/5' : 'border-slate-700 hover:border-slate-600 hover:bg-slate-900'
+            className={`border border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer relative overflow-hidden ${file ? 'border-primary-500/50 bg-primary-500/5' : 'border-slate-700 hover:border-slate-600 hover:bg-slate-950'
               }`}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -205,109 +219,138 @@ export function ConvertView() {
             />
 
             {file ? (
-              <div className="flex items-center justify-center gap-4">
-                <div className="w-12 h-12 bg-slate-800 rounded flex items-center justify-center text-primary-400">
-                  <FileType size={24} />
+              <div className="flex flex-col items-center justify-center gap-2">
+                 <div className="w-10 h-10 bg-slate-800 rounded flex items-center justify-center text-primary-400 mb-1">
+                  <FileType size={20} />
                 </div>
-                <div className="text-left">
-                  <p className="font-semibold text-white">{file.name}</p>
+                <div className="text-center w-full">
+                  <p className="font-semibold text-white text-sm truncate max-w-[250px] mx-auto">{file.name}</p>
                   <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                 </div>
-                {isUploading && <Loader2 className="animate-spin text-slate-500 ml-4" />}
+                <div className="text-xs text-primary-400 font-medium">Click to change</div>
+                {isUploading && <div className="absolute top-2 right-2"><Loader2 className="animate-spin text-slate-500" size={16} /></div>}
               </div>
             ) : (
               <>
-                <Upload size={32} className="mx-auto mb-2 text-slate-500" />
-                <p className="font-medium">Click to select file</p>
-                <p className="text-sm text-slate-500">Supports images, video, audio, markdown, pdf, docx</p>
+                <Upload size={24} className="mx-auto mb-2 text-slate-500" />
+                <p className="font-medium text-sm">Click to select file</p>
+                <p className="text-[10px] text-slate-500 mt-1">Supports img, vid, audio, docs</p>
               </>
             )}
           </div>
+        </div>
 
-          {/* Arrow */}
-          {file && (
-            <div className="flex justify-center">
-              <p className="text-slate-400 max-w-sm text-center">
-                Upload media from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start converting.
-              </p>
-            </div>
-          )}
-
-          {/* Target Options */}
-          {file && availableFormats.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Target Format */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-400">Target Format</label>
+          {file && availableFormats.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2">
               {availableFormats.map(fmt => (
                 <button
                   key={fmt}
                   onClick={() => setTargetFormat(fmt)}
-                  className={`py-3 px-4 rounded-lg font-medium border text-sm transition-all ${targetFormat === fmt
-                    ? 'bg-primary-600 border-primary-500 text-white shadow-lg shadow-primary-900/30'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-white'
+                  className={`py-2 px-2 rounded-md font-medium border text-xs uppercase transition-all ${targetFormat === fmt
+                    ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-900/20'
+                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-white'
                     }`}
                 >
-                  {fmt.toUpperCase()}
+                  {fmt}
                 </button>
               ))}
             </div>
-          )}
-
-          {file && availableFormats.length === 0 && (
-            <div className="text-center text-yellow-500 text-sm">
-              Format not supported for conversion options yet.
-            </div>
-          )}
-
-          {/* Action */}
-          <button
-            onClick={handleConvert}
-            disabled={!targetFormat || isUploading || isSubmitting}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-lg shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:grayscale transition-all flex items-center justify-center gap-2 mt-4"
-          >
-            {isSubmitting ? (
-              <><Loader2 className="animate-spin" /> Converting...</>
-            ) : (
-              <><RefreshCw size={20} /> Convert Now</>
-            )}
-          </button>
-
-          <ErrorAlert error={error} onDismiss={() => setError(null)} />
-
-          {result && (
-            <div className="mt-6 p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500/10 text-green-400 rounded flex items-center justify-center">
-                  <FileType size={20} />
-                </div>
-                <div className="text-left overflow-hidden">
-                  <p className="text-sm font-semibold truncate text-white">{result.split('/').pop()}</p>
-                  <p className="text-xs text-slate-500">
-                    Conversion Complete {genDuration && `in ${formatDuration(genDuration * 1000)}`}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsPreviewOpen(true)}
-                  className="btn-primary text-xs !py-1.5"
-                >
-                  Preview
-                </button>
-                <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-xs !py-1.5">
-                  Download
-                </a>
-              </div>
+          ) : (
+            <div className="p-4 bg-slate-950 border border-slate-800 rounded-lg text-center text-slate-500 text-xs italic">
+                {file ? "No compatible formats found." : "Upload a file to see options."}
             </div>
           )}
         </div>
+
+        <ErrorAlert error={error} onDismiss={() => setError(null)} />
+
+        {/* Action Button */}
+        <div className="mt-auto pt-4">
+            <button
+            onClick={handleConvert}
+            disabled={!targetFormat || isUploading || isSubmitting}
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            >
+            {isSubmitting ? (
+                <><Loader2 className="animate-spin" size={18} /> Converting...</>
+            ) : (
+                <><RefreshCw size={18} /> Convert Now</>
+            )}
+            </button>
+        </div>
+      </div>
+
+      {/* Main Preview Area */}
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 min-h-[500px] lg:min-h-0">
+        {!result && !file && (
+          <div className="text-center text-slate-500">
+            <RefreshCw size={48} className="mx-auto mb-4 opacity-20" />
+            <h3 className="text-lg font-medium mb-2">Ready to Convert</h3>
+            <p className="text-slate-400 max-w-sm">
+              Upload a file from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to see conversion options.
+            </p>
+          </div>
+        )}
+
+        {!result && file && inputPreviewUrl && (
+             <div className="flex flex-col items-center justify-center max-w-full h-full gap-4 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+                <div className="relative rounded-lg overflow-hidden border border-slate-700 shadow-xl max-h-[60vh]">
+                    <img src={inputPreviewUrl} alt="Input Preview" className="max-h-[60vh] object-contain" />
+                    <div className="absolute top-2 left-2 bg-slate-800/80 px-2 py-1 rounded text-xs text-white">Input Preview</div>
+                </div>
+                 <p className="text-sm text-slate-400">Select a format and click convert to process this file.</p>
+            </div>
+        )}
+        
+        {!result && file && !inputPreviewUrl && (
+            <div className="text-center text-slate-500">
+                <FileType size={64} className="mx-auto mb-4 opacity-20" />
+                <h3 className="text-lg font-medium mb-1">{file.name}</h3>
+                <p className="text-slate-400">Preview not available for this file type.</p>
+            </div>
+        )}
+
+        {result && (
+           <div className="flex flex-col items-center justify-center max-w-full h-full gap-6 animate-in fade-in zoom-in duration-300">
+             <div className="relative group rounded-lg overflow-hidden border border-blue-500/30 shadow-2xl max-h-[70vh] cursor-pointer bg-slate-900" onClick={() => setIsPreviewOpen(true)}>
+               {/* Result Preview Logic */}
+               {['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                 <img src={`${API_BASE_URL}/api/files/${result}`} alt="Converted Result" className="max-h-[70vh] object-contain" />
+               ) : ['mp4', 'webm', 'mov'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                 <video src={`${API_BASE_URL}/api/files/${result}`} controls className="max-h-[70vh]" />
+               ) : (
+                 <div className="w-64 h-64 flex flex-col items-center justify-center bg-slate-800 text-slate-400">
+                   <FileType size={64} className="mb-4" />
+                   <span className="font-mono text-lg">{result.split('.').pop()?.toUpperCase()} CONTENT</span>
+                 </div>
+               )}
+
+               <div className="absolute top-2 left-2 bg-blue-600 px-2 py-1 rounded text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
+                   <span className="font-bold uppercase tracking-wider">Converted</span>
+                   {genDuration && <span className="opacity-80 font-medium">in {formatDuration(genDuration * 1000)}</span>}
+               </div>
+
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+                </div>
+             </div>
+
+             <div className="flex gap-3">
+               <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Preview</button>
+               <a href={`${API_BASE_URL}/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download File</a>
+             </div>
+           </div>
+        )}
       </div>
 
       {currentJobId && (
         <JobProgressModal
           jobId={currentJobId}
-          onClose={() => {
-            setCurrentJobId(null);
-            if (result) setIsPreviewOpen(true);
-          }}
+          onClose={handleCloseModal}
+          onViewResult={handleViewResult}
         />
       )}
 
