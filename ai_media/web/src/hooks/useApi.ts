@@ -21,7 +21,7 @@ export function useResourceMonitor() {
     // Quick health check to set connected status fast
     const quickHealthCheck = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/health`, { method: 'GET' });
+        const res = await fetch(`${API_BASE()}/api/health`, { method: 'GET' });
         if (res.ok) {
           setConnected(true);
         }
@@ -37,7 +37,15 @@ export function useResourceMonitor() {
         retryTimeoutRef.current = null;
       }
 
-      eventSourceRef.current = new EventSource(`${API_BASE}/sse/resources`);
+      // Determine correct SSE URL
+      // Determine correct SSE URL
+      let sseBaseUrl = API_BASE();
+      if (!sseBaseUrl) {
+         console.error("API_BASE is empty despite init check!");
+         // Let it fail naturally or return
+      }
+
+      eventSourceRef.current = new EventSource(`${sseBaseUrl}/sse/resources`);
 
       eventSourceRef.current.onopen = () => {
         setConnected(true);
@@ -81,7 +89,7 @@ export function useSystemInfo() {
   const { setSystemInfo } = useAppStore();
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/system`)
+    fetch(`${API_BASE()}/api/system`)
       .then((res) => res.json())
       .then((data) => setSystemInfo(data))
       .catch((err) => console.error('Failed to fetch system info:', err));
@@ -108,12 +116,17 @@ export function useJobSocket() {
       }
 
       // Create WebSocket connection
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // Create WebSocket connection
       // Use string cast to avoid TS getting confused if API_BASE is empty literal
-      const baseStr = (API_BASE as string);
-      const wsUrl = baseStr 
-        ? `${baseStr.replace('http', 'ws')}/ws/jobs`
-        : `${wsProtocol}//${window.location.host}/ws/jobs`;
+      const baseStr = API_BASE();
+      let wsUrl = '';
+      
+      if (baseStr) {
+        wsUrl = `${baseStr.replace(/^http/, 'ws')}/ws/jobs`;
+      } else {
+         console.error("API_BASE is empty, cannot connect to job socket");
+      }
+      
       const ws = new WebSocket(wsUrl);
       socketRef.current = ws;
 
@@ -199,7 +212,7 @@ export async function generateImage(params: {
   negative_prompt?: string;
   force?: boolean;
 }) {
-  const response = await fetch(`${API_BASE}/api/generate/image`, {
+  const response = await fetch(`${API_BASE()}/api/generate/image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -214,7 +227,7 @@ export async function generateVideo(params: {
   height?: number;
   duration?: number;
 }) {
-  const response = await fetch(`${API_BASE}/api/generate/video`, {
+  const response = await fetch(`${API_BASE()}/api/generate/video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -227,7 +240,7 @@ export async function generateAudio(params: {
   model?: string;
   duration?: number;
 }) {
-  const response = await fetch(`${API_BASE}/api/generate/audio`, {
+  const response = await fetch(`${API_BASE()}/api/generate/audio`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -247,7 +260,7 @@ export async function generateArticle(params: {
   max_images?: number;
   output_filename?: string;
 }) {
-  const response = await fetch(`${API_BASE}/api/generate/article`, {
+  const response = await fetch(`${API_BASE()}/api/generate/article`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -260,7 +273,7 @@ export async function generateCode(params: {
   output_name?: string;
   model?: string;
 }) {
-  const response = await fetch(`${API_BASE}/api/generate/code`, {
+  const response = await fetch(`${API_BASE()}/api/generate/code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -269,12 +282,12 @@ export async function generateCode(params: {
 }
 
 export async function getJobStatus(jobId: string) {
-  const response = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+  const response = await fetch(`${API_BASE()}/api/jobs/${jobId}`);
   return response.json();
 }
 
 export async function cancelJob(jobId: string) {
-  const response = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
+  const response = await fetch(`${API_BASE()}/api/jobs/${jobId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -284,7 +297,7 @@ export async function cancelJob(jobId: string) {
 }
 
 export async function fetchModels() {
-  const response = await fetch(`${API_BASE}/api/models`);
+  const response = await fetch(`${API_BASE()}/api/models`);
   return response.json();
 }
 
@@ -293,7 +306,7 @@ export async function fetchModels() {
  */
 export function useConfig() {
   useEffect(() => {
-    fetch(`${API_BASE}/api/config`)
+    fetch(`${API_BASE()}/api/config`)
       .then(res => res.json())
       .then(config => {
         if (config.preferences?.theme === 'dark') {
@@ -307,8 +320,39 @@ export function useConfig() {
 }
 
 export async function updateConfig(params: { theme?: string }) {
-  const response = await fetch(`${API_BASE}/api/config`, {
-    method: 'POST',
+  // Electron Strategy: Use IPC
+  if ((window as any).electronAPI) {
+    try {
+        // We need to pass the full config structure or just the updates
+        // The main process implementation takes 'config' and writes it. 
+        // We should first GET, then UDPATE, then SAVE to be safe, 
+        // OR checks if main process 'save-config' handles merging.
+        // Looking at main.js logic (not shown fully but likely overwrites), 
+        // let's trust the IPC is smart or we just pass what we want to change if it supports partials.
+        // Actually, main.js usually just writes what receives.
+        
+        // Let's safe-guard: Get current config -> Merge -> Save
+        const currentConfig = await (window as any).electronAPI.getConfig();
+        if (!currentConfig.preferences) currentConfig.preferences = {};
+        if (params.theme) currentConfig.preferences.theme = params.theme;
+        
+        await (window as any).electronAPI.saveConfig(currentConfig);
+        
+        // Apply immediately
+        if (params.theme) {
+          if (params.theme === 'dark') document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+        }
+        return { success: true };
+    } catch (e) {
+        console.error("IPC save config failed:", e);
+        throw e;
+    }
+  }
+
+  // Web Strategy: Use API (PUT)
+  const response = await fetch(`${API_BASE()}/api/config`, {
+    method: 'PUT', // Changed from POST to PUT
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });

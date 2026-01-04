@@ -1,5 +1,10 @@
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
+
+// Set App Name explicitly
+if (!app.isPackaged) {
+    app.setName('AI-Media');
+}
 
 // Suppress security warnings in dev
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
@@ -13,6 +18,234 @@ let serverProcess = null;
 
 // Determine if we're in development or production
 const isDev = !app.isPackaged;
+
+let aboutWindow = null;
+
+function createAboutWindow() {
+  if (aboutWindow) {
+    aboutWindow.focus();
+    return;
+  }
+
+  aboutWindow = new BrowserWindow({
+    width: 400,
+    height: 380,
+    title: 'About AI-Media',
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    webPreferences: {
+      nodeIntegration: true, // Enabled for this local static file to simplify logic
+      contextIsolation: false
+    },
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#0f172a',
+    parent: mainWindow || null,
+    modal: true,
+    show: false
+  });
+
+  aboutWindow.loadFile(path.join(__dirname, 'about.html'));
+
+  aboutWindow.once('ready-to-show', () => {
+    // Inject dynamic versions
+    const script = `
+      document.getElementById('app-version').innerText = 'Version ${app.getVersion()}';
+      document.getElementById('electron-version').innerText = 'Electron ${process.versions.electron}';
+      document.getElementById('year').innerText = new Date().getFullYear();
+    `;
+    aboutWindow.webContents.executeJavaScript(script);
+    aboutWindow.show();
+  });
+
+  // Handle external links in About window
+  aboutWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  aboutWindow.on('closed', () => {
+    aboutWindow = null;
+  });
+}
+
+function createAppMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // { role: 'appMenu' }
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { 
+              label: `About ${app.name}`,
+              click: createAboutWindow
+            },
+            { type: 'separator' },
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' }
+          ]
+        }]
+      : []),
+    // { role: 'fileMenu' }
+    {
+      label: 'File',
+      submenu: [
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    // ... existing menus ...
+
+    // { role: 'editMenu' }
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac
+          ? [
+              { role: 'pasteAndMatchStyle' },
+              { role: 'delete' },
+              { role: 'selectAll' },
+              { type: 'separator' },
+              {
+                label: 'Speech',
+                submenu: [
+                  { role: 'startSpeaking' },
+                  { role: 'stopSpeaking' }
+                ]
+              }
+            ]
+          : [
+              { role: 'delete' },
+              { type: 'separator' },
+              { role: 'selectAll' }
+            ])
+      ]
+    },
+    // { role: 'viewMenu' }
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+
+    // Tools Menu (Custom)
+    {
+      label: 'Tools',
+      submenu: [
+        { label: 'Generate', enabled: false },
+        { 
+            label: '🖼️ Image', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'image') 
+        },
+        { 
+            label: '🎥 Video', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'video') 
+        },
+        { 
+            label: '🎵 Audio', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'audio') 
+        },
+        { 
+            label: '📄 Article', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'article') 
+        },
+        { 
+            label: '💻 Code', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'code') 
+        },
+        { 
+            label: '💬 Chat', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'chat') 
+        },
+        { type: 'separator' },
+        { label: 'Edit', enabled: false },
+        { 
+            label: '✨ Transform', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'transform') 
+        },
+        { 
+            label: '🔄 Convert', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'convert') 
+        },
+        { 
+            label: '📈 Upscale', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'upscale') 
+        },
+        { type: 'separator' },
+        { label: 'History', enabled: false },
+        { 
+            label: '⏱️ Jobs', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'jobs') 
+        },
+        { type: 'separator' },
+        { label: 'System', enabled: false },
+        { 
+            label: '⚙️ Settings', 
+            click: () => mainWindow?.webContents.send('navigate-to', 'settings') 
+        }
+      ]
+    },
+    // { role: 'windowMenu' }
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac
+          ? [
+              { type: 'separator' },
+              { role: 'front' },
+              { type: 'separator' },
+              { role: 'window' }
+            ]
+          : [
+              { role: 'close' }
+            ])
+      ]
+    },
+    // Help Menu (Custom)
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Help Guide',
+          click: async () => {
+             // Always target the main window for app-level navigation
+             if (mainWindow && !mainWindow.isDestroyed()) {
+                 mainWindow.webContents.send('navigate-to', 'help');
+                 mainWindow.focus(); // Bring main window to front
+             }
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -42,6 +275,7 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
     mainWindow.show();
   });
 
@@ -196,6 +430,13 @@ app.whenReady().then(async () => {
     // Main process managing server (VITE_API_PORT set), skipping internal start.
   }
 
+  // Set Dock Icon for dev mode (macOS)
+  if (isDev && process.platform === 'darwin') {
+      const iconPath = path.join(__dirname, 'assets', 'icon.png');
+      app.dock.setIcon(iconPath);
+  }
+
+  createAppMenu();
   createWindow();
 
   app.on('activate', () => {

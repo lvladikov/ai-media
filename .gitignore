@@ -38,6 +38,10 @@ media-output/
 # Force include test inputs (overriding global extension ignores)
 !ai_media/testing/data/inputs/**
 
+# Allow web public assets
+!ai_media/web/public/**
+!ai_media/web/packages/electron/assets/**
+
 # Ignore test outputs and pycache in testing dir
 ai_media/testing/data/outputs/
 ai_media/testing/__pycache__/

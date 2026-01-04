@@ -27,13 +27,31 @@ def convert_text(markdown_text: str, fmt: str, filename: str = None) -> bytes:
     if fmt == "md":
         return markdown_text.encode("utf-8")
         
-    elif fmt == "html" or fmt == "xhtml":
+    elif fmt == "html":
         html = md_module.markdown(markdown_text, extensions=['extra', 'codehilite'])
         full_html = (
             f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Export</title>"
             f"<style>body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}"
             f"pre{{background:#f4f4f4;padding:1em;border-radius:5px}}</style></head>"
             f"<body>{html}</body></html>"
+        )
+        return full_html.encode("utf-8")
+
+    elif fmt == "xhtml":
+        # Strict XHTML 1.1
+        html = md_module.markdown(markdown_text, extensions=['extra', 'codehilite'], output_format='xhtml')
+        full_html = (
+            f'<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
+            f'<html xmlns="http://www.w3.org/1999/xhtml">\n'
+            f'<head>\n'
+            f'<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />\n'
+            f'<title>Export</title>\n'
+            f'<style type="text/css">\n'
+            f'body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}\n'
+            f'pre{{background:#f4f4f4;padding:1em;border-radius:5px}}\n'
+            f'</style>\n'
+            f'</head>\n'
+            f'<body>\n{html}\n</body>\n</html>'
         )
         return full_html.encode("utf-8")
         

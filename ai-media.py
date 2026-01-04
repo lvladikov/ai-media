@@ -432,7 +432,6 @@ Examples:
   -- Web Server --
   python ai-media.py --serve (Loads Server + both Web & Electron)
   python ai-media.py --serve-web-only-client
-  python ai-media.py --serve-electron-dev-only-client
   python ai-media.py --serve-no-client (Server only)
   python ai-media.py --serve --reload
 
@@ -638,9 +637,10 @@ Supported Models (Code : Download Size | Description):
     server_group = parser.add_argument_group("Web Server")
     server_group.add_argument("--serve", action="store_true", help="Start the web server and launch both Web and Electron clients (Loads Server + both Web & Electron)")
     server_group.add_argument("--serve-web-only-client", action="store_true", help="Start the web server and launch only the Web client")
-    server_group.add_argument("--serve-electron-dev-only-client", action="store_true", help="Start the web server and launch only the Electron client")
     server_group.add_argument("--serve-no-client", action="store_true", help="Start the backend server only (no clients)")
     server_group.add_argument("--reload", action="store_true", help="Enable auto-reload for development (On by default for Client modes)")
+    server_group.add_argument("--host", default=None, help="Host for the web server (Overrides config)")
+    server_group.add_argument("--port", type=int, default=None, help="Port for the backend server (Overrides config)")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
     parser.add_argument("--list-models", action="store_true", help="List all available models and exit.")
@@ -682,21 +682,21 @@ Supported Models (Code : Download Size | Description):
         sys.exit(0)
     
     # Server Mode - start web server
-    serve_any = args.serve or args.serve_web_only_client or args.serve_electron_dev_only_client or args.serve_no_client
+    serve_any = args.serve or args.serve_web_only_client or args.serve_no_client
     if serve_any:
-        # Load config for host/ports
-        host = CONFIG["server"]["host"]
-        server_port = CONFIG["server"]["port"]
+        # Load config for host/ports (allowing CLI overrides)
+        host = args.host if args.host else CONFIG["server"]["host"]
+        server_port = args.port if args.port else CONFIG["server"]["port"]
         web_port = CONFIG["client"]["port"]
         
         # Determine if reload should be on (default True for clients, False for server-only)
         reload_enabled = args.reload
-        if not reload_enabled and (args.serve or args.serve_web_only_client or args.serve_electron_dev_only_client):
+        if not reload_enabled and (args.serve or args.serve_web_only_client):
             reload_enabled = True
         
         # Determine which clients to start
         start_web = args.serve or args.serve_web_only_client
-        start_electron = args.serve or args.serve_electron_dev_only_client
+        start_electron = args.serve
         
         procs = []
         try:

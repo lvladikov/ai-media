@@ -4,10 +4,10 @@ export function TitleBar() {
 
   return (
     <div 
-      className="h-10 w-full bg-slate-950/50 border-b border-white/5 flex items-center justify-center text-xs text-slate-500 select-none shrink-0"
+      className="h-10 w-full bg-secondary border-b border-border flex items-center justify-center text-xs text-slate-500 dark:text-slate-400 select-none shrink-0"
       style={{ WebkitAppRegion: 'drag' } as any}
     >
-      <span className="font-medium opacity-50">AI-Media Studio</span>
+      <span className="font-medium">AI-Media</span>
     </div>
   );
 }

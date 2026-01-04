@@ -10,6 +10,7 @@ import { ResourceWarningModal } from './common/ResourceWarningModal';
 import { NumberInput } from './common/NumberInput';
 import { DragDropZone } from './common/DragDropZone';
 import { formatDuration } from '../utils/formatTime';
+import { ModelHelpLink } from './common/ModelHelpLink';
 
 // Check if a file extension can't be previewed in browsers
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -68,7 +69,7 @@ export function UpscaleView() {
       formData.append('file', selectedFile);
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        const response = await fetch(`${API_BASE_URL()}/api/upload`, {
           method: 'POST',
           body: formData,
         });
@@ -109,7 +110,7 @@ export function UpscaleView() {
     formData.append('file', droppedFile);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      const response = await fetch(`${API_BASE_URL()}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -135,7 +136,7 @@ export function UpscaleView() {
     setProcessedFactor(factor);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upscale`, {
+      const response = await fetch(`${API_BASE_URL()}/api/upscale`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,7 +181,7 @@ export function UpscaleView() {
     // Validate first
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/upscale/validate`, {
+      const res = await fetch(`${API_BASE_URL()}/api/upscale/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -215,9 +216,13 @@ export function UpscaleView() {
   useEffect(() => {
     if (!currentJobId) return;
 
+    let hasSeenJob = false;
+
     const unsubscribe = useAppStore.subscribe((state) => {
       const job = state.jobs.find(j => j.job_id === currentJobId);
       if (job) {
+        hasSeenJob = true;
+
         if (job.status === 'complete') {
           setResult(job.result_path);
 
@@ -242,8 +247,8 @@ export function UpscaleView() {
           setError("Job cancelled.");
           setTimeout(() => setError(null), 6000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled)
         setIsSubmitting(false);
         setCurrentJobId(null);
       }
@@ -252,19 +257,19 @@ export function UpscaleView() {
   }, [currentJobId]);
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Sidebar Params */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             {isDownscale ? <TrendingDown className="text-emerald-400" /> : <TrendingUp className="text-emerald-400" />} {isDownscale ? "Downscale" : "Upscale"}
           </h2>
-          <p className="text-xs text-slate-500">Enhance resolution and details</p>
+          <p className="text-xs text-tertiary">Enhance resolution and details</p>
         </div>
 
         {/* Upload */}
         <DragDropZone
-          className="border-2 border-dashed border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-emerald-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer relative"
+          className="border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-emerald-500/50 hover:bg-secondary/50 transition-colors cursor-pointer relative"
           draggingClassName="border-emerald-500 bg-emerald-500/10"
           onFileDrop={handleFileDrop}
           accept="image/*,video/*,.tiff,.tif"
@@ -279,10 +284,10 @@ export function UpscaleView() {
 
           {file && isNonPreviewableFormat(file.name) ? (
             <div className="flex flex-col items-center gap-2 py-2">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-lg flex items-center justify-center border border-slate-600">
-                <ImageIcon size={28} className="text-slate-500" />
+              <div className="w-16 h-16 bg-tertiary/50 rounded-lg flex items-center justify-center border border-border">
+                <ImageIcon size={28} className="text-tertiary" />
               </div>
-              <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+              <span className="text-[10px] text-tertiary bg-secondary px-2 py-0.5 rounded">
                 {file.name.split('.').pop()?.toUpperCase()} - No Preview
               </span>
             </div>
@@ -290,14 +295,16 @@ export function UpscaleView() {
             <img src={inputPreview} alt="Preview" className="max-h-32 object-contain rounded" />
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <Upload size={28} className="text-slate-400" />
-              <span className="text-sm text-slate-400">Click or Drag & Drop</span>
+              <Upload size={28} className="text-secondary" />
+              <span className="text-sm text-secondary">Click or Drag & Drop</span>
             </div>
           )}
 
-          <div className="text-center">
-            <p className="text-sm font-medium">{file ? file.name : "Upload Media"}</p>
-            <p className="text-xs text-slate-500">Image or Video</p>
+          <div className="text-center w-full">
+            <p className="font-medium text-primary text-xs truncate max-w-[200px] mx-auto" title={file ? file.name : undefined}>{file ? file.name : "Upload Media"}</p>
+            <p className="text-xs text-secondary">
+              {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Image or Video"}
+            </p>
           </div>
 
           {isUploading && (
@@ -312,12 +319,12 @@ export function UpscaleView() {
 
           {/* Factor */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Scale Factor</label>
-            <div className="flex flex-wrap gap-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <label className="text-sm font-medium text-secondary">Scale Factor</label>
+            <div className="flex flex-wrap gap-2 bg-primary p-1 rounded-lg border border-border">
               {[2.0, 4.0, 8.0].map(f => (
                 <button
                   key={f}
-                  className={`flex-1 py-1.5 px-2 text-sm font-medium rounded transition-all ${!isCustomFactor && factor === f ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                  className={`flex-1 py-1.5 px-2 text-sm font-medium rounded transition-all ${!isCustomFactor && factor === f ? 'bg-slate-200 dark:bg-secondary text-slate-900 dark:text-primary shadow' : 'text-slate-500 dark:text-secondary hover:text-slate-900 dark:hover:text-primary'}`}
                   onClick={() => {
                     setFactor(f);
                     setIsCustomFactor(false);
@@ -327,7 +334,7 @@ export function UpscaleView() {
                 </button>
               ))}
               <button
-                className={`flex-1 py-1.5 px-2 text-sm font-medium rounded transition-all ${isCustomFactor ? 'bg-primary-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`flex-1 py-1.5 px-2 text-sm font-medium rounded transition-all ${isCustomFactor ? 'bg-slate-200 dark:bg-primary-600 text-slate-900 dark:text-primary shadow' : 'text-slate-500 dark:text-secondary hover:text-slate-900 dark:hover:text-primary'}`}
                 onClick={() => setIsCustomFactor(true)}
                 title="Custom factor (allows higher numbers and < 1.0 effectively for downscaling)"
               >
@@ -344,12 +351,12 @@ export function UpscaleView() {
                   max={method === 'ai' ? 16.0 : 128.0}
                   step={0.1}
                   allowFloat={true}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-primary focus:outline-none focus:border-primary-500 transition-colors"
                   placeholder="Enter scale (e.g. 0.5, 2x)"
                   title={`Enter value (0.1 - ${method === 'ai' ? '16.0' : '128.0'}). Use values < 1.0 to downscale (e.g. 0.5)`}
                 />
                 {method === 'ai' && (
-                  <p className="text-[10px] text-slate-500 mt-1 text-right">Max recommended for AI models: 8x</p>
+                  <p className="text-[10px] text-tertiary mt-1 text-right">Max recommended for AI models: 8x</p>
                 )}
               </div>
             )}
@@ -357,17 +364,20 @@ export function UpscaleView() {
 
           {/* Method */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-slate-400">Method</label>
+            <label className="text-sm font-medium text-secondary flex items-center">
+              Method
+              <ModelHelpLink section="upscale" />
+            </label>
 
             {/* AI Group */}
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">AI Upscaling</p>
+              <p className="text-[10px] font-bold text-tertiary uppercase tracking-wider pl-1">AI Upscaling</p>
               <div className="grid grid-cols-1 gap-2">
                 <button
                   onClick={() => setMethod('fast')}
                   className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${method === 'fast'
-                      ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-primary border-border text-secondary hover:bg-secondary/50'
                     }`}
                 >
                   <Zap size={18} />
@@ -380,8 +390,8 @@ export function UpscaleView() {
                 <button
                   onClick={() => setMethod('ai')}
                   className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${method === 'ai'
-                      ? 'bg-purple-500/10 border-purple-500/50 text-purple-400'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                      ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-400'
+                      : 'bg-primary border-border text-secondary hover:bg-secondary/50'
                     }`}
                 >
                   <Wand2 size={18} />
@@ -395,12 +405,12 @@ export function UpscaleView() {
 
             {/* Traditional Group */}
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Traditional</p>
+              <p className="text-[10px] font-bold text-tertiary uppercase tracking-wider pl-1">Traditional</p>
               <button
                 onClick={() => setMethod('simple')}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${method === 'simple'
-                    ? 'bg-blue-500/10 border-blue-500/50 text-blue-400'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                    ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-400'
+                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
                   }`}
               >
                 <ImageIcon size={18} />
@@ -415,9 +425,9 @@ export function UpscaleView() {
           {/* Denoise Strength (Only for AI) */}
           {method === 'ai' && (
             <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-              <label className="text-sm font-medium text-slate-400 flex justify-between">
+              <label className="text-sm font-medium text-secondary flex justify-between">
                 Creativity / Denoise
-                <span className="text-white">{strength}</span>
+                <span className="text-primary">{strength}</span>
               </label>
               <input
                 type="range"
@@ -426,9 +436,9 @@ export function UpscaleView() {
                 step="0.05"
                 value={strength}
                 onChange={(e) => setStrength(parseFloat(e.target.value))}
-                className="w-full accent-emerald-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                className="w-full accent-emerald-500 h-1 bg-secondary rounded-lg appearance-none cursor-pointer"
               />
-              <p className="text-xs text-slate-500">Higher = more imagined details (modifies original)</p>
+              <p className="text-xs text-tertiary">Higher = more imagined details (modifies original)</p>
             </div>
           )}
         </div>
@@ -436,7 +446,7 @@ export function UpscaleView() {
         <button
           onClick={handleUpscaleClick}
           disabled={!serverFilePath || isUploading || isSubmitting}
-          className={`mt-auto w-full relative overflow-hidden bg-[length:100%_200%] bg-[linear-gradient(to_top,#10b981,#14b8a6,#10b981,#14b8a6,#10b981)] text-white font-bold py-3 rounded-lg shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 transition-all group hover:shadow-emerald-900/40 ${serverFilePath && !isUploading && !isSubmitting ? (isDownscale ? 'animate-gradient-y-reverse' : 'animate-gradient-y') : ''
+          className={`mt-auto w-full relative overflow-hidden bg-[length:100%_200%] bg-[linear-gradient(to_top,#10b981,#14b8a6,#10b981,#14b8a6,#10b981)] text-primary font-bold py-3 rounded-lg shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 transition-all group hover:shadow-emerald-900/40 ${serverFilePath && !isUploading && !isSubmitting ? (isDownscale ? 'animate-gradient-y-reverse' : 'animate-gradient-y') : ''
             }`}
         >
           {/* Decorative Animated Arrows */}
@@ -444,16 +454,16 @@ export function UpscaleView() {
             <>
               <div className="absolute left-3 inset-y-0 flex items-center justify-center">
                 {isDownscale ? (
-                  <ChevronsDown className="text-white blur-[1px] animate-shimmer-down" size={24} />
+                  <ChevronsDown className="text-primary blur-[1px] animate-shimmer-down" size={24} />
                 ) : (
-                  <ChevronsUp className="text-white blur-[1px] animate-shimmer-up" size={24} />
+                  <ChevronsUp className="text-primary blur-[1px] animate-shimmer-up" size={24} />
                 )}
               </div>
               <div className="absolute right-3 inset-y-0 flex items-center justify-center">
                 {isDownscale ? (
-                  <ChevronsDown className="text-white blur-[1px] animate-shimmer-down" size={24} />
+                  <ChevronsDown className="text-primary blur-[1px] animate-shimmer-down" size={24} />
                 ) : (
-                  <ChevronsUp className="text-white blur-[1px] animate-shimmer-up" size={24} />
+                  <ChevronsUp className="text-primary blur-[1px] animate-shimmer-up" size={24} />
                 )}
               </div>
             </>
@@ -471,15 +481,15 @@ export function UpscaleView() {
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
       </div>
 
-      <div className="flex-1 p-8 flex items-center justify-center bg-slate-950/30">
+      <div className="flex-1 p-8 flex items-center justify-center bg-primary/30">
         {file && isNonPreviewableFormat(file.name) ? (
           /* TIFF/Non-Previewable File Placeholder */
           <div className="flex flex-col md:flex-row items-stretch gap-6 max-w-full">
-            <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-slate-900/50 min-w-[280px] min-h-[320px]">
-              <ImageIcon size={64} className="text-slate-600 mb-4" />
+            <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-primary/50 min-w-[280px] min-h-[320px]">
+              <ImageIcon size={64} className="text-tertiary mb-4" />
               <div className="flex flex-col items-center text-center">
-                <span className="text-lg font-bold text-slate-300">{file.name.split('.').pop()?.toUpperCase()} File</span>
-                <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                <span className="text-lg font-bold text-secondary">{file.name.split('.').pop()?.toUpperCase()} File</span>
+                <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
               </div>
               <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
                 Original
@@ -487,21 +497,21 @@ export function UpscaleView() {
             </div>
 
             {/* Arrow */}
-            {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+            {result && <ArrowRight className="hidden md:block text-tertiary" size={32} />}
 
             {/* Upscaled Result */}
             {result && (
-              <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-slate-900/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+              <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-primary/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
                 {isNonPreviewableFormat(result) ? (
                   <>
-                    <ImageIcon size={64} className="text-slate-600 mb-4" />
+                    <ImageIcon size={64} className="text-tertiary mb-4" />
                     <div className="flex flex-col items-center text-center">
-                      <span className="text-lg font-bold text-slate-300">{result.split('.').pop()?.toUpperCase()} File</span>
-                      <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                      <span className="text-lg font-bold text-secondary">{result.split('.').pop()?.toUpperCase()} File</span>
+                      <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
                     </div>
                   </>
                 ) : (
-                  <img src={`http://localhost:8000/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
+                  <img src={`${API_BASE_URL()}/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
                 )}
                 <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-1">
                   <span className="text-[10px] font-mono text-white uppercase tracking-tighter">
@@ -518,7 +528,7 @@ export function UpscaleView() {
         ) : inputPreview ? (
           <div className="flex flex-col md:flex-row items-center gap-6 max-w-full">
             {/* Original */}
-            <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl max-w-full">
+            <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-2xl max-w-full">
               <img src={inputPreview} className="max-w-full max-h-[70vh] object-contain" />
               <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
                 Original
@@ -526,12 +536,12 @@ export function UpscaleView() {
             </div>
 
             {/* Arrow */}
-            {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+            {result && <ArrowRight className="hidden md:block text-tertiary" size={32} />}
 
             {/* Upscaled Result */}
             {result && (
               <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl max-w-full cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
-                <img src={`http://localhost:8000/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
+                <img src={`${API_BASE_URL()}/api/files/${result}`} className="max-w-full max-h-[70vh] object-contain" />
                 <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-1">
                   <span className="text-[10px] font-mono text-white uppercase tracking-tighter">
                     {isResultDownscale ? "Downscaled" : "Upscaled"} {processedFactor}x
@@ -545,10 +555,10 @@ export function UpscaleView() {
             )}
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <TrendingUp size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to Upscale</h3>
-            <p className="text-slate-400 max-w-sm">
+            <p className="text-secondary max-w-sm">
               Upload an image/video from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start upscaling.
             </p>
           </div>

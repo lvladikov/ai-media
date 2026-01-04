@@ -1,7 +1,7 @@
 {
   "name": "ai-media-web",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.1",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -11,6 +11,7 @@
     "dev:client": "vite",
     "dev:server": "cd ../.. && source venv/bin/activate && python ai-media.py --serve",
     "dev:both": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:electron": "concurrently \"npm run dev:client\" \"npm run electron\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

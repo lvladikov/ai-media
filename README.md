@@ -25,7 +25,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](docs/media-conversion.md#document-conversion-options).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](docs/upscaling.md#options), [Examples](docs/upscaling.md#examples) and [Models](docs/upscaling.md#models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
-- 🌐 **Web Client & Desktop App** - Browser-based interface and Electron desktop app for all features with real-time resource monitoring. Launch with `python ai-media.py --serve` (both clients), `--serve-web-only-client`, or `--serve-electron-dev-only-client`. See [Web Client](docs/web-client.md).
+- 🌐 **Web Client & Desktop App** - Browser-based interface and Electron desktop app for all features with real-time resource monitoring. Launch with `python ai-media.py --serve` (both clients), or `--serve-web-only-client` (only Web Client). See [Web Client](docs/web-client.md).
 - 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](docs/testing.md).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)

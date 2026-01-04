@@ -37,6 +37,9 @@ async def transform_image(request: TransformRequest):
             request.instruction,
             output_path,
             request.model,
+            request.guidance_scale,
+            request.image_guidance_scale,
+            request.silhouette,
             True, # Always bypass warning in server mode
         ),
     )

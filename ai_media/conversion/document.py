@@ -244,13 +244,31 @@ def _write_from_markdown(markdown_content, output_path, output_format):
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(markdown_content)
             
-    elif output_format in ["html", "xhtml"]:
+    elif output_format == "html":
         html = md_module.markdown(markdown_content, extensions=['extra', 'codehilite'])
         full_html = (
             f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Document</title>"
             f"<style>body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}"
             f"pre{{background:#f4f4f4;padding:1em;border-radius:5px}}</style></head>"
             f"<body>{html}</body></html>"
+        )
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(full_html)
+            
+    elif output_format == "xhtml":
+        html = md_module.markdown(markdown_content, extensions=['extra', 'codehilite'], output_format='xhtml')
+        full_html = (
+            f'<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
+            f'<html xmlns="http://www.w3.org/1999/xhtml">\n'
+            f'<head>\n'
+            f'<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />\n'
+            f'<title>Document</title>\n'
+            f'<style type="text/css">\n'
+            f'body{{font-family:sans-serif;max-width:800px;margin:2em auto;padding:1em;line-height:1.6}}\n'
+            f'pre{{background:#f4f4f4;padding:1em;border-radius:5px}}\n'
+            f'</style>\n'
+            f'</head>\n'
+            f'<body>\n{html}\n</body>\n</html>'
         )
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(full_html)

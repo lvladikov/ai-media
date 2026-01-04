@@ -102,14 +102,14 @@ export function SaveModal({ isOpen, onClose, onSave, lastMessage, fullChat, sugg
             <label className="block text-xs font-semibold text-tertiary uppercase tracking-wider mb-2">What to Save</label>
             <div className="grid grid-cols-2 gap-2">
               <button 
-                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${scope === 'last' ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-slate-600'}`}
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${scope === 'last' ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-border'}`}
                 onClick={() => setScope('last')}
                 disabled={!lastMessage}
               >
                 Last Message
               </button>
               <button 
-                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${scope === 'full' ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-slate-600'}`}
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${scope === 'full' ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-border'}`}
                 onClick={() => setScope('full')}
               >
                 Full Chat History
@@ -124,7 +124,7 @@ export function SaveModal({ isOpen, onClose, onSave, lastMessage, fullChat, sugg
               {FORMATS.map(f => (
                 <button 
                   key={f.id}
-                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-all ${format === f.id ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-slate-600'}`}
+                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-all ${format === f.id ? 'bg-brand-500/10 border-brand-500 text-brand-400' : 'bg-primary border-border text-tertiary hover:border-border'}`}
                   onClick={() => setFormat(f.id)}
                 >
                   {f.label}
@@ -143,7 +143,7 @@ export function SaveModal({ isOpen, onClose, onSave, lastMessage, fullChat, sugg
                 onChange={e => setFilename(e.target.value)}
                 placeholder="filename.ext"
               />
-              <FileText className="absolute right-3 top-2.5 text-slate-500" size={18} />
+              <FileText className="absolute right-3 top-2.5 text-tertiary" size={18} />
             </div>
           </div>
           

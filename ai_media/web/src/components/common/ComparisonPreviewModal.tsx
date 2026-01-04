@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Download, Image, Columns, ArrowLeftRight } from 'lucide-react';
+import { API_BASE_URL } from '../../config';
 
 interface ImageMetadata {
   width: number;
@@ -58,8 +59,8 @@ export function ComparisonPreviewModal({
 
   // Build URLs - originalPath might be data URL, blob URL, or server path
   const isFullUrl = originalPath && (originalPath.startsWith('data:') || originalPath.startsWith('blob:') || originalPath.startsWith('http'));
-  const originalUrl = isFullUrl ? originalPath : `http://localhost:8000/api/files/${originalPath}`;
-  const resultUrl = `http://localhost:8000/api/files/${resultPath}`;
+  const originalUrl = isFullUrl ? originalPath : `${API_BASE_URL()}/api/files/${originalPath}`;
+  const resultUrl = `${API_BASE_URL()}/api/files/${resultPath}`;
 
   const handleDownload = () => {
     const a = document.createElement('a');
@@ -88,10 +89,10 @@ export function ComparisonPreviewModal({
       if (factor >= 1) {
           // Upscaling
           if (!isOriginal) return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
-          return { className: `${base} border-slate-700`, style: { maxHeight: 'calc(100% - 2rem)', height: `${(1/factor) * 100}%` } };
+          return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: `${(1/factor) * 100}%` } };
       } else {
           // Downscaling
-          if (isOriginal) return { className: `${base} border-slate-700`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
+          if (isOriginal) return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
           return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: `${factor * 100}%` } };
       }
   };
@@ -102,14 +103,14 @@ export function ComparisonPreviewModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div 
-        className="relative bg-slate-800 rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col" 
+        className="relative bg-secondary rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col" 
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '90vw', maxHeight: '90vh' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-0 flex-shrink-0 px-4 pt-4">
           <div className="flex items-center gap-3 pb-4">
-            <h3 className="text-lg font-semibold truncate max-w-md flex items-center gap-2 text-white">
+            <h3 className="text-lg font-semibold truncate max-w-md flex items-center gap-2 text-primary">
               <ArrowLeftRight size={18} className="text-primary-400" />
               {fileName}
             </h3>
@@ -124,8 +125,8 @@ export function ComparisonPreviewModal({
                   onClick={() => setActiveTab(tab.id)}
                   className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${idx > 0 ? 'ml-[-1px]' : ''} ${
                     activeTab === tab.id 
-                      ? 'bg-[#1e1e1e] text-primary-400 border-slate-600 border-b-[#1e1e1e] z-10' 
-                      : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
+                      ? 'bg-zinc-100 dark:bg-zinc-950 text-primary border-zinc-300 dark:border-zinc-800 border-b-zinc-100 dark:border-b-zinc-950 z-10' 
+                      : 'bg-secondary text-secondary border-transparent hover:bg-tertiary hover:text-primary border-b-zinc-300 dark:border-b-zinc-800'
                   }`}
                 >
                   {tab.icon} {tab.label}
@@ -133,11 +134,11 @@ export function ComparisonPreviewModal({
               ))}
             </div>
           
-            <div className="flex items-center gap-2 pb-3 mb-1 pl-4 border-l border-slate-700/50">
+            <div className="flex items-center gap-2 pb-3 mb-1 pl-4 border-l border-border/50">
               <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center" onClick={handleDownload} title={`Download ${resultLabel}`}>
                 <Download size={16} />
               </button>
-              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center hover:bg-red-500/20 hover:text-red-200 hover:border-red-500/50" onClick={onClose} title="Close">
+              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-200 hover:border-red-500/50" onClick={onClose} title="Close">
                 <X size={16} />
               </button>
             </div>
@@ -145,18 +146,18 @@ export function ComparisonPreviewModal({
         </div>
 
         {/* Content */}
-        <div className="relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-[#1e1e1e] border border-slate-600 rounded-b-lg rounded-tr-lg flex items-center justify-center p-4">
+        <div className="relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-b-lg rounded-tr-lg flex items-center justify-center p-4">
           {activeTab === 'result' && (
             (resultCannotPreview || resultError) ? (
               <div className="flex flex-col items-center gap-4 text-center p-8">
-                <div className="w-24 h-24 bg-slate-700/50 rounded-xl flex items-center justify-center border border-slate-600">
-                  <Image size={48} className="text-slate-500" />
+                <div className="w-24 h-24 bg-tertiary/50 rounded-xl flex items-center justify-center border border-border">
+                  <Image size={48} className="text-tertiary" />
                 </div>
                 <div className="space-y-2">
-                  <h4 className="text-lg font-medium text-slate-300">
+                  <h4 className="text-lg font-medium text-secondary">
                     {resultCannotPreview ? `${resultFormat?.toUpperCase()} files cannot be previewed` : 'Failed to load image'}
                   </h4>
-                  <p className="text-sm text-slate-500 max-w-sm">
+                  <p className="text-sm text-tertiary max-w-sm">
                     {resultCannotPreview 
                       ? 'This format is not supported for browser preview. Download the file to view it in an image editor.'
                       : 'There was an error loading the result image. It may be corrupted or missing.'}
@@ -191,14 +192,14 @@ export function ComparisonPreviewModal({
           {activeTab === 'original' && (
             (originalCannotPreview || originalError) ? (
               <div className="flex flex-col items-center gap-4 text-center p-8">
-                <div className="w-24 h-24 bg-slate-700/50 rounded-xl flex items-center justify-center border border-slate-600">
-                  <Image size={48} className="text-slate-500" />
+                <div className="w-24 h-24 bg-tertiary/50 rounded-xl flex items-center justify-center border border-border">
+                  <Image size={48} className="text-tertiary" />
                 </div>
                 <div className="space-y-2">
-                  <h4 className="text-lg font-medium text-slate-300">
+                  <h4 className="text-lg font-medium text-secondary">
                     {originalCannotPreview ? `${originalFormat?.toUpperCase() || 'This'} file cannot be previewed` : 'Failed to load original image'}
                   </h4>
-                  <p className="text-sm text-slate-500 max-w-sm">
+                  <p className="text-sm text-tertiary max-w-sm">
                     {originalCannotPreview 
                       ? 'This format is not supported for browser preview.'
                       : 'There was an error loading the original image.'}
@@ -215,7 +216,7 @@ export function ComparisonPreviewModal({
                   onError={() => setOriginalError(true)}
                 />
                 {originalMeta && (
-                  <div className="absolute bottom-2 left-2 text-[11px] text-slate-400 bg-black/60 px-2 py-1 rounded backdrop-blur-sm">
+                  <div className="absolute bottom-2 left-2 text-[11px] text-white bg-black/60 px-2 py-1 rounded backdrop-blur-sm">
                     {originalMeta.width}×{originalMeta.height}{originalFileSize && ` • ${formatFileSize(originalFileSize)}`}
                   </div>
                 )}
@@ -226,10 +227,10 @@ export function ComparisonPreviewModal({
           {activeTab === 'sideBySide' && (
             <div className="flex flex-col md:flex-row gap-4 w-full h-full items-center justify-center">
               <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
-                <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-xs font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded-t border border-b-0 border-slate-700">Original</span>
+                <div className="flex flex-col items-center shadow-sm">
+                  <span className="text-xs font-medium text-secondary bg-white dark:bg-secondary px-2 py-1 rounded-t border border-b-0 border-border">Original</span>
                   {(originalMeta || originalFileSize) && (
-                    <span className="text-[10px] text-slate-500 bg-slate-800/80 px-2 py-0.5 rounded-b border border-t-0 border-slate-700">
+                    <span className="text-[10px] text-tertiary bg-white/80 dark:bg-secondary/80 px-2 py-0.5 rounded-b border border-t-0 border-border">
                       {originalMeta && `${originalMeta.width}×${originalMeta.height}`}
                       {originalMeta && originalFileSize && ' • '}
                       {originalFileSize && formatFileSize(originalFileSize)}
@@ -237,9 +238,9 @@ export function ComparisonPreviewModal({
                   )}
                 </div>
                 {originalCannotPreview || originalError ? (
-                  <div className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-800/50 rounded-lg border border-slate-700 h-full w-full max-w-[400px]">
-                    <Image size={32} className="text-slate-500" />
-                    <span className="text-xs text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-3 p-6 bg-white/50 dark:bg-secondary/50 rounded-lg border border-border h-full w-full max-w-[400px]">
+                    <Image size={32} className="text-tertiary" />
+                    <span className="text-xs text-tertiary">
                       {originalCannotPreview ? `${originalFormat?.toUpperCase()} preview unavailable` : 'Failed to load original'}
                     </span>
                   </div>
@@ -255,10 +256,10 @@ export function ComparisonPreviewModal({
                 )}
               </div>
               <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
-                <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-xs font-medium text-primary-400 bg-primary-500/10 px-2 py-1 rounded-t border border-b-0 border-primary-500/30">{resultLabel}</span>
+                <div className="flex flex-col items-center shadow-sm">
+                  <span className="text-xs font-medium text-primary-600 dark:text-primary-400 bg-white dark:bg-primary-500/10 px-2 py-1 rounded-t border border-b-0 border-primary-200 dark:border-primary-500/30">{resultLabel}</span>
                   {!resultCannotPreview && (resultMeta || resultFileSize) && (
-                    <span className="text-[10px] text-primary-300/70 bg-primary-500/5 px-2 py-0.5 rounded-b border border-t-0 border-primary-500/20">
+                    <span className="text-[10px] text-primary-500/70 dark:text-primary-300/70 bg-white/90 dark:bg-primary-500/5 px-2 py-0.5 rounded-b border border-t-0 border-primary-200 dark:border-primary-500/20">
                       {resultMeta && `${resultMeta.width}×${resultMeta.height}`}
                       {resultMeta && resultFileSize && ' • '}
                       {resultFileSize && formatFileSize(resultFileSize)}
@@ -266,9 +267,9 @@ export function ComparisonPreviewModal({
                   )}
                 </div>
                 {resultCannotPreview || resultError ? (
-                  <div className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-800/50 rounded-lg border border-slate-700 h-full w-full max-w-[400px]">
-                    <Image size={32} className="text-slate-500" />
-                    <span className="text-xs text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-3 p-6 bg-secondary/50 rounded-lg border border-border h-full w-full max-w-[400px]">
+                    <Image size={32} className="text-tertiary" />
+                    <span className="text-xs text-tertiary">
                       {resultCannotPreview ? `${resultFormat?.toUpperCase()} preview unavailable` : 'Failed to load result'}
                     </span>
                     <button onClick={handleDownload} className="btn-primary text-xs py-1 px-3 flex items-center gap-1.5 mt-2">

@@ -10,6 +10,7 @@ import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
 import { ProjectPreviewModal } from './ProjectPreviewModal';
 import { formatDuration } from '../utils/formatTime';
+import { ModelHelpLink } from './common/ModelHelpLink';
 import { API_BASE_URL } from '../config';
 
 interface ModelInfo {
@@ -24,7 +25,7 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
   'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
   'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
-  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
+  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
   'qwen3-coder-30b': { label: 'Qwen3 Coder 30B MoE (⚠️ 64GB RAM)', vram: '~10GB' },
@@ -81,7 +82,9 @@ export function CodeGenerator() {
       .catch((err) => console.error('Failed to fetch models:', err));
 
     // Connect to a lightweight endpoint for cleanup on disconnect (like Chat)
-    const ws = new WebSocket(`ws://localhost:8000/ws/code`);
+    const wsBaseUrl = API_BASE_URL();
+    const wsUrl = wsBaseUrl.replace(/^http/, 'ws');
+    const ws = new WebSocket(`${wsUrl}/ws/code`);
 
     // Cleanup: Close socket when navigating away - server unloads model on disconnect
     return () => {
@@ -132,9 +135,13 @@ export function CodeGenerator() {
   useEffect(() => {
     if (!currentJobId) return;
 
+    let hasSeenJob = false;
+
     const unsubscribe = useAppStore.subscribe((state) => {
       const job = state.jobs.find(j => j.job_id === currentJobId);
       if (job) {
+        hasSeenJob = true;
+
         if (job.status === 'complete') {
           setResult(job.result_path);
 
@@ -168,8 +175,8 @@ export function CodeGenerator() {
           // Auto-dismiss after 6 seconds
           setTimeout(() => setError(null), 6000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled)
         setIsLoading(false);
         setCurrentJobId(null);
       }
@@ -200,24 +207,24 @@ export function CodeGenerator() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <Code className="text-brand-400" /> Code Gen
           </h2>
-          <p className="text-xs text-slate-500">Generate applications, scripts and modules</p>
+          <p className="text-xs text-tertiary">Generate applications, scripts and modules</p>
         </div>
 
         {/* Instructions */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-400">Instructions</label>
+            <label className="text-sm font-medium text-secondary">Instructions</label>
             <RandomPrompt type="code" onPromptSelect={setPrompt} />
           </div>
           <textarea
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
+            className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
             placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -226,9 +233,12 @@ export function CodeGenerator() {
 
         {/* Model Selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-400">Model</label>
+          <label className="text-sm font-medium text-secondary flex items-center">
+            Model
+            <ModelHelpLink section="text" />
+          </label>
           <select
-            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
@@ -258,12 +268,12 @@ export function CodeGenerator() {
 
         {/* Output Name */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-400">
+          <label className="text-xs font-medium text-secondary">
             Output Name (Optional)
           </label>
           <input
             type="text"
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            className="w-full bg-primary border border-border rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
             placeholder="Auto-generated if empty"
             value={outputName}
             onChange={(e) => setOutputName(e.target.value)}
@@ -274,7 +284,7 @@ export function CodeGenerator() {
 
         <ValidationTooltip error={!prompt.trim() ? "Please enter instructions" : null} className="w-full mt-auto pt-4">
           <button
-            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={handleGenerate}
             disabled={isLoading || !prompt.trim()}
           >
@@ -284,18 +294,18 @@ export function CodeGenerator() {
       </div>
 
       {/* Main Result Area */}
-      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-primary/30 scroll-mt-4">
         {result ? (
           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
-            <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+            <div className="w-full p-8 bg-primary/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border/50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
                     {isMultiFile ? <FolderArchive size={24} /> : <Code size={24} />}
                   </div>
                   <div className="overflow-hidden">
-                    <h3 className="font-medium text-slate-200 truncate max-w-md">{resultDisplayName}{isMultiFile && '.zip'}</h3>
-                    {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                    <h3 className="font-medium text-primary truncate max-w-md">{resultDisplayName}{isMultiFile && '.zip'}</h3>
+                    {duration && <p className="text-xs text-tertiary">Generated in {formatDuration(duration * 1000)}</p>}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -307,11 +317,9 @@ export function CodeGenerator() {
 
                   <a
                     href={isMultiFile
-                      ? `${API_BASE_URL}/api/files/zip?path=${encodeURIComponent(result)}`
-                      : `${API_BASE_URL}/api/files/${result}`
+                      ? `${API_BASE_URL()}/api/files/zip?path=${encodeURIComponent(result)}`
+                      : `${API_BASE_URL()}/api/files/${result}?download=true`
                     }
-                    target="_blank"
-                    rel="noreferrer"
                     className="btn-secondary text-sm flex items-center gap-1"
                   >
                     <Download size={14} />
@@ -322,14 +330,14 @@ export function CodeGenerator() {
 
               {/* Multi-file project explanation */}
               {isMultiFile && (
-                <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                <div className="p-4 bg-secondary/50 rounded-lg border border-border/50">
                   <div className="flex items-start gap-3">
                     <FolderArchive size={20} className="text-brand-400 mt-0.5 shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm text-slate-300 font-medium mb-1">
+                      <p className="text-sm text-secondary font-medium mb-1">
                         Multi-File Project ({generatedFiles.length} files)
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-tertiary">
                         Click "Preview Project" above to browse the file structure.
                       </p>
                     </div>
@@ -339,25 +347,25 @@ export function CodeGenerator() {
 
               {/* Reasoning / Thinking Block */}
               {reasoning && (
-                <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                <div className="p-4 bg-primary/50 rounded-lg border border-border/50 max-h-[40vh] overflow-y-auto">
                   <div className="flex items-center gap-2 mb-2 text-brand-400">
                     <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
                   </div>
-                  <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                  <div className="text-xs text-secondary font-mono whitespace-pre-wrap italic leading-relaxed">
                     {reasoning}
                   </div>
                 </div>
               )}
 
               {!reasoning && (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-tertiary">
                   <p>Code generated successfully.</p>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <Code size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to Code</h3>
             <p className="max-w-sm mx-auto">Generate scripts, modules, or full applications by describing your requirements.</p>

@@ -11,7 +11,7 @@ export function SettingsView() {
 
   useEffect(() => {
     // Check current theme from DOM or fetch
-    fetch(`${API_BASE}/api/config`)
+    fetch(`${API_BASE()}/api/config`)
       .then(res => res.json())
       .then(config => {
          if (config.preferences?.theme) {
@@ -34,9 +34,9 @@ export function SettingsView() {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl py-6">
       <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-primary">
-        <SettingsIcon className="text-brand-400" />
+        <SettingsIcon className="text-brand-600 dark:text-brand-400" />
         Settings
       </h1>
 
@@ -51,7 +51,7 @@ export function SettingsView() {
             
             <div className="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-border">
                 <div className="flex items-center gap-3">
-                    {theme === 'dark' ? <Moon size={20} className="text-brand-400" /> : <Sun size={20} className="text-yellow-500" />}
+                    {theme === 'dark' ? <Moon size={20} className="text-brand-600 dark:text-brand-400" /> : <Sun size={20} className="text-yellow-600 dark:text-yellow-500" />}
                     <div>
                         <p className="font-medium text-primary">Interface Theme</p>
                         <p className="text-sm text-secondary">Select your preferred color scheme</p>
@@ -118,13 +118,13 @@ export function SettingsView() {
               </div>
               <div>
                 <span className="text-secondary">CUDA:</span>
-                <span className={`ml-2 ${systemInfo.cuda_available ? 'text-green-500' : 'text-secondary'}`}>
+                <span className={`ml-2 ${systemInfo.cuda_available ? 'text-green-600 dark:text-green-500' : 'text-secondary'}`}>
                   {systemInfo.cuda_available ? 'Available' : 'Not Available'}
                 </span>
               </div>
               <div>
                 <span className="text-secondary">MPS (Apple):</span>
-                <span className={`ml-2 ${systemInfo.mps_available ? 'text-green-500' : 'text-secondary'}`}>
+                <span className={`ml-2 ${systemInfo.mps_available ? 'text-green-600 dark:text-green-500' : 'text-secondary'}`}>
                   {systemInfo.mps_available ? 'Available' : 'Not Available'}
                 </span>
               </div>
@@ -141,8 +141,8 @@ export function SettingsView() {
             Server Connection
           </h2>
           <div className="text-sm">
-            <p className="text-secondary">API Server: <span className="text-primary">http://localhost:8000</span></p>
-            <p className="text-secondary mt-2">WebSocket: <span className="text-primary">ws://localhost:8000/ws/chat</span></p>
+            <p className="text-secondary">API Server: <span className="text-primary">{API_BASE()}</span></p>
+            <p className="text-secondary mt-2">WebSocket: <span className="text-primary">{API_BASE().replace(/^http/, 'ws')}/ws/chat</span></p>
           </div>
         </div>
       </div>

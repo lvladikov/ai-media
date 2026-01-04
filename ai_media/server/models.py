@@ -125,6 +125,9 @@ class TransformRequest(BaseModel):
     input_path: str = Field(..., description="Path to input image")
     instruction: str = Field(..., description="Transformation instruction (or 'remove-bg')")
     model: str = Field("default", description="Model name (e.g., 'instruct-pix2pix', 'remove-bg')")
+    guidance_scale: float = Field(7.5, description="Text guidance scale")
+    image_guidance_scale: float = Field(1.5, description="Image guidance scale")
+    silhouette: bool = Field(False, description="Create black silhouette instead of transparent (for rembg)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 

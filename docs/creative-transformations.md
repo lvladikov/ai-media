@@ -89,8 +89,6 @@ Here are prompt examples for common editing tasks.
 
 ## Examples
 
-## Examples
-
 ### Instructional Edits (InstructPix2Pix)
 
 Modify images using natural language instructions.

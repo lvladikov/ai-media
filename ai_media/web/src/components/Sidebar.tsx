@@ -12,7 +12,6 @@ import {
   TrendingUp,
   History,
   Settings,
-  Zap,
   Book,
 } from 'lucide-react';
 
@@ -74,7 +73,7 @@ export function Sidebar() {
         {/* Logo (Hidden on mobile as it's in header) */}
         <div className="hidden md:block p-4 border-b border-border z-10 relative">
           <div className="flex items-center gap-2">
-            <Zap className="w-6 h-6 text-primary-400" />
+            <img src="/ai-media-192x192.png" alt="AI-Media Logo" className="w-8 h-8 object-contain rounded-lg shadow-lg" />
             <span className="text-lg font-semibold text-primary">AI-Media</span>
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-secondary">
@@ -122,7 +121,7 @@ export function Sidebar() {
         </nav>
 
         {/* Version */}
-        <div className="p-4 border-t border-border text-xs text-tertiary z-10 relative bg-secondary">
+        <div className="p-4 border-t border-r border-border text-xs text-tertiary z-10 relative bg-secondary">
           v{packageJson.version}
         </div>
       </div>

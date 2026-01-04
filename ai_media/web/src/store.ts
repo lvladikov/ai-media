@@ -101,7 +101,9 @@ interface AppState {
 
   // Help
   isHelpOpen: boolean;
+  helpSection: string | null;
   toggleHelp: () => void;
+  openHelpSection: (section: string) => void;
 
   // Mobile Menu
   isMobileMenuOpen: boolean;
@@ -164,7 +166,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Help
   isHelpOpen: false,
-  toggleHelp: () => set((state) => ({ isHelpOpen: !state.isHelpOpen })),
+  helpSection: null,
+  toggleHelp: () => set((state) => ({ isHelpOpen: !state.isHelpOpen, helpSection: state.isHelpOpen ? null : state.helpSection })),
+  openHelpSection: (section) => set({ isHelpOpen: true, helpSection: section }),
 
   // Mobile Menu
   isMobileMenuOpen: false,

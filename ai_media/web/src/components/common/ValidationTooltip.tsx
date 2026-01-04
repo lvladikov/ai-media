@@ -28,9 +28,9 @@ export function ValidationTooltip({ error, children, className = "" }: Validatio
     >
       {children}
       {show && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-800 border border-slate-600 text-slate-200 text-xs rounded-md shadow-xl whitespace-nowrap z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-secondary border border-border text-primary text-xs rounded-md shadow-xl whitespace-nowrap z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
           {errorMessage}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border" />
         </div>
       )}
     </div>

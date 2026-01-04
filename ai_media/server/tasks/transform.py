@@ -11,6 +11,9 @@ def run_transform(
     instruction: str,
     output_path: str,
     model: str,
+    guidance_scale: float = 7.5,
+    image_guidance_scale: float = 1.5,
+    silhouette: bool = False,
     bypass_warning: bool = False,
     force: bool = False,
     progress_queue: Queue = None,
@@ -34,7 +37,7 @@ def run_transform(
         if model == "remove-bg" or instruction.lower() == "remove-bg":
             from ai_media.generators.transform import remove_background
             send_update(status="generating", phase="generating", progress=30, message="Removing background...")
-            success = remove_background(input_path, output_path, force=force, bypass_warning=bypass_warning)
+            success = remove_background(input_path, output_path, silhouette=silhouette, force=force, bypass_warning=bypass_warning)
         else:
             from ai_media.generators.transform import generate_edit
             
@@ -47,6 +50,8 @@ def run_transform(
                 prompt=instruction,
                 output_path=output_path,
                 model_name=model,
+                guidance_scale=guidance_scale,
+                image_guidance_scale=image_guidance_scale,
                 progress_callback=on_progress,
                 force=force,
                 bypass_warning=bypass_warning,

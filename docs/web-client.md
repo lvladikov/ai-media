@@ -43,9 +43,6 @@ python ai-media.py --serve
 # Start backend server + ONLY the Web UI
 python ai-media.py --serve-web-only-client
 
-# Start backend server + ONLY the Electron Dev app
-python ai-media.py --serve-electron-dev-only-client
-
 # Start ONLY the backend server (no clients)
 # (Defaults: Reload OFF)
 python ai-media.py --serve-no-client
@@ -59,6 +56,7 @@ The server runs at `http://localhost:8000` by default with:
 - API endpoints at `/api/*`
 - WebSocket for chat at `/ws/chat`
 - SSE for resource monitoring at `/sse/resources`
+- Default port can be changed in `config.json`
 
 ## Quick Start (Recommended)
 
@@ -103,7 +101,9 @@ The desktop app bundles the web client for native experience on:
 ### Running Electron Dev Mode
 
 ```bash
-npm run electron     # Starts Electron (requires dev:client running)
+npm run electron     # Starts Electron (requires dev:client running), see Note below!
+
+# NOTE: It is better to use `npm run dev:electron` which will start both dev:client and electron, or use the `python ai-media.py --serve` command (which takes care of order of execution, server, client, electron).
 ```
 
 ### Building Desktop Apps

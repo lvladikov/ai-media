@@ -138,19 +138,19 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
           {isOngoing && job.logs && job.logs.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono text-slate-500 uppercase tracking-wider">Server Logs</span>
+                <span className="text-xs font-mono text-tertiary uppercase tracking-wider">Server Logs</span>
                 <button
                   onClick={() => {
                     // Clear logs locally - they'll repopulate
                     if (job) job.logs = [];
                   }}
-                  className="text-xs flex items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="text-xs flex items-center gap-1 text-tertiary hover:text-primary transition-colors"
                   title="Clear logs"
                 >
                   <Trash2 size={12} /> Clear
                 </button>
               </div>
-              <div className="bg-slate-900/50 p-3 rounded-lg font-mono text-xs text-slate-400 max-h-32 overflow-y-auto border border-slate-700/50 shadow-inner scrollbar-themed">
+              <div className="bg-primary/50 p-3 rounded-lg font-mono text-xs text-secondary max-h-32 overflow-y-auto border border-border shadow-inner scrollbar-themed">
                 {job.logs.map((log: string, i: number) => (
                   <div key={i} className="whitespace-pre-wrap">{log}</div>
                 ))}
@@ -219,7 +219,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
             <button
               onClick={handleCancel}
               disabled={isCancelling}
-              className="btn-secondary w-full flex items-center justify-center gap-2 text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/50"
+              className="btn-secondary w-full flex items-center justify-center gap-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-slate-800 border-red-200 dark:border-red-500/30"
             >
               <StopCircle size={18} />
               {isCancelling ? 'Cancelling...' : 'Cancel Job'}

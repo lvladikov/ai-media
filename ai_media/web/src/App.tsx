@@ -78,7 +78,8 @@ function App() {
   useSystemInfo();
   useJobSocket();
   useConfig();
-  const { activeTab } = useAppStore();
+  useConfig();
+  const { activeTab, setActiveTab } = useAppStore();
 
   // Sync activeTab to URL
   useEffect(() => {
@@ -88,6 +89,19 @@ function App() {
       window.history.pushState({ path: newUrl }, '', newUrl);
     }
   }, [activeTab]);
+
+  // Listen for Electron navigation events (Menu)
+  useEffect(() => {
+    if ((window as any).electronAPI?.onNavigate) {
+        (window as any).electronAPI.onNavigate((id: string) => {
+            if (id === 'help') {
+                useAppStore.getState().toggleHelp();
+            } else {
+                setActiveTab(id as any);
+            }
+        });
+    }
+  }, [setActiveTab]);
 
   return (
     <div className="flex flex-col h-screen bg-primary text-primary overflow-hidden">

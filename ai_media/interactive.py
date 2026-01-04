@@ -975,6 +975,7 @@ def run_interactive(jump_point=None):
             ("PDF - Portable Document", "pdf"),
             ("DOCX - Microsoft Word", "docx"),
             ("HTML - Web Page", "html"),
+            ("XHTML - Extensible HTML", "xhtml"),
             ("MD - Markdown", "md"),
             ("RTF - Rich Text Format", "rtf"),
             ("TXT - Plain Text", "txt"),
@@ -1509,10 +1510,10 @@ def run_interactive(jump_point=None):
             options = [
                 ("🚀  Start Server (No Client)", "SERVER_ONLY"),
                 ("🌐  Start Client (Web)", "WEB_CLIENT"),
-                ("💻  Start Client (Electron Dev)", "ELECTRON_DEV"),
                 ("🔥  Start Both Server and Web Client", "BOTH_WEB"),
                 ("⚡  Start Both Server and Web + Electron Dev Client", "BOTH_FULL"),
                 ("🛠️   Electron Build Options", "BUILD_OPTS"),
+                ("📦  Versioning Scripts", "VERSION_OPTS"),
             ]
             
             choice = prompt_choice("Select an option:", options, allow_back=True, default_index=3)
@@ -1526,21 +1527,63 @@ def run_interactive(jump_point=None):
                 code = run_self_command("--serve-no-client")
             elif choice == "WEB_CLIENT":
                 code = run_shell_command("npm run dev:client", cwd=web_dir)
-            elif choice == "ELECTRON_DEV":
-                code = run_shell_command("npm run electron", cwd=web_dir)
             elif choice == "BOTH_WEB":
                 code = run_self_command("--serve-web-only-client")
             elif choice == "BOTH_FULL":
                 code = run_self_command("--serve")
             elif choice == "BUILD_OPTS":
                 electron_build_menu()
+            elif choice == "VERSION_OPTS":
+                version_menu()
                 
-            if choice != "BUILD_OPTS":
+            if choice != "BUILD_OPTS" and choice != "VERSION_OPTS":
                 # If code is non-zero (likely interrupted by Ctrl+C or error), 
                 # return to menu immediately instead of waiting
                 if code is not None and code != 0:
                     continue
                 wait_for_back()
+
+    def version_menu():
+        """Versioning scripts submenu."""
+        # Get path to web/package.json
+        web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+        pkg_path = os.path.join(web_dir, "package.json")
+        
+        while True:
+            # Read current version
+            current_version = "Unknown"
+            try:
+                if os.path.exists(pkg_path):
+                    with open(pkg_path, "r") as f:
+                        data = json.load(f)
+                        current_version = data.get("version", "Unknown")
+            except:
+                pass
+
+            clear_screen()
+            show_header("Versioning Scripts")
+            
+            # Info Block
+            console.print(Panel(
+                f"[bold cyan]ℹ️  Current Version:[/bold cyan] [bold green]{current_version}[/bold green]",
+                border_style="blue",
+                padding=(0, 2),
+                width=60
+            ))
+            print()
+            
+            options = [
+                ("🩹  Patch (1.0.X)", "version:patch"),
+                ("🔹  Minor (1.X.0)", "version:minor"),
+                ("🔸  Major (X.0.0)", "version:major"),
+            ]
+            
+            choice = prompt_choice("Select update type:", options, allow_back=True)
+            if choice is None: return
+            
+            # Run npm version command
+            run_shell_command(f"npm run {choice}", cwd=web_dir)
+            wait_for_back("Press Enter to continue...")
 
     def electron_build_menu():
         """Electron build options submenu."""

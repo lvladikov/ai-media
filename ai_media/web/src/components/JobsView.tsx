@@ -11,9 +11,9 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: (job: Job) => void }) {
     pending: 'text-yellow-400',
     loading: 'text-blue-400',
     generating: 'text-purple-400',
-    complete: 'text-green-400',
+    complete: 'text-green-700 dark:text-green-400',
     failed: 'text-red-400',
-    cancelled: 'text-slate-400',
+    cancelled: 'text-secondary',
   };
 
   const statusIcons = {
@@ -47,31 +47,31 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: (job: Job) => void }) {
             <span className={statusColors[job.status]}>{statusIcons[job.status]}</span>
             <span className="font-medium capitalize">{job.type}</span>
             {job.model && (
-              <span className="text-xs px-2 py-0.5 rounded bg-slate-600/50 text-slate-300">
+              <span className="text-xs px-2 py-0.5 rounded bg-tertiary/50 text-secondary">
                 {job.model}
               </span>
             )}
-            <span className={`text-xs px-2 py-0.5 rounded ${statusColors[job.status]} bg-slate-700/50`}>
+            <span className={`text-xs px-2 py-0.5 rounded ${statusColors[job.status]} bg-tertiary/50`}>
               {job.status}
             </span>
           </div>
           
           {/* Prompt */}
           {job.prompt && (
-            <p className="text-sm text-slate-300 mt-2 line-clamp-2" title={job.prompt}>
+            <p className="text-sm text-secondary mt-2 line-clamp-2" title={job.prompt}>
               "{job.prompt}"
             </p>
           )}
           
           {/* Params */}
           {paramsStr && (
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-tertiary mt-1">
               {paramsStr}
             </p>
           )}
           
-          <p className="text-sm text-slate-400 mt-1">{job.message}</p>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-sm text-secondary mt-1">{job.message}</p>
+          <p className="text-xs text-tertiary mt-1">
             {new Date(job.created_at).toLocaleString()}
           </p>
         </div>
@@ -107,13 +107,13 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: (job: Job) => void }) {
 
       {(job.status === 'loading' || job.status === 'generating') && (
         <div className="mt-3">
-          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-2 bg-tertiary rounded-full overflow-hidden">
             <div
               className="h-full bg-primary-500 progress-animated transition-all duration-300"
               style={{ width: `${job.progress}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 mt-1">{job.progress}% - {job.phase}</p>
+          <p className="text-xs text-tertiary mt-1">{job.progress}% - {job.phase}</p>
         </div>
       )}
 
@@ -144,14 +144,14 @@ export function JobsView() {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl pt-6">
       <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
         <History className="text-primary-400" />
         Job History
       </h1>
 
       {jobs.length === 0 ? (
-        <div className="card text-center text-slate-400 py-12">
+        <div className="card text-center text-secondary py-12">
           <History size={48} className="mx-auto mb-4 opacity-50" />
           <p>No jobs yet. Start generating to see your job history here.</p>
         </div>

@@ -22,7 +22,7 @@ export function ResolutionSelector({ width, height, onChange, disabled }: Resolu
 
   // Fetch constants on mount
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/constants`)
+    fetch(`${API_BASE_URL()}/api/constants`)
       .then(res => res.json())
       .then(data => {
         if (data.resolutions) {
@@ -71,7 +71,7 @@ export function ResolutionSelector({ width, height, onChange, disabled }: Resolu
       <div>
         <label className="label flex items-center mb-1">
            Resolution Template
-           <Tooltip content="Select a standard resolution or choose Custom to enter specific values." />
+           <Tooltip content="Select a standard resolution or choose Custom to enter specific values." align="left" />
         </label>
         <select 
           className="select w-full" 
@@ -94,7 +94,7 @@ export function ResolutionSelector({ width, height, onChange, disabled }: Resolu
         <div>
           <label className="label flex items-center">
              Width
-             <Tooltip content="Image/Video width in pixels." />
+             <Tooltip content="Image/Video width in pixels." align="left" />
           </label>
           <NumberInput 
              value={width} 
@@ -110,7 +110,7 @@ export function ResolutionSelector({ width, height, onChange, disabled }: Resolu
         <div>
           <label className="label flex items-center">
              Height
-             <Tooltip content="Image/Video height in pixels." />
+             <Tooltip content="Image/Video height in pixels." align="left" />
           </label>
           <NumberInput 
              value={height} 

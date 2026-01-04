@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>About AI-Media</title>
+  <style>
+    body {
+      background-color: #0f172a; /* matches app background */
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    .icon {
+      width: 96px;
+      height: 96px;
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .version {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .tech {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 24px;
+    }
+    .credits {
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    a {
+      color: #38bdf8;
+      text-decoration: none;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .close-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #94a3b8;
+      transition: all 0.2s;
+      -webkit-app-region: no-drag;
+    }
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+
+    /* Light Theme Support */
+    @media (prefers-color-scheme: light) {
+      body {
+        background-color: #f8fafc; /* slate-50 */
+        color: #0f172a; /* slate-900 */
+      }
+      .version {
+        color: #475569; /* slate-600 */
+      }
+      .tech {
+        color: #64748b; /* slate-500 */
+      }
+      .close-btn {
+        background: rgba(0, 0, 0, 0.05);
+        color: #475569;
+      }
+      .close-btn:hover {
+        background: rgba(0, 0, 0, 0.1);
+        color: #0f172a;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="close-btn" id="close-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  </div>
+
+  <img src="assets/icon.png" class="icon" alt="App Icon">
+  <div class="title">AI-Media</div>
+  <div class="version" id="app-version">Version 1.3.0</div>
+  <div class="tech" id="electron-version">Electron</div>
+  
+  <div class="credits">
+    Powered by Local AI Models<br>
+    © <span id="year">2025</span> AI-Media Project<br><br>
+    <a href="https://github.com/lvladikov/ai-media" id="link">https://github.com/lvladikov/ai-media</a>
+  </div>
+
+  <script>
+    const { ipcRenderer, shell } = require('electron');
+    
+    document.getElementById('link').addEventListener('click', (e) => {
+      e.preventDefault();
+      shell.openExternal('https://github.com/lvladikov/ai-media');
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => {
+      window.close();
+    });
+
+    // Escape key to close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.close();
+    });
+  </script>
+</body>
+</html>

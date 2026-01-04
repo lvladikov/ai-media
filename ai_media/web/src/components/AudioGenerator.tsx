@@ -3,6 +3,7 @@ import { RandomPrompt } from './common/RandomPrompt';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
+import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
 
 interface ModelInfo {
@@ -31,6 +32,7 @@ const MODEL_ORDER = [
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateAudio, fetchModels } from '../hooks/useApi';
+import { API_BASE_URL } from '../config';
 import { FileAudio, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { NumberInput } from './common/NumberInput';
 import { Tooltip } from './common/Tooltip';
@@ -103,9 +105,13 @@ export function AudioGenerator() {
   useEffect(() => {
     if (!currentJobId) return;
 
+    let hasSeenJob = false;
+
     const unsubscribe = useAppStore.subscribe((state) => {
       const updatedJob = state.jobs.find(j => j.job_id === currentJobId);
       if (updatedJob) {
+        hasSeenJob = true;
+        
         if (updatedJob.status === 'complete') {
           setResult(updatedJob.result_path);
 
@@ -130,8 +136,8 @@ export function AudioGenerator() {
           setError("Job cancelled.");
           setTimeout(() => setError(null), 6000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled)
         setIsLoading(false);
         setCurrentJobId(null);
       }
@@ -153,24 +159,24 @@ export function AudioGenerator() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <FileAudio className="text-brand-400" /> Audio Gen
           </h2>
-          <p className="text-xs text-slate-500">Generate sound effects and music</p>
+          <p className="text-xs text-tertiary">Generate sound effects and music</p>
         </div>
 
         {/* Prompt */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-400">Prompt</label>
+            <label className="text-sm font-medium text-secondary">Prompt</label>
             <RandomPrompt type="audio" onPromptSelect={setPrompt} />
           </div>
           <textarea
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+            className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
             placeholder="Upbeat electronic music with a driving beat..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -179,9 +185,12 @@ export function AudioGenerator() {
 
         {/* Model Selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-400">Model</label>
+          <label className="text-sm font-medium text-secondary flex items-center">
+            Model
+            <ModelHelpLink section="audio" />
+          </label>
           <select
-            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
@@ -196,13 +205,13 @@ export function AudioGenerator() {
           </select>
           {/* Warnings */}
           {model === 'stable-audio' && (
-            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-1">
               <AlertTriangle size={12} />
               <span>Requires HF Login</span>
             </div>
           )}
           {model === 'bark' && (
-            <div className="flex items-center gap-2 text-blue-400 text-xs mt-1">
+            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs mt-1">
               <AlertCircle size={12} />
               <span>Duration based on text length (~14s)</span>
             </div>
@@ -211,9 +220,9 @@ export function AudioGenerator() {
 
         {/* Duration */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
+          <label className="text-xs font-medium text-secondary flex items-center gap-1">
             Duration (seconds)
-            <Tooltip content="Audio duration in seconds. Ignored for Bark (text-based length) and MusicGen-Small/Medium (fixed 30s tokens often). Default 10s." />
+            <Tooltip content="Audio duration in seconds. Ignored for Bark (text-based length) and MusicGen-Small/Medium (fixed 30s tokens often). Default 10s." align="left" />
           </label>
           <NumberInput
             value={duration}
@@ -229,7 +238,7 @@ export function AudioGenerator() {
 
         <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt" : null} className="w-full mt-auto pt-4">
           <button
-            className="w-full bg-gradient-to-r from-brand-600 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            className="w-full bg-gradient-to-r from-brand-600 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={handleGenerate}
             disabled={isLoading || !prompt.trim()}
           >
@@ -239,26 +248,26 @@ export function AudioGenerator() {
       </div>
 
       {/* Main Preview */}
-      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 min-h-[500px] lg:min-h-0 scroll-mt-4">
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-primary/30 min-h-[500px] lg:min-h-0 scroll-mt-4">
         {result ? (
           <div className="flex flex-col items-center justify-center max-w-2xl w-full gap-6">
-            <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col items-center gap-6">
+            <div className="w-full p-8 bg-primary/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col items-center gap-6">
               <div className="w-24 h-24 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 animate-pulse">
                 <FileAudio size={48} />
               </div>
-              <audio src={`http://localhost:8000/api/files/${result}`} controls className="w-full" />
+              <audio src={`${API_BASE_URL()}/api/files/${result}`} controls className="w-full" />
               <div className="flex flex-col items-center">
-                <p className="text-sm text-slate-400">Generated Audio Result</p>
-                {genDuration && <p className="text-xs text-slate-500 mt-1">Generated in {formatDuration(genDuration * 1000)}</p>}
+                <p className="text-sm text-secondary">Generated Audio Result</p>
+                {genDuration && <p className="text-xs text-tertiary mt-1">Generated in {formatDuration(genDuration * 1000)}</p>}
               </div>
             </div>
 
             <div className="flex gap-2">
-              <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+              <a href={`${API_BASE_URL()}/api/files/${result}?download=true`} className="btn-secondary text-sm">Download</a>
             </div>
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <FileAudio size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to Compose</h3>
             <p className="max-w-sm mx-auto">Describe the sound or music you want to create.</p>

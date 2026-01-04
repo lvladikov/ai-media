@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateArticle, fetchModels, type ModelInfo } from '../hooks/useApi';
+import { API_BASE_URL } from '../config';
 import { FileText, Loader2, Globe, AlertTriangle } from 'lucide-react';
 
 import { ValidationTooltip } from './common/ValidationTooltip';
@@ -12,6 +13,7 @@ import { ErrorAlert } from './common/ErrorAlert';
 
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
+import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
 
 // Display names matching CLI
@@ -21,7 +23,7 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
   'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
   'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
-  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
+  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
   'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
   'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
@@ -123,9 +125,13 @@ export function ArticleGenerator() {
   useEffect(() => {
     if (!currentJobId) return;
 
+    let hasSeenJob = false;
+
     const unsubscribe = useAppStore.subscribe((state) => {
       const job = state.jobs.find(j => j.job_id === currentJobId);
       if (job) {
+        hasSeenJob = true;
+
         if (job.status === 'complete') {
           setResult(job.result_path);
 
@@ -153,8 +159,8 @@ export function ArticleGenerator() {
           // Auto-dismiss after 6 seconds
           setTimeout(() => setError(null), 6000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled)
         setIsLoading(false);
         setCurrentJobId(null);
       }
@@ -182,24 +188,24 @@ export function ArticleGenerator() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <FileText className="text-brand-400" /> Article Gen
           </h2>
-          <p className="text-xs text-slate-500">Generate articles, blogs and essays</p>
+          <p className="text-xs text-tertiary">Generate articles, blogs and essays</p>
         </div>
 
         {/* Topic */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-400">Topic</label>
+            <label className="text-sm font-medium text-secondary">Topic</label>
             <RandomPrompt type="article" onPromptSelect={setTopic} />
           </div>
           <textarea
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
+            className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
             placeholder="The future of renewable energy technologies..."
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
@@ -208,12 +214,12 @@ export function ArticleGenerator() {
 
         {/* Filename */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-400">
+          <label className="text-xs font-medium text-secondary">
             Filename (Optional)
           </label>
           <input
             type="text"
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
+            className="w-full bg-primary border border-border rounded-lg p-2 text-sm focus:outline-none focus:border-brand-500"
             placeholder="Auto-generated if empty"
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
@@ -222,9 +228,12 @@ export function ArticleGenerator() {
 
         {/* Model Selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-400">Model</label>
+          <label className="text-sm font-medium text-secondary flex items-center">
+            Model
+            <ModelHelpLink section="text" />
+          </label>
           <select
-            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
@@ -249,9 +258,9 @@ export function ArticleGenerator() {
         {/* Format & Length */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Format</label>
+            <label className="text-xs font-medium text-secondary">Format</label>
             <select
-              className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
               value={format}
               onChange={(e) => setFormat(e.target.value)}
             >
@@ -264,9 +273,9 @@ export function ArticleGenerator() {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400">Length</label>
+            <label className="text-xs font-medium text-secondary">Length</label>
             <select
-              className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
               value={length}
               onChange={(e) => setLength(e.target.value)}
             >
@@ -278,7 +287,7 @@ export function ArticleGenerator() {
         </div>
 
         {/* Online Research */}
-        <div className="space-y-3 pt-2 border-t border-slate-800">
+        <div className="space-y-3 pt-2 border-t border-border">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -286,7 +295,7 @@ export function ArticleGenerator() {
               checked={online}
               onChange={(e) => setOnline(e.target.checked)}
             />
-            <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
+            <span className="text-sm font-medium text-secondary flex items-center gap-2">
               <Globe size={14} className="text-brand-400" />
               Online Research
             </span>
@@ -295,7 +304,7 @@ export function ArticleGenerator() {
           {online && (
             <div className="grid grid-cols-2 gap-4 pl-6">
               <div>
-                <label className="text-xs text-slate-400">Sources</label>
+                <label className="text-xs text-secondary">Sources</label>
                 <NumberInput
                   value={researchIterations}
                   onChange={setResearchIterations}
@@ -305,7 +314,7 @@ export function ArticleGenerator() {
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400">Max Images</label>
+                <label className="text-xs text-secondary">Max Images</label>
                 <NumberInput
                   value={maxImages}
                   onChange={setMaxImages}
@@ -322,7 +331,7 @@ export function ArticleGenerator() {
 
         <ValidationTooltip error={!topic.trim() ? "Please enter a topic" : null} className="w-full mt-auto pt-4">
           <button
-            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={handleGenerate}
             disabled={isLoading || !topic.trim()}
           >
@@ -332,47 +341,47 @@ export function ArticleGenerator() {
       </div>
 
       {/* Main Result Area */}
-      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-slate-950/30 scroll-mt-4">
+      <div ref={resultRef} className="flex-1 p-6 flex items-center justify-center bg-primary/30 scroll-mt-4">
         {result ? (
           <div className="flex flex-col items-center justify-center max-w-3xl w-full gap-6 h-full">
-            <div className="w-full p-8 bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-700/50 pb-4">
+            <div className="w-full p-8 bg-primary/80 backdrop-blur-sm rounded-2xl border border-brand-500/30 shadow-2xl flex flex-col gap-6 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-border/50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
                     <FileText size={24} />
                   </div>
                   <div>
-                    <h3 className="font-medium text-slate-200">{result?.split('/').pop()}</h3>
-                    {duration && <p className="text-xs text-slate-500">Generated in {formatDuration(duration * 1000)}</p>}
+                    <h3 className="font-medium text-primary">{result?.split('/').pop()}</h3>
+                    {duration && <p className="text-xs text-tertiary">Generated in {formatDuration(duration * 1000)}</p>}
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Preview</button>
-                  <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+                  <a href={`${API_BASE_URL()}/api/files/${result}?download=true`} className="btn-secondary text-sm">Download</a>
                 </div>
               </div>
 
               {/* Reasoning / Thinking Block */}
               {reasoning && (
-                <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/50 max-h-[40vh] overflow-y-auto">
+                <div className="p-4 bg-primary/50 rounded-lg border border-border/50 max-h-[40vh] overflow-y-auto">
                   <div className="flex items-center gap-2 mb-2 text-brand-400">
                     <span className="text-xs font-bold uppercase tracking-wider opacity-70">Reasoning Process</span>
                   </div>
-                  <div className="text-xs text-slate-400 font-mono whitespace-pre-wrap italic leading-relaxed">
+                  <div className="text-xs text-secondary font-mono whitespace-pre-wrap italic leading-relaxed">
                     {reasoning}
                   </div>
                 </div>
               )}
 
               {!reasoning && (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-tertiary">
                   <p>Article generated successfully.</p>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <FileText size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to Write</h3>
             <p className="max-w-sm mx-auto">Enter a topic to generate a comprehensive article, blog post, or essay.</p>

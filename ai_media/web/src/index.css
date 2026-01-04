@@ -6,7 +6,31 @@
 
 @layer base {
   :root {
-    /* Dark Mode (default) */
+    /* Light Mode (default) - High Contrast Design */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f1f5f9;
+    /* slate-100 - visible card backgrounds */
+    --bg-tertiary: #e2e8f0;
+    /* slate-200 - input backgrounds */
+    --bg-overlay: #ffffff;
+
+    --text-primary: #020617;
+    /* slate-950 - maximum contrast for headings */
+    --text-secondary: #1e293b;
+    /* slate-800 - strong readable body text */
+    --text-tertiary: #475569;
+    /* slate-600 - labels and secondary info */
+
+    --border-color: #94a3b8;
+    /* slate-400 - STRONG visible borders */
+    --accent: #0369a1;
+    /* sky-700 - darker accent for light mode */
+    --scrollbar-thumb: #94a3b8; 
+    /* slate-400 - darker scrollbar for light mode visibility */
+  }
+
+  .dark {
+    /* Dark Mode */
     --bg-primary: #0f172a;
     /* slate-900 */
     --bg-secondary: #1e293b;
@@ -23,29 +47,10 @@
     /* slate-400 */
 
     --border-color: #334155;
-    /* slate-700 */
+    /* slate-700 - visible border against slate-800 background */
     --accent: #0ea5e9;
-  }
-
-  .light {
-    /* Light Mode */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f1f5f9;
-    /* slate-100 */
-    --bg-tertiary: #e2e8f0;
-    /* slate-200 */
-    --bg-overlay: #ffffff;
-
-    --text-primary: #0f172a;
-    /* slate-900 */
-    --text-secondary: #64748b;
-    /* slate-500 */
-    --text-tertiary: #94a3b8;
-    /* slate-400 */
-
-    --border-color: #cbd5e1;
-    /* slate-300 */
-    --accent: #0ea5e9;
+    --scrollbar-thumb: #475569;
+    /* slate-600 - dark scrollbar for dark mode */
   }
 
   body {
@@ -53,7 +58,7 @@
 
     /* Global scrollbar styling for Windows/Chromium */
     scrollbar-width: thin;
-    scrollbar-color: #475569 #1e293b;
+    scrollbar-color: var(--scrollbar-thumb) var(--bg-secondary);
   }
 
   /* Global webkit scrollbar styling (Chrome, Edge, Electron) */
@@ -63,21 +68,21 @@
   }
 
   *::-webkit-scrollbar-track {
-    background: #1e293b;
+    background: var(--bg-secondary);
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #475569;
+    background-color: var(--scrollbar-thumb);
     border-radius: 5px;
-    border: 2px solid #1e293b;
+    border: 2px solid var(--bg-secondary);
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #64748b;
+    background-color: var(--text-tertiary);
   }
 
   *::-webkit-scrollbar-corner {
-    background: #1e293b;
+    background: var(--bg-secondary);
   }
 }
 
@@ -92,7 +97,7 @@
   }
 
   .main-content {
-    @apply flex-1 overflow-auto p-6 bg-primary transition-colors duration-200;
+    @apply flex-1 overflow-auto px-6 py-0 bg-primary transition-colors duration-200;
   }
 
   .card {
@@ -104,18 +109,18 @@
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-tertiary hover:bg-slate-600 text-primary rounded-lg font-medium transition-colors duration-200 border border-border disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-tertiary;
+    @apply px-4 py-2 bg-tertiary hover:bg-slate-300 dark:hover:bg-slate-600 text-primary rounded-lg font-medium transition-colors duration-200 border border-border disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-tertiary;
   }
 
   .input {
-    @apply w-full px-4 py-2 bg-tertiary border border-border rounded-lg text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-800;
+    @apply w-full px-4 py-2 bg-tertiary border border-border rounded-lg text-primary placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .select {
     @apply w-full pl-4 pr-10 py-2 bg-tertiary border border-border rounded-lg text-primary focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors duration-200;
     appearance: none;
     -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     background-size: 1rem;
@@ -123,6 +128,27 @@
 
   .label {
     @apply block text-sm font-medium text-secondary mb-1;
+  }
+
+  /* Range slider styling */
+  input[type="range"] {
+    @apply w-full h-2 rounded-lg appearance-none cursor-pointer;
+    background: var(--border-color);
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 rounded-full bg-brand-500 cursor-pointer;
+    -webkit-appearance: none;
+    margin-top: -4px; /* Center thumb on track: (thumb_height - track_height) / 2 */
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    @apply w-4 h-4 rounded-full bg-brand-500 cursor-pointer border-0;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    @apply h-2 rounded-lg;
+    background: var(--border-color);
   }
 
   .resource-bar {
@@ -135,31 +161,31 @@
 
   .nav-item:hover,
   .nav-item.active {
-    @apply mr-0 pr-5 rounded-r-none z-10;
+    @apply mr-0 pr-5 rounded-r-none z-20;
   }
 
-  /* The tab-docking pseudo-element */
+  /* The tab-docking pseudo-element that covers the sidebar border */
   .nav-item:hover::after,
   .nav-item.active::after {
     content: '';
-    @apply absolute top-0 bottom-0 -right-px w-[2px];
-    /* Slightly thicker to ensure overlap on Windows */
+    @apply absolute top-0 bottom-0 -right-px w-1;
+    /* Wide enough to cover the 1px border */
   }
 
   .nav-item:hover {
-    @apply bg-slate-700/40 text-primary border-slate-700/20 shadow-sm;
+    @apply bg-tertiary text-primary border-border shadow-sm;
   }
 
   .nav-item:hover::after {
-    @apply bg-slate-700/40;
+    @apply bg-tertiary;
   }
 
   .nav-item.active {
-    @apply bg-primary text-brand-400 border-border border-r-transparent;
+    @apply bg-primary text-brand-600 dark:text-brand-400 border-border border-r-0;
   }
 
   .nav-item.active::after {
-    @apply bg-primary;
+    @apply bg-primary z-30;
   }
 
   .nav-section {
@@ -205,7 +231,7 @@
   /* Themed scrollbars for dark mode */
   .scrollbar-themed {
     scrollbar-width: thin;
-    scrollbar-color: #475569 transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
     /* slate-600 thumb, transparent track */
   }
 
@@ -219,7 +245,7 @@
   }
 
   .scrollbar-themed::-webkit-scrollbar-thumb {
-    background-color: #475569;
+    background-color: var(--scrollbar-thumb);
     /* slate-600 */
     border-radius: 4px;
     border: 2px solid transparent;
@@ -227,7 +253,7 @@
   }
 
   .scrollbar-themed::-webkit-scrollbar-thumb:hover {
-    background-color: #64748b;
+    background-color: var(--text-secondary);
     /* slate-500 */
   }
 
@@ -267,4 +293,56 @@
 .prose li+li,
 .prose-sm li+li {
   margin-top: 0;
+}
+
+/* Light Mode Prism Overrides */
+/* Force light background and dark text for code blocks in light mode */
+html:not(.dark) code[class*="language-"],
+html:not(.dark) pre[class*="language-"] {
+  background-color: #ffffff !important; /* white */
+  color: #334155 !important; /* slate-700 */
+  text-shadow: none !important;
+}
+
+/* Override token colors for readability on light background */
+/* Comments */
+html:not(.dark) .token.comment,
+html:not(.dark) .token.prolog,
+html:not(.dark) .token.doctype,
+html:not(.dark) .token.cdata {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+/* Punctuation */
+html:not(.dark) .token.punctuation {
+  color: #64748b !important; /* slate-500 */
+}
+
+/* Keywords, Tags, Class names - Blue/Purple */
+html:not(.dark) .token.property,
+html:not(.dark) .token.tag,
+html:not(.dark) .token.constant,
+html:not(.dark) .token.symbol,
+html:not(.dark) .token.deleted,
+html:not(.dark) .token.keyword,
+html:not(.dark) .token.selector,
+html:not(.dark) .token.attr-name,
+html:not(.dark) .token.string,
+html:not(.dark) .token.char,
+html:not(.dark) .token.builtin,
+html:not(.dark) .token.inserted {
+  color: #0369a1 !important; /* sky-700 */
+}
+
+/* Functions, Numbers - Indigo/Violet */
+html:not(.dark) .token.atrule,
+html:not(.dark) .token.attr-value,
+html:not(.dark) .token.function,
+html:not(.dark) .token.class-name,
+html:not(.dark) .token.number,
+html:not(.dark) .token.boolean,
+html:not(.dark) .token.variable,
+html:not(.dark) .token.regex,
+html:not(.dark) .token.important {
+  color: #7c3aed !important; /* violet-600 */
 }

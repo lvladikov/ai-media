@@ -54,9 +54,17 @@ async def websocket_chat(websocket: WebSocket):
     import asyncio
     loop = asyncio.get_running_loop()
     
+    # Helper to safe send (ignores disconnects logs but returns status)
+    async def safe_send_json(data):
+        try:
+            await websocket.send_json(data)
+            return True
+        except RuntimeError:
+            return False
+
     try:
         # Send session ID to client
-        await websocket.send_json({"type": "session", "session_id": session_id})
+        await safe_send_json({"type": "session", "session_id": session_id})
         
         while True:
             data = await websocket.receive_json()
@@ -68,10 +76,10 @@ async def websocket_chat(websocket: WebSocket):
                 # Check cache first
                 is_model_cached = model_cache.get("text", model) is not None
                 if is_model_cached:
-                    await websocket.send_json({"type": "status", "status": "ready", "message": "Model ready."})
-                    await websocket.send_json({"type": "status_clear"}) # Clear loading indicator
+                    await safe_send_json({"type": "status", "status": "ready", "message": "Model ready."})
+                    await safe_send_json({"type": "status_clear"}) # Clear loading indicator
                 else:
-                    await websocket.send_json({"type": "status", "status": "loading", "message": "Loading model... (this may take a moment)"})
+                    await safe_send_json({"type": "status", "status": "loading", "message": "Loading model... (this may take a moment)"})
                     
                     # Pre-load in thread
                     def preload():
@@ -79,15 +87,15 @@ async def websocket_chat(websocket: WebSocket):
                         
                         # Define callback to stream logs to client
                         def progress_callback(status, progress, message):
-                            # Run async send_json on main loop
+                            # Run async send_json on main loop (fire and forget)
+                            asyncio.run_coroutine_threadsafe(
+                                safe_send_json({"type": "log", "message": message}),
+                                loop
+                            )
+                            
                             if status == "error":
                                 asyncio.run_coroutine_threadsafe(
-                                    websocket.send_json({"type": "status", "status": "error", "message": message}),
-                                    loop
-                                )
-                            else:
-                                asyncio.run_coroutine_threadsafe(
-                                    websocket.send_json({"type": "log", "message": message}),
+                                    safe_send_json({"type": "status", "status": "error", "message": message}),
                                     loop
                                 )
                         
@@ -102,8 +110,8 @@ async def websocket_chat(websocket: WebSocket):
                     success = await loop.run_in_executor(None, preload)
                         
                     if success:
-                        await websocket.send_json({"type": "status", "status": "ready", "message": "Model loaded."})
-                        await websocket.send_json({"type": "status_clear"})
+                        await safe_send_json({"type": "status", "status": "ready", "message": "Model loaded."})
+                        await safe_send_json({"type": "status_clear"})
                     # Error status is already sent via progress_callback if it failed
 
             elif data.get("type") == "message":
@@ -133,7 +141,7 @@ async def websocket_chat(websocket: WebSocket):
                                 chat_sessions[session_id].append({"role": "system", "content": cmd_result["context"]})
                         
                         # Send response immediately
-                        await websocket.send_json({
+                        await safe_send_json({
                             "type": "command_response",
                             "content": response_text,
                             "session_id": session_id,
@@ -144,7 +152,7 @@ async def websocket_chat(websocket: WebSocket):
                 chat_sessions[session_id].append({"role": "user", "content": user_message})
                 
                 # Send acknowledgment
-                await websocket.send_json({"type": "status", "status": "processing", "message": "Thinking..."})
+                await safe_send_json({"type": "status", "status": "processing", "message": "Thinking..."})
                 
                 # Generate response (in thread pool to not block)
                 # Generate response (in thread pool to not block)
@@ -164,7 +172,7 @@ async def websocket_chat(websocket: WebSocket):
                 # Add to history (store CLEAN content without reasoning to save context tokens)
                 chat_sessions[session_id].append({"role": "assistant", "content": parsed["content"]})
                 
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "response",
                     "content": parsed["content"],
                     "reasoning": parsed["reasoning"],
@@ -173,10 +181,18 @@ async def websocket_chat(websocket: WebSocket):
                 
             elif data.get("type") == "clear":
                 chat_sessions[session_id] = []
-                await websocket.send_json({"type": "cleared"})
+                await safe_send_json({"type": "cleared"})
     
-    except WebSocketDisconnect:
-        print(f"🔌 Client disconnected (Session: {session_id})")
+                await safe_send_json({"type": "cleared"})
+    
+    except (WebSocketDisconnect, RuntimeError) as e:
+        # Treat RuntimeErrors (like 'WebSocket is not connected') as disconnects to ensure cleanup
+        error_msg = str(e)
+        if hasattr(e, 'code'): # WebSocketDisconnect has a code
+             print(f"🔌 Client disconnected (Session: {session_id})")
+        else:
+             print(f"🔌 Client disconnected with error: {error_msg} (Session: {session_id})")
+
         chat_manager.disconnect(session_id)
         if session_id in chat_sessions:
             del chat_sessions[session_id]

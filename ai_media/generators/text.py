@@ -318,6 +318,8 @@ class ArticleGenerator:
                             clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
                             if clean_text.strip():
                                 self.callback("loading", 0, clean_text) 
+                        except ConnectionAbortedError:
+                            raise # Propagate cancel signal
                         except:
                             pass
 
@@ -401,6 +403,10 @@ class ArticleGenerator:
                 if self.progress_callback:
                     self.progress_callback("error", 0, err)
                 return False
+
+        except ConnectionAbortedError:
+            print(f"🛑 Model loading cancelled (Client disconnected).")
+            return False
                 
         except (ValueError, Exception) as e:
             error_msg = str(e)

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { generateImage, fetchModels } from '../hooks/useApi';
+import { API_BASE_URL } from '../config';
 import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
-import { NumberInput } from './common/NumberInput';
 import { Tooltip } from './common/Tooltip';
 import { ResolutionSelector } from './common/ResolutionSelector';
 import { ValidationTooltip } from './common/ValidationTooltip';
@@ -11,15 +11,8 @@ import { JobProgressModal } from './common/JobProgressModal';
 import { ResourceWarningModal } from './common/ResourceWarningModal';
 import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
+import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
-
-// ... (keep interfaces)
-// ...
-
-// Note: I am not including the entire file here, just fixing the import and then targeting the specific body part separately?
-// No, replace_file_content replaces a contiguous block. I cannot edit top and bottom easily in one go unless I include everything between.
-// I will use multi_replace for this, or two replace calls.
-// Let's use two replace calls. First imports.
 
 interface ModelInfo {
   name: string;
@@ -33,17 +26,17 @@ interface ModelInfo {
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: string }> = {
   'sd3.5-turbo': { label: 'SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated)', vram: '~19GB' },
   'sdxl': { label: 'SDXL Turbo (Fast, no login)', vram: '~8GB' },
-  'sd-1.5': { label: 'SD 1.5 (Lightweight)', vram: '~4GB' },
-  'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, 🔒 Gated)', vram: '~10GB' },
-  'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, 🔒 Gated)', vram: '~19GB' },
+  'sd-1.5': { label: 'SD 1.5 (Lightweight, Negative Prompt)', vram: '~4GB' },
+  'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, Negative Prompt, 🔒 Gated)', vram: '~10GB' },
+  'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, Negative Prompt, 🔒 Gated)', vram: '~19GB' },
 
-  'qwen-image-auto': { label: 'Qwen 2.5 Image (High Quality)', vram: '~20-40GB' },
+  'qwen-image-auto': { label: 'Qwen 2.5 Image (High Quality, Negative Prompt)', vram: '~20-40GB' },
   'qwen-image-lightning': { label: 'Qwen 2.5 Image (Lightning, Fast)', vram: '~40GB' },
-  'qwen-image-4bit': { label: 'Qwen 2.5 Image (4-bit Lite, CUDA only)', vram: '~20GB' },
-  'flux': { label: 'Flux Schnell (High Quality, Slow on Mac)', vram: '~12GB' },
-  'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac)', vram: '~16GB' },
-  'flux2': { label: 'FLUX.2 (4-bit quantized, CUDA only)', vram: '~12GB' },
-  'flux2-full': { label: 'FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!)', vram: '~65GB' },
+  'qwen-image-4bit': { label: 'Qwen 2.5 Image (4-bit Lite, Negative Prompt, CUDA only)', vram: '~20GB' },
+  'flux': { label: 'Flux Schnell (High Quality, Slow on Mac, 🔒 Gated)', vram: '~12GB' },
+  'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac, 🔒 Gated)', vram: '~16GB' },
+  'flux2': { label: 'FLUX.2 (4-bit quantized, CUDA only, 🔒 Gated)', vram: '~12GB' },
+  'flux2-full': { label: 'FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!, 🔒 Gated)', vram: '~65GB' },
 };
 
 const MODEL_ORDER = [
@@ -63,6 +56,7 @@ export function ImageGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
   const [duration, setDuration] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
@@ -76,8 +70,6 @@ export function ImageGenerator() {
     details?: any;
     critical?: boolean;
   } | null>(null);
-
-  // ... (keep useEffects for fetchModels and defaults)
 
   // Fetch models on mount
   useEffect(() => {
@@ -105,16 +97,17 @@ export function ImageGenerator() {
     // Steps defaults
     if (model.includes('turbo') || model.includes('flux')) {
       setSteps(4);
-      setGuidanceScale(0); // Turbo/Flux models often use 0 guidance
+      setGuidanceScale(0);
     } else if (model === 'sd-1.5') {
       setSteps(30);
       setGuidanceScale(7.5);
     } else {
-      // Default for other models
       setSteps(30);
       setGuidanceScale(7.5);
     }
   }, [model]);
+
+
 
   // Actual execution logic, moved from handleGenerate
   const executeGeneration = async (force: boolean = false) => {
@@ -152,8 +145,8 @@ export function ImageGenerator() {
         height,
         steps,
         guidance_scale: guidanceScale,
-        negative_prompt: negativePrompt, // Pass negative prompt
-        force, // Pass force flag to API
+        negative_prompt: negativePrompt,
+        force,
       });
 
       setCurrentJobId(response.job_id);
@@ -243,14 +236,15 @@ export function ImageGenerator() {
   useEffect(() => {
     if (!currentJobId) return;
 
-    // Find the job in the global store
-    const job = useAppStore.getState().jobs.find(j => j.job_id === currentJobId);
-    if (!job) return;
+    // Track if we've ever seen this job in the store (to detect removal vs not-yet-added)
+    let hasSeenJob = false;
 
     // Use a subscription to the store to react to updates for this specific job
     const unsubscribe = useAppStore.subscribe((state) => {
       const updatedJob = state.jobs.find(j => j.job_id === currentJobId);
       if (updatedJob) {
+        hasSeenJob = true; // Mark that we've seen the job
+        
         if (updatedJob.status === 'complete') {
           setResult(updatedJob.result_path);
 
@@ -275,11 +269,12 @@ export function ImageGenerator() {
           setError("Job cancelled. The model may continue running briefly until it reaches a checkpoint.");
           setTimeout(() => setError(null), 8000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled - server cleaned up)
         setIsLoading(false);
         setCurrentJobId(null);
       }
+      // If !updatedJob && !hasSeenJob, the job simply hasn't appeared in the store yet - do nothing
     });
 
     return () => unsubscribe();
@@ -309,24 +304,24 @@ export function ImageGenerator() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <Sparkles className="text-brand-400" /> Image Gen
           </h2>
-          <p className="text-xs text-slate-500">Generate images from text descriptions</p>
+          <p className="text-xs text-tertiary">Generate images from text descriptions</p>
         </div>
 
         {/* Prompt */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-400">Prompt</label>
+            <label className="text-sm font-medium text-secondary">Prompt</label>
             <RandomPrompt type="image" onPromptSelect={setPrompt} />
           </div>
           <textarea
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[100px]"
+            className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[100px]"
             placeholder="A majestic mountain landscape at sunset with dramatic clouds..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -336,14 +331,14 @@ export function ImageGenerator() {
         {/* Negative Prompt */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className={`text-sm font-medium ${supportsNegativePrompt ? 'text-slate-400' : 'text-slate-600'} flex items-center gap-1`}>
+            <label className={`text-sm font-medium ${supportsNegativePrompt ? 'text-secondary' : 'text-tertiary'} flex items-center gap-1`}>
               Negative Prompt (Optional)
               <Tooltip content="List items to exclude (e.g., 'blur, text'). Do NOT use 'no' or 'without'. Note: For Lightning/Turbo models, using this will force standard speed (~2x slower)." />
             </label>
           </div>
           <input
             type="text"
-            className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 ${!supportsNegativePrompt ? 'opacity-50 cursor-not-allowed text-slate-500' : ''}`}
+            className={`w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 ${!supportsNegativePrompt ? 'opacity-50 cursor-not-allowed text-tertiary' : ''}`}
             placeholder={supportsNegativePrompt ? "e.g. blur, text, watermark (NOT 'no text')" : "Not supported by this model"}
             value={negativePrompt}
             onChange={(e) => setNegativePrompt(e.target.value)}
@@ -353,9 +348,12 @@ export function ImageGenerator() {
 
         {/* Model Selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-400">Model</label>
+          <label className="text-sm font-medium text-secondary flex items-center">
+            Model
+            <ModelHelpLink section="image" />
+          </label>
           <select
-            className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
@@ -371,18 +369,19 @@ export function ImageGenerator() {
 
           {/* Warnings */}
           {(model.includes('sd3.5') || model === 'stable-audio') && (
-            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-1">
               <AlertTriangle size={12} />
               <span>Requires HF Login</span>
             </div>
           )}
           {model === 'flux2-full' && (
-            <div className="flex items-center gap-2 text-red-400 text-xs mt-1">
+            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-xs mt-1">
               <AlertTriangle size={12} />
               <span>Requires 128GB+ RAM</span>
             </div>
           )}
         </div>
+
 
         {/* Resolution */}
         <div className="space-y-2">
@@ -394,21 +393,44 @@ export function ImageGenerator() {
         </div>
 
         {/* Advanced Settings */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
-              Steps
-              <Tooltip content="Inference steps. SD 3.5 Turbo needs 4. Flux Schnell needs 4. Others usually 20-30." />
-            </label>
-            <NumberInput value={steps} onChange={setSteps} min={1} max={100} />
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-secondary flex items-center gap-1">
+                Steps: <span className="text-brand-400 font-bold">{steps}</span>
+                <Tooltip content="Number of refinement passes. Turbo models need 4. Standard models work best at 20-30. Higher is slower but more detailed." align="left" />
+              </label>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              value={steps}
+              onChange={(e) => setSteps(parseInt(e.target.value))}
+              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-brand-500"
+            />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
-              Guidance
-              <Tooltip content="CFG Scale. SD 3.5 Turbo/Flux Schnell use 0 (distilled). Others use 5-7." />
-            </label>
-            <NumberInput value={guidanceScale} onChange={setGuidanceScale} min={0} max={20} step={0.5} allowFloat={true} />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-secondary flex items-center gap-1">
+                Text Guidance (CFG): <span className="text-brand-400 font-bold">{guidanceScale}</span>
+                <Tooltip content="How closely to follow your prompt. 0 is distilled (Turbo/Flux), 5-8 is standard. High values (>12) on Mac can sometimes cause black images." align="left" />
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="20"
+              step="0.5"
+              value={guidanceScale}
+              onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
+              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-brand-500"
+            />
           </div>
+
+
         </div>
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -416,7 +438,7 @@ export function ImageGenerator() {
         {/* Generate Action */}
         <ValidationTooltip error={!prompt.trim() ? "Please enter a prompt" : null} className="w-full mt-auto pt-4">
           <button
-            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={handleGenerate}
             disabled={isLoading || !prompt.trim() || pendingGeneration}
           >
@@ -431,7 +453,7 @@ export function ImageGenerator() {
       </div>
 
       {/* Main Preview Area */}
-      <div className="flex-1 p-6 flex items-center justify-center bg-slate-950/30">
+      <div className="flex-1 p-6 flex items-center justify-center bg-primary/30">
         {result ? (
           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
             <div
@@ -439,11 +461,11 @@ export function ImageGenerator() {
               onClick={() => setIsPreviewOpen(true)}
             >
               <img
-                src={`http://localhost:8000/api/files/${result}`}
+                src={`${API_BASE_URL()}/api/files/${result}`}
                 alt="Generated Image"
                 className="max-h-[85vh] object-contain"
               />
-              <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-[10px] sm:text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
+              <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-[10px] sm:text-xs text-primary shadow-lg flex flex-col items-start leading-none gap-0.5">
                 <span className="font-bold uppercase tracking-wider">Result</span>
                 {duration && <span className="opacity-80 font-medium">in {formatDuration(duration * 1000)}</span>}
               </div>
@@ -454,15 +476,15 @@ export function ImageGenerator() {
 
             <div className="flex gap-2">
               <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Screen</button>
-              <a href={`http://localhost:8000/api/files/${result}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Download</a>
+              <a href={`${API_BASE_URL()}/api/files/${result}?download=true`} className="btn-secondary text-sm">Download</a>
             </div>
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <Sparkles size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to Imagine</h3>
-            <p className="text-slate-400 max-w-sm">
-              Upload an image from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start editing with AI instructions.
+            <p className="text-secondary max-w-sm">
+              Enter a prompt in the sidebar and click Generate to create an image.
             </p>
           </div>
         )}

@@ -1,6 +1,6 @@
-import { X, Book, Lock, ExternalLink, Image, Film, Music, FileText, Wand2, ScanEye, Monitor, Cpu, Terminal, Palette, FileType, MessageSquare } from 'lucide-react';
+import { X, Book, Lock, ExternalLink, Image, Film, Music, FileText, Wand2, ScanEye, Monitor, Cpu, Terminal, Palette, FileType, MessageSquare, TrendingUp, Sparkles, Info, ArrowRight } from 'lucide-react';
 import { useAppStore } from '../store';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // --- Shared UI Components ---
 
@@ -10,7 +10,7 @@ function ExternalLinkBtn({ href, children }: { href: string; children: React.Rea
       href={href} 
       target="_blank" 
       rel="noreferrer" 
-      className="text-primary-400 hover:text-primary-300 inline-flex items-center gap-1 hover:underline"
+      className="text-brand-600 dark:text-brand-400 hover:text-brand-500 dark:hover:text-brand-300 inline-flex items-center gap-1 hover:underline"
     >
       {children} <ExternalLink size={12} />
     </a>
@@ -19,7 +19,7 @@ function ExternalLinkBtn({ href, children }: { href: string; children: React.Rea
 
 function CodeBadge({ children }: { children: React.ReactNode }) {
   return (
-    <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-200 text-sm font-mono border border-slate-700">
+    <code className="bg-secondary px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-200 text-sm font-mono border border-border">
       {children}
     </code>
   );
@@ -39,8 +39,8 @@ function GatedLock({ onClick }: { onClick: () => void }) {
 
 function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2 border-b border-slate-700 pb-2 mt-8 first:mt-0">
-      <span className="text-primary-400">{icon}</span>
+    <h3 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2 border-b border-border pb-2 mt-8 first:mt-0">
+      <span className="text-brand-600 dark:text-brand-400">{icon}</span>
       {children}
     </h3>
   );
@@ -48,12 +48,12 @@ function SectionTitle({ icon, children }: { icon: React.ReactNode; children: Rea
 
 function InfoCard({ title, children, icon }: { title: string; children: React.ReactNode; icon?: React.ReactNode }) {
   return (
-    <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800">
-      <h4 className="text-md font-medium text-slate-200 mb-2 flex items-center gap-2">
-        {icon || <Book size={16} className="text-slate-500"/>}
+    <div className="bg-primary/50 p-4 rounded-lg border border-border">
+      <h4 className="text-md font-medium text-primary mb-2 flex items-center gap-2">
+        {icon || <Book size={16} className="text-tertiary"/>}
         {title}
       </h4>
-      <div className="text-sm text-slate-400 space-y-2 pl-6">
+      <div className="text-sm text-secondary space-y-2 pl-6">
         {children}
       </div>
     </div>
@@ -62,17 +62,17 @@ function InfoCard({ title, children, icon }: { title: string; children: React.Re
 
 function Table({ headers, rows }: { headers: string[], rows: (string | React.ReactNode)[][] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-700 my-4">
+    <div className="overflow-x-auto rounded-lg border border-border my-4">
       <table className="w-full text-left text-xs">
-        <thead className="bg-slate-950 text-slate-300">
+        <thead className="bg-tertiary dark:bg-primary text-primary font-semibold">
           <tr>
-            {headers.map((h, i) => <th key={i} className="p-3">{h}</th>)}
+            {headers.map((h, i) => <th key={i} className="p-3 border-b border-border">{h}</th>)}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-800 bg-slate-900/50">
+        <tbody className="divide-y divide-border bg-secondary/50">
           {rows.map((row, i) => (
             <tr key={i}>
-              {row.map((cell, j) => <td key={j} className="p-3 text-slate-300">{cell}</td>)}
+              {row.map((cell, j) => <td key={j} className="p-3 text-secondary">{cell}</td>)}
             </tr>
           ))}
         </tbody>
@@ -89,15 +89,15 @@ interface HelpSectionProps {
 
 function HelpGatedModels() {
   return (
-    <div className="space-y-6 max-w-3xl text-slate-300">
-      <p className="text-lg text-slate-200">
+    <div className="space-y-6 max-w-3xl text-secondary">
+      <p className="text-lg text-primary">
         Some state-of-the-art models (like <CodeBadge>FLUX.1</CodeBadge> and <CodeBadge>SD 3.5</CodeBadge>) require Hugging Face authentication, but correspond to free-to-use research licenses.
       </p>
 
       <div className="space-y-4">
-        <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800">
-           <h3 className="text-white font-semibold flex items-center gap-2 mb-2">
-             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs border border-slate-700">1</span>
+        <div className="bg-primary/50 p-4 rounded-lg border border-border">
+           <h3 className="text-primary font-semibold flex items-center gap-2 mb-2">
+             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-xs border border-border">1</span>
              Create Account
            </h3>
            <p className="text-sm ml-8">
@@ -105,13 +105,13 @@ function HelpGatedModels() {
            </p>
         </div>
 
-        <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800">
-          <h3 className="text-white font-semibold flex items-center gap-2 mb-2">
-             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs border border-slate-700">2</span>
+        <div className="bg-primary/50 p-4 rounded-lg border border-border">
+          <h3 className="text-primary font-semibold flex items-center gap-2 mb-2">
+             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-xs border border-border">2</span>
              Accept Licenses
            </h3>
           <p className="text-sm ml-8 mb-4">
-            Visit each model page below and click <span className="text-white font-medium">"Agree and access repository"</span>:
+            Visit each model page below and click <span className="text-primary font-medium">"Agree and access repository"</span>:
           </p>
           <div className="ml-8 grid gap-2 text-sm">
             {[
@@ -122,17 +122,17 @@ function HelpGatedModels() {
               { name: 'Stable Audio Open', url: 'https://huggingface.co/stabilityai/stable-audio-open-1.0' },
               { name: 'Llama 3.1 8B', url: 'https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct' }
             ].map(model => (
-              <div key={model.name} className="flex items-center justify-between bg-slate-800/40 px-3 py-2 rounded border border-slate-700/50 hover:bg-slate-800/60 transition-colors">
-                <span className="font-mono text-slate-300">{model.name}</span>
+              <div key={model.name} className="flex items-center justify-between bg-secondary/40 px-3 py-2 rounded border border-border/50 hover:bg-secondary/60 transition-colors">
+                <span className="font-mono text-secondary">{model.name}</span>
                 <ExternalLinkBtn href={model.url}>Accept License</ExternalLinkBtn>
               </div>
             ))}
           </div>
         </div>
         
-         <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800">
-          <h3 className="text-white font-semibold flex items-center gap-2 mb-2">
-             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs border border-slate-700">3</span>
+         <div className="bg-primary/50 p-4 rounded-lg border border-border">
+          <h3 className="text-primary font-semibold flex items-center gap-2 mb-2">
+             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-xs border border-border">3</span>
              Create Token
            </h3>
            <ul className="list-disc ml-8 space-y-1 text-sm">
@@ -141,9 +141,9 @@ function HelpGatedModels() {
           </ul>
         </div>
 
-        <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800">
-          <h3 className="text-white font-semibold flex items-center gap-2 mb-2">
-             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs border border-slate-700">4</span>
+        <div className="bg-primary/50 p-4 rounded-lg border border-border">
+          <h3 className="text-primary font-semibold flex items-center gap-2 mb-2">
+             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-xs border border-border">4</span>
              Login
            </h3>
           <p className="text-sm ml-8">
@@ -157,24 +157,101 @@ function HelpGatedModels() {
 
 function HelpImage({ onNavigate }: HelpSectionProps) {
   return (
-    <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
         Generate high-quality images using state-of-the-art diffusion models running locally. 
-        Supports SDXL, SD 1.5, SD 3.5, and Flux.
+        Supports SDXL, SD 1.5, SD 3.5, Flux, and Qwen-Image.
       </p>
 
+      {/* Quick Pick Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+          <div className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mb-1">🎯 First Timer</div>
+          <div className="text-primary font-bold text-sm">SDXL Turbo</div>
+          <div className="text-secondary text-xs">No login, good quality, fast</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1">🍎 Mac User</div>
+          <div className="text-primary font-bold text-sm">SD 3.5 Turbo</div>
+          <div className="text-secondary text-xs">Best Mac performance</div>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+          <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1">🎮 CUDA 24GB+</div>
+          <div className="text-primary font-bold text-sm">Flux Schnell</div>
+          <div className="text-secondary text-xs">SOTA realism</div>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg">
+          <div className="text-amber-600 dark:text-amber-400 font-medium text-xs mb-1">🔤 Text in Image</div>
+          <div className="text-primary font-bold text-sm">Qwen-Image</div>
+          <div className="text-secondary text-xs">Best text rendering</div>
+        </div>
+      </div>
+
+      <SectionTitle icon={<Cpu size={20}/>}>Model Comparison</SectionTitle>
+      <Table 
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        rows={[
+          [
+            <span className="font-bold text-primary flex items-center">SD 3.5 Turbo <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~19GB', '32GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 4 steps</span>, 'Mac/CUDA', 'Default. High quality, very fast'
+          ],
+          [
+            <span className="font-bold text-primary">SDXL Turbo</span>, 
+            '~8GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'No login, good all-rounder'
+          ],
+          [
+            <span className="font-bold text-primary">SD 1.5</span>, 
+            '~4GB', '8GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Low VRAM, artistic styles'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">SD 3.5 Medium <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~10GB', '24GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 30 steps</span>, 'Mac/CUDA', 'Balanced quality/speed'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">SD 3.5 Large <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~19GB', '32GB+', <span className="text-orange-600 dark:text-orange-400">🕐 40 steps</span>, 'Mac/CUDA', 'Best SD quality'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">Flux Schnell <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~12GB', '24GB+', <span className="text-red-600 dark:text-red-400">🐢 Slow on Mac</span>, 'CUDA best', 'SOTA realism'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">Flux Dev <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~16GB', '32GB+', <span className="text-red-600 dark:text-red-400">🐢 Very slow</span>, 'CUDA best', 'Professional quality'
+          ],
+          [
+            <span className="font-bold text-primary">Qwen-Image Auto</span>, 
+            '~20-40GB', '48GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 30 steps</span>, 'CUDA', 'Best text rendering'
+          ],
+          [
+            <span className="font-bold text-primary">Qwen-Image Lightning</span>, 
+            '~40GB', '64GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 4 steps</span>, 'CUDA', 'Fast text rendering'
+          ],
+          [
+            <span className="font-bold text-primary">Qwen-Image 4-bit</span>, 
+            '~20GB', '32GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'CUDA only', 'Text rendering, less VRAM'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">FLUX.2 4-bit <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~12GB', '24GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'CUDA only', 'Quantized Flux'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">FLUX.2 Full <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~65GB', '128GB+', <span className="text-red-600 dark:text-red-400">🐢 Slow</span>, 'CUDA only', <span className="text-red-600 dark:text-red-400">⚠️ Extreme RAM</span>
+          ],
+        ]}
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="Key Features" icon={<Image size={16} className="text-blue-400"/>}>
+        <InfoCard title="Key Features" icon={<Image size={16} className="text-blue-600 dark:text-blue-400"/>}>
           <ul className="list-disc pl-4 space-y-1">
             <li><strong>Text-to-Image</strong>: Detailed wallpapers, art, photos.</li>
-            <li><strong>Format Control</strong>: Landscape (16:9), Portrait (9:16), Square.</li>
-            <li><strong>Proactive Optimization</strong>: Auto-upscaling for high resolutions.</li>
-            <li><strong>Negative Prompt</strong>: List items to remove (e.g., "blurry, text"). Avoid "no" or "without".</li>
-            <li><strong>Safety</strong>: Optional NSFW checker.</li>
+            <li><strong>Negative Prompt</strong>: List items to exclude (e.g., "blur, text").</li>
+            <li><strong>Steps/CFG</strong>: Turbo models use 4 steps & 0 CFG. Standard use 30+ steps.</li>
           </ul>
         </InfoCard>
         
-        <InfoCard title="Supported Formats" icon={<Monitor size={16} className="text-green-400"/>}>
+        <InfoCard title="Supported Formats" icon={<Monitor size={16} className="text-green-600 dark:text-green-400"/>}>
            <ul className="list-disc pl-4 space-y-1">
             <li><strong>Resolutions</strong>: 720p, 1080p, 4k, 8k, HD, UHD.</li>
             <li><strong>Custom</strong>: Width x Height (e.g. 1024x1024).</li>
@@ -183,82 +260,111 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
         </InfoCard>
       </div>
 
-      <SectionTitle icon={<Cpu size={20}/>}>Recommended Models</SectionTitle>
-      <Table 
-        headers={['Model', 'VRAM', 'Best For']}
-        rows={[
-          [<span className="font-bold text-white flex items-center">SD 3.5 Large Turbo <GatedLock onClick={() => onNavigate('gated-models')}/></span>, '~19GB', 'Default. Fast (4 steps) & High Qual.'],
-          [<span className="font-bold text-white">SDXL Turbo</span>, '~8GB', 'Fast, no login. Good all-rounder.'],
-          [<span className="font-bold text-white flex items-center">FLUX.1-schnell <GatedLock onClick={() => onNavigate('gated-models')}/></span>, '~12GB+', <span>State-of-the-art realism. <span className="text-yellow-400">⚠️ Very slow on Mac.</span></span>],
-          [<span className="font-bold text-white">SD 1.5</span>, '~4GB', 'Low VRAM, artistic styles, faster.'],
-          [<span className="font-bold text-white">Qwen-Image</span>, '~20GB', 'Best text rendering. CUDA only.'],
-          [<span className="font-bold text-white">Qwen-Image (MPS)</span>, '~40GB', 'Text rendering on Mac (Float32).']
-        ]}
-      />
-
       <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mt-4">
-        <h4 className="text-blue-400 font-medium mb-2 flex items-center gap-2"><Monitor size={16}/> Smart Multi-Stage Strategy (Proactive Workflow)</h4>
+        <h4 className="text-blue-600 dark:text-blue-400 font-medium mb-2 flex items-center gap-2"><Monitor size={16}/> Smart Multi-Stage Strategy</h4>
         <p className="mb-2">
-          Generating native 4K+ images can crash systems. We use a smart strategy for requests &gt; 6 Megapixels:
+          For high-res requests (&gt; 6 Megapixels), we auto-generate at ~3K base then AI upscale to target.
         </p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li><strong>Threshold Detection</strong>: Detects high-res request (e.g. 8K).</li>
-          <li><strong>Step 1</strong>: Generates at a stable ~3K base resolution (fits in VRAM).</li>
-          <li><strong>Step 2</strong>: Instantly <strong>AI Upscales</strong> to target using Real-ESRGAN.</li>
-        </ol>
       </div>
     </div>
   );
 }
 
-function HelpVideo({ onNavigate }: HelpSectionProps) {
+function HelpVideo() {
   return (
-     <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
         Create engaging short clips using models like Zeroscope, LTX-Video, and Wan 2.2.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="Modes" icon={<Film size={16} className="text-purple-400"/>}>
+      {/* Quick Pick Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+          <div className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mb-1">🍎 Mac Champion</div>
+          <div className="text-primary font-bold text-sm">LTX-Video</div>
+          <div className="text-secondary text-xs">Best native Apple Silicon</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1">⚡ Instant Preview</div>
+          <div className="text-primary font-bold text-sm">Zeroscope</div>
+          <div className="text-secondary text-xs">Fastest for quick loops</div>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+          <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1">🎮 CUDA Power</div>
+          <div className="text-primary font-bold text-sm">Wan 2.2</div>
+          <div className="text-secondary text-xs">Photorealism (24GB VRAM)</div>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg">
+          <div className="text-amber-600 dark:text-amber-400 font-medium text-xs mb-1">🌊 High Motion</div>
+          <div className="text-primary font-bold text-sm">Mochi 1</div>
+          <div className="text-secondary text-xs">Best physics & fluidity</div>
+        </div>
+      </div>
+
+      <SectionTitle icon={<Film size={20}/>}>Model Comparison</SectionTitle>
+      <Table
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        rows={[
+          [
+            <span className="font-bold text-primary">LTX-Video</span>, 
+            '~12GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Perfect speed/motion balance'
+          ],
+          [
+            <span className="font-bold text-primary">Zeroscope</span>, 
+            '~4GB', '8GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Stable, no watermark loops'
+          ],
+          [
+            <span className="font-bold text-primary">Wan 2.2</span>, 
+            '~24GB', '32GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'CUDA Best', 'State-of-the-Art realism'
+          ],
+          [
+            <span className="font-bold text-primary">Mochi 1</span>, 
+            '~19GB', '32GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'CUDA Best', 'Fluid physics & high motion'
+          ],
+          [
+            <span className="font-bold text-primary">SVD</span>, 
+            '~8GB', '16GB+', <span className="text-red-600 dark:text-red-400">🐢 Slow on Mac</span>, 'Mac/CUDA', 'Image-to-Video specialist'
+          ],
+          [
+            <span className="font-bold text-primary">CogVideoX</span>, 
+            '~38GB', '48GB+', <span className="text-red-600 dark:text-red-400">🐢 Heavy</span>, 'CUDA Best', 'High fidelity production'
+          ],
+          [
+            <span className="font-bold text-primary">Hunyuan</span>, 
+            '~80GB+', '64GB+', <span className="text-red-600 dark:text-red-400">🐢 Very heavy</span>, 'CUDA only', 'Cinematic scale (13B)'
+          ]
+        ]}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+        <InfoCard title="Generation Modes" icon={<Film size={16} className="text-purple-600 dark:text-purple-400"/>}>
            <ul className="list-disc pl-4 space-y-1">
-            <li><strong>Text-to-Video</strong>: From scratch prompts ("A robot dancing").</li>
-            <li><strong>Image-to-Video (I2V)</strong>: Animate a starting image (`-ii`).</li>
-            <li><strong>Audio-Reactive</strong>: Generates matching audio track automatically.</li>
+            <li><strong>Text-to-Video</strong>: Create from prompts ("A forest drone shot").</li>
+            <li><strong>Image-to-Video</strong>: Animate a starting frame image (`-ii`).</li>
+            <li><strong>Audio-Reactive</strong>: Generates matching audio automatically.</li>
            </ul>
         </InfoCard>
 
-         <InfoCard title="Mac M-Series Optimization" icon={<Cpu size={16} className="text-yellow-400"/>}>
+         <InfoCard title="Platform Performance" icon={<Cpu size={16} className="text-yellow-600 dark:text-yellow-400"/>}>
            <ul className="list-disc pl-4 space-y-1">
-            <li><strong>LTX-Video</strong>: ✅ Best native performance (~35s for 2s).</li>
-            <li><strong>Zeroscope</strong>: ✅ Fast, efficient, auto-upscales.</li>
-            <li><strong>Mochi 1</strong>: ⚠️ Works but slow (Sequential Offload).</li>
-            <li><strong>Wan 2.2</strong>: ❌ Impractical (Too slow).</li>
-            <li><strong>Hunyuan</strong>: ❌ Fails on &lt;64GB Macs.</li>
+            <li><strong>Mac (MPS)</strong>: Use LTX-Video or Zeroscope for best results.</li>
+            <li><strong>NVIDIA (CUDA)</strong>: Wan 2.2 and Mochi thrive on 24GB+ cards.</li>
+            <li><strong>Memory</strong>: SVD/Hunyuan require high RAM regardless of GPU.</li>
            </ul>
         </InfoCard>
       </div>
 
-      <SectionTitle icon={<Cpu size={20}/>}>Video Models</SectionTitle>
-      <Table
-        headers={['Model', 'Type', 'VRAM', 'Notes']}
-        rows={[
-          [<span className="font-bold text-white">Zeroscope</span>, 'T2V', '~4GB', 'Default. Fast. Dynamic Upscaling.'],
-          [<span className="font-bold text-white">LTX-Video</span>, 'T2V / I2V', '~12GB', 'Best balance for Mac/Consumer GPU.'],
-          [<span className="font-bold text-white">SVD</span>, 'I2V Only', '~8GB', 'Stable Video Diffusion. Slow on Mac (CPU).'],
-          [<span className="font-bold text-white flex items-center">Wan 2.2 <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 'T2V / I2V', '~24GB', 'SOTA 2025. Very heavy (NVIDIA rec).'],
-          [<span className="font-bold text-white">Mochi 1</span>, 'T2V', '~19GB', 'High motion fidelity. Slow on Mac.']
-        ]}
-      />
-
-       <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-        <h4 className="text-primary-400 font-medium mb-2">Zeroscope Dynamic Upscaling Pipeline</h4>
+       <div className="bg-secondary/50 p-4 rounded-lg border border-border mt-6">
+        <h4 className="text-primary-600 dark:text-primary-400 font-medium mb-2">Zeroscope Dynamic Upscaling Pipeline</h4>
         <p className="mb-2">When generating &gt; 576x320 with Zeroscope:</p>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="bg-slate-800 px-2 py-1 rounded">1. Native 576x320</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="bg-secondary px-2 py-1 rounded">1. Native 576x320</span>
           <span>→</span>
-          <span className="bg-slate-800 px-2 py-1 rounded">2. Temporal Upscale (XL)</span>
+          <span className="bg-secondary px-2 py-1 rounded">2. Temporal Upscale (XL)</span>
           <span>→</span>
-          <span className="bg-slate-800 px-2 py-1 rounded">3. Real-ESRGAN 2x-4x</span>
+          <span className="bg-secondary px-2 py-1 rounded">3. Real-ESRGAN 2x-4x</span>
+          <span>→</span>
+          <span className="bg-secondary px-2 py-1 rounded">4. Final HQ MP4</span>
         </div>
       </div>
     </div>
@@ -267,55 +373,107 @@ function HelpVideo({ onNavigate }: HelpSectionProps) {
 
 function HelpAudio({ onNavigate }: HelpSectionProps) {
   return (
-    <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
-        Compose music, SFX, and speech entirely offline.
+        Compose music, SFX, and realistic speech entirely offline.
       </p>
 
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="Models" icon={<Music size={16} className="text-pink-400"/>}>
-           <ul className="list-disc pl-4 space-y-1">
-             <li><strong>MusicGen</strong>: High-fidelity music composition.</li>
-             <li><strong>AudioLDM 2</strong>: Best for Sound Effects (Foley, Rain).</li>
-             <li><strong>Bark</strong>: Realistic Speech + Emotion (Laughter).</li>
-             <li><strong>Stable Audio</strong>: <GatedLock onClick={() => onNavigate('gated-models')}/> Variable-length high-quality.</li>
-           </ul>
-        </InfoCard>
-
-         <InfoCard title="Features" icon={<Wand2 size={16} className="text-violet-400"/>}>
-           <ul className="list-disc pl-4 space-y-1">
-             <li><strong>Auto-Chunking</strong>: Unlimited length generation (Bark/MusicGen).</li>
-             <li><strong>Visual-to-Audio</strong>: Generate soundtrack from image/video.</li>
-             <li><strong>Voice Presets</strong>: Multilingual support in Bark.</li>
-           </ul>
-        </InfoCard>
+      {/* Quick Pick Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+          <div className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mb-1">🎹 Music Composer</div>
+          <div className="text-primary font-bold text-sm">MusicGen</div>
+          <div className="text-secondary text-xs">High-fidelity melodies</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1">🔊 SFX Specialist</div>
+          <div className="text-primary font-bold text-sm">AudioLDM 2</div>
+          <div className="text-secondary text-xs">Foley, weather & nature</div>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+          <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1">🗣️ Voice Engine</div>
+          <div className="text-primary font-bold text-sm">Bark</div>
+          <div className="text-secondary text-xs">Speech with emotion</div>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex flex-col justify-between">
+          <div>
+            <div className="text-amber-600 dark:text-amber-400 font-medium text-xs mb-1 flex items-center justify-between">
+              <span>🎬 Cinema Score</span>
+              <GatedLock onClick={() => onNavigate('gated-models')}/>
+            </div>
+            <div className="text-primary font-bold text-sm">Stable Audio</div>
+            <div className="text-secondary text-xs">Professional textures</div>
+          </div>
+        </div>
       </div>
 
-       <SectionTitle icon={<MessageSquare size={20}/>}>Bark Special Tokens</SectionTitle>
-       <p className="mb-2">Add these to your prompt to trigger sound effects:</p>
-       <div className="flex flex-wrap gap-2 mb-4">
-         <CodeBadge>[laughter]</CodeBadge>
-         <CodeBadge>[cheers]</CodeBadge>
-         <CodeBadge>[music]</CodeBadge>
-         <CodeBadge>[sighs]</CodeBadge>
-         <CodeBadge>[gasps]</CodeBadge>
-         <CodeBadge>[clears throat]</CodeBadge>
-         <CodeBadge>♪ lyrics ♪</CodeBadge>
-       </div>
-       <p className="text-xs text-slate-500 mb-4">Note: Bark ignores the 'Duration' setting; length depends on text amount. Use <CodeBadge>--voice-preset v2/en_speaker_6</CodeBadge> for best results.</p>
+      <SectionTitle icon={<Music size={20}/>}>Model Comparison</SectionTitle>
+      <Table
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Type', 'Best For']}
+        rows={[
+          [
+            <span className="font-bold text-primary">MusicGen (Small)</span>, 
+            '~4GB', '8GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Music', 'Quick melodic ideas'
+          ],
+          [
+            <span className="font-bold text-primary">MusicGen (Medium)</span>, 
+            '~8GB', '16GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'Music', 'High-quality loopable music'
+          ],
+          [
+            <span className="font-bold text-primary">AudioLDM 2</span>, 
+            '~6GB', '12GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'SFX', 'Soundscapes and Foley'
+          ],
+          [
+            <span className="font-bold text-primary">Bark</span>, 
+            '~6GB', '12GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'Speech', 'Natural TTS with prosody'
+          ],
+          [
+            <span className="font-bold text-primary">Stable Audio <GatedLock onClick={() => onNavigate('gated-models')}/></span>, 
+            '~12GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'All-in-one', 'Long textures & full songs'
+          ]
+        ]}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+        <InfoCard title="Audio Features" icon={<Wand2 size={16} className="text-violet-600 dark:text-violet-400"/>}>
+           <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Auto-Chunking</strong>: Models generate up to 30s at once; this tool automatically chains prompts for unlimited length (Bark/MusicGen).</li>
+            <li><strong>Visual-to-Audio</strong>: Uses an internal "Vision" description of your image/video to prompt the audio model automatically.</li>
+            <li><strong>Voice Presets</strong>: Support for 100+ native speakers in Bark (`v2/en_speaker_x`).</li>
+           </ul>
+        </InfoCard>
+
+        <div className="bg-primary/50 p-4 rounded-lg border border-border">
+           <h4 className="text-primary font-bold mb-2 flex items-center gap-2">
+             <MessageSquare size={16} className="text-primary-600 dark:text-primary-400"/>
+             Bark Special Tokens
+           </h4>
+           <div className="flex flex-wrap gap-1.5 mb-3">
+            {['[laughter]', '[cheers]', '[music]', '[sighs]', '[gasps]', '[clears throat]', '♪ lyrics ♪'].map(token => (
+              <span key={token} className="px-2 py-0.5 bg-secondary border border-border rounded text-[10px] font-mono text-primary-400 dark:text-primary-300">
+                {token}
+              </span>
+            ))}
+           </div>
+           <p className="text-[11px] text-tertiary">
+             To trigger these sounds, simply include the token in your prompt. 
+             Note: Audio length depends strictly on text volume in Bark.
+           </p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function HelpText() {
     return (
-     <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+     <div className="space-y-6 max-w-4xl text-secondary text-sm">
        <p className="text-base">
          Unified hub for <strong>Articles</strong>, <strong>Code</strong>, and <strong>Deep Research</strong> using LLMs.
        </p>
  
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-         <InfoCard title="Capabilities" icon={<FileText size={16} className="text-emerald-400"/>}>
+         <InfoCard title="Capabilities" icon={<FileText size={16} className="text-emerald-600 dark:text-emerald-400"/>}>
             <ul className="list-disc pl-4 space-y-1">
              <li><strong>Article</strong>: Context-aware offline writing.</li>
              <li><strong>Deep Research</strong>: Autonomous web search (DuckDuckGo).</li>
@@ -324,7 +482,7 @@ function HelpText() {
             </ul>
          </InfoCard>
          
-          <InfoCard title="DeepSeek R1" icon={<Cpu size={16} className="text-blue-400"/>}>
+          <InfoCard title="DeepSeek R1" icon={<Cpu size={16} className="text-blue-600 dark:text-blue-400"/>}>
             <p>
               We support <strong>DeepSeek R1 Distilled</strong> models (Qwen/Llama). 
               These are "Reasoning" models that output a <code className="text-amber-200">&lt;think&gt;</code> process before answering.
@@ -348,13 +506,13 @@ function HelpText() {
 
 function HelpTransform() {
   return (
-    <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
          Modify existing images using AI-powered instructional commands or computer vision tasks.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-         <InfoCard title="Tools" icon={<Palette size={16} className="text-pink-400"/>}>
+         <InfoCard title="Tools" icon={<Palette size={16} className="text-pink-600 dark:text-pink-400"/>}>
              <ul className="list-disc pl-4 space-y-1">
               <li><strong>InstructPix2Pix</strong>: Stylistic edits ("Make it anime").</li>
               <li><strong>Qwen-Image-Edit</strong>: Precision text/object edits.</li>
@@ -362,7 +520,7 @@ function HelpTransform() {
             </ul>
          </InfoCard>
 
-         <InfoCard title="Guidance Scale" icon={<Wand2 size={16} className="text-purple-400"/>}>
+         <InfoCard title="Guidance Scale" icon={<Wand2 size={16} className="text-purple-600 dark:text-purple-400"/>}>
             <ul className="list-disc pl-4 space-y-1">
               <li><strong>&lt; 1.2</strong>: Creative, loose adherence to original.</li>
               <li><strong>&gt; 1.5</strong>: Strict, keeps original structure.</li>
@@ -388,13 +546,13 @@ function HelpTransform() {
 
 function HelpDescription() {
   return (
-    <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
        <p className="text-base">
          Use Vision-Language Models (VLMs) to give eyes to your AI. Describes images or videos.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="Image Captioning" icon={<Image size={16} className="text-blue-400"/>}>
+        <InfoCard title="Image Captioning" icon={<Image size={16} className="text-blue-600 dark:text-blue-400"/>}>
            <p className="mb-2">Two models available:</p>
            <ul className="list-disc pl-4 space-y-1">
             <li><strong>Florence-2</strong> (Default): Rich detail, spatial awareness.</li>
@@ -402,7 +560,7 @@ function HelpDescription() {
            </ul>
         </InfoCard>
 
-        <InfoCard title="Video Analysis" icon={<Film size={16} className="text-purple-400"/>}>
+        <InfoCard title="Video Analysis" icon={<Film size={16} className="text-purple-600 dark:text-purple-400"/>}>
            <p>
              The script intelligently samples <strong>10 frames</strong> from the video, analyzes each, and synthesizes a full summary of action, setting, and flow.
            </p>
@@ -414,7 +572,7 @@ function HelpDescription() {
 
 function HelpMultimedia() {
   return (
-    <div className="space-y-6 max-w-4xl text-slate-300 text-sm">
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
        <p className="text-base">
          Instantly convert images, videos, audio, and documents between formats (No AI required).
       </p>
@@ -430,25 +588,25 @@ function HelpMultimedia() {
           ['Image', '📷', '📷', '📷', '📷', '📷', '📷', '📷']
         ]}
        />
-       <p className="text-xs text-slate-500 mt-2">
+       <p className="text-xs text-tertiary mt-2">
           📷 = <strong>OCR (Optical Character Recognition)</strong>: Extract text from images/scans.
        </p>
-       <div className="bg-slate-950/50 p-4 rounded-lg border border-slate-800 mt-2">
-         <h4 className="text-xs font-bold text-slate-200 mb-2 uppercase tracking-tight">OCR Model Options</h4>
+       <div className="bg-primary/50 p-4 rounded-lg border border-border mt-2">
+         <h4 className="text-xs font-bold text-primary mb-2 uppercase tracking-tight">OCR Model Options</h4>
          <div className="space-y-3">
            <div>
              <div className="flex justify-between items-center mb-1">
-               <span className="text-xs font-bold text-white">Qwen-VL (Default)</span>
-               <span className="text-[10px] text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">PRECISE</span>
+               <span className="text-xs font-bold text-primary">Qwen-VL (Default)</span>
+               <span className="text-[10px] text-blue-600 dark:text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">PRECISE</span>
              </div>
-             <p className="text-[11px] text-slate-400">~30GB RAM usage. High-precision extraction of code, paths, and 🐍 emojis.</p>
+             <p className="text-[11px] text-secondary">~30GB RAM usage. High-precision extraction of code, paths, and 🐍 emojis.</p>
            </div>
-           <div className="pt-2 border-t border-slate-800">
+           <div className="pt-2 border-t border-border">
              <div className="flex justify-between items-center mb-1">
-               <span className="text-xs font-bold text-white">Florence-2 (Fast Choice)</span>
-               <span className="text-[10px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded border border-green-400/20">FAST</span>
+               <span className="text-xs font-bold text-primary">Florence-2 (Fast Choice)</span>
+               <span className="text-[10px] text-green-600 dark:text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded border border-green-400/20">FAST</span>
              </div>
-             <p className="text-[11px] text-slate-400 italic">Lightweight (~1.5GB RAM). Best for quick scans and general text drafts.</p>
+             <p className="text-[11px] text-secondary italic">Lightweight (~1.5GB RAM). Best for quick scans and general text drafts.</p>
            </div>
          </div>
        </div>
@@ -457,31 +615,173 @@ function HelpMultimedia() {
 }
 
 
+function HelpUpscale() {
+  return (
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
+      <p className="text-base">
+        Enhance the resolution and quality of images and videos using AI-powered upscaling.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Upscaling Methods" icon={<TrendingUp size={16} className="text-emerald-600 dark:text-emerald-400"/>}>
+           <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Fast (Real-ESRGAN)</strong>: Best for clean photos and digital art. Very fast.</li>
+            <li><strong>Creative (Latent)</strong>: Uses Stable Diffusion to "re-imagine" details. Best for low-res artifacts.</li>
+            <li><strong>Simple (Lanczos)</strong>: Traditional mathematical scaling. No AI artifacts.</li>
+           </ul>
+        </InfoCard>
+
+        <InfoCard title="Strategy" icon={<Monitor size={16} className="text-blue-600 dark:text-blue-400"/>}>
+           <p>
+             The studio uses a <strong>Proactive Strategy</strong>: if you request a massive resolution, we generate at a stable size first, then instantly AI upscale to your target to prevent OOM (Out of Memory) crashes.
+           </p>
+        </InfoCard>
+      </div>
+
+      <SectionTitle icon={<Cpu size={20}/>}>Recommended Factors</SectionTitle>
+      <Table 
+        headers={['Factor', 'Usage', 'Quality']}
+        rows={[
+          ['2x', 'Standard HD to 4K', 'Excellent / Sharp'],
+          ['4x', 'SD to 4K / HD to 8K', 'Good / High Detail'],
+          ['8x+', 'Extreme scaling', 'Soft / Potential artifacts']
+        ]}
+      />
+    </div>
+  );
+}
+
+function HelpGeneral({ onNavigate }: HelpSectionProps) {
+  const tocItems = [
+    { id: 'image', title: 'Image Generation', icon: <Image className="text-emerald-600 dark:text-emerald-400" size={24}/>, desc: 'Flux, SDXL, SD 3.5' },
+    { id: 'video', title: 'Video Generation', icon: <Film className="text-purple-600 dark:text-purple-400" size={24}/>, desc: 'Wan 2.2, LTX, Zeroscope' },
+    { id: 'audio', title: 'Audio Generation', icon: <Music className="text-blue-600 dark:text-blue-400" size={24}/>, desc: 'MusicGen, Bark, AudioLDM' },
+    { id: 'text', title: 'Chat, Articles & Research', icon: <FileText className="text-amber-600 dark:text-amber-400" size={24}/>, desc: 'DeepSeek, Llama, Web Search' },
+    { id: 'transform', title: 'Transformations', icon: <Wand2 className="text-pink-600 dark:text-pink-400" size={24}/>, desc: 'Edit, BG Removal' },
+    { id: 'upscale', title: 'Upscaling', icon: <TrendingUp className="text-cyan-600 dark:text-cyan-400" size={24}/>, desc: 'AI & Lanczos enlargement' },
+  ];
+
+  return (
+    <div className="space-y-8 max-w-4xl text-secondary text-sm">
+      <div className="space-y-3">
+        <h3 className="text-2xl font-bold text-primary flex items-center gap-3">
+          <Sparkles className="text-primary-600 dark:text-primary-400" size={28}/>
+          Welcome to AI-Media
+        </h3>
+        <p className="text-base leading-relaxed text-secondary">
+          AI-Media is a comprehensive local generative AI studio designed to run state-of-the-art open source models entirely on your hardware. 
+          No subscriptions, no cloud latency, and 100% privacy.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Hardware Acceleration" icon={<Cpu size={16} className="text-primary-600 dark:text-primary-400"/>}>
+          <div className="space-y-4 pt-1">
+            <div className="flex items-start gap-3">
+              <div className="bg-secondary p-2 rounded shrink-0">🍏</div>
+              <div>
+                <div className="text-primary font-bold text-xs uppercase tracking-wider mb-1">Apple Silicon (MPS)</div>
+                <p className="text-xs text-secondary">Optimized for M-Series unified memory. Massive models use sequential offloading to run on consumer RAM.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="bg-secondary p-2 rounded shrink-0">🟢</div>
+              <div>
+                <div className="text-primary font-bold text-xs uppercase tracking-wider mb-1">NVIDIA (CUDA)</div>
+                <p className="text-xs text-secondary">Full CUDA & Tensor Core support. Automatically uses BFloat16 on RTX 30xx+ for maximum fidelity.</p>
+              </div>
+            </div>
+          </div>
+        </InfoCard>
+
+        <div className="bg-primary-500/5 border border-primary-500/20 p-5 rounded-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-primary-500/10 rounded-lg">
+                <Lock className="text-primary-600 dark:text-primary-400" size={20}/>
+              </div>
+              <h4 className="text-primary font-bold text-lg">Gated Models</h4>
+            </div>
+            <p className="text-secondary mb-4 whitespace-normal">
+              State-of-the-art models like <strong>FLUX.1</strong> and <strong>Llama 3.1</strong> require a one-time 
+              license acceptance on Hugging Face.
+            </p>
+          </div>
+          <button 
+            onClick={() => onNavigate('gated-models')}
+            className="flex items-center justify-between w-full p-3 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-lg text-primary-600 dark:text-primary-400 font-bold transition-all group"
+          >
+            Setup Guide
+            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Book size={18} className="text-blue-600 dark:text-blue-400"/>
+          <h4 className="text-primary font-bold text-lg">Table of Contents</h4>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {tocItems.map(item => (
+            <button 
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className="flex items-center gap-4 p-4 bg-secondary/40 hover:bg-secondary/80 border border-border/50 rounded-xl transition-all text-left group"
+            >
+              <div className="shrink-0 transition-transform group-hover:scale-110">
+                {item.icon}
+              </div>
+              <div>
+                <div className="text-primary font-bold">{item.title}</div>
+                <div className="text-[10px] text-tertiary uppercase tracking-wider">{item.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-primary/40 p-5 rounded-xl border border-border flex items-start gap-4">
+        <div className="p-2 bg-blue-500/10 rounded-lg mt-1">
+          <Info size={18} className="text-blue-600 dark:text-blue-400"/>
+        </div>
+        <div>
+          <h4 className="text-primary font-bold mb-1">Local Model Cache</h4>
+          <p className="text-secondary leading-relaxed">
+            All AI models are downloaded once and stored in your local cache (`HF_HOME`).
+            Ensure you have enough disk space (50GB+ recommended) for a comfortable experience.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Main Modal ---
 
 const SECTIONS = [
+  { id: 'general', label: 'General Info', icon: <Book size={18} />, component: HelpGeneral },
   { id: 'gated-models', label: 'Gated Models', icon: <Lock size={18} />, component: HelpGatedModels },
-  { id: 'general', label: 'General Info', icon: <Book size={18} />, component: () => (
-      <div className="text-slate-300 space-y-4">
-        <p>Select a topic from the sidebar to view detailed documentation.</p>
-        <InfoCard title="About AI-Media" icon={<Terminal size={16}/>}>
-          AI-Media is a comprehensive local generative AI studio. 
-          All models run offline on your hardware (support for Mac MPS and NVIDIA CUDA).
-        </InfoCard>
-      </div>
-  )},
   { id: 'image', label: 'Image Generation', icon: <Image size={18} />, component: HelpImage },
   { id: 'video', label: 'Video Generation', icon: <Film size={18} />, component: HelpVideo },
   { id: 'audio', label: 'Audio Generation', icon: <Music size={18} />, component: HelpAudio },
-  { id: 'text', label: 'Text & Deep Research', icon: <FileText size={18} />, component: HelpText },
+  { id: 'text', label: 'Chat, Articles & Research', icon: <FileText size={18} />, component: HelpText },
   { id: 'transform', label: 'Transformations', icon: <Wand2 size={18} />, component: HelpTransform },
+  { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
   { id: 'description', label: 'Vision / Description', icon: <ScanEye size={18} />, component: HelpDescription },
   { id: 'multimedia', label: 'Converters', icon: <FileType size={18} />, component: HelpMultimedia },
 ];
 
 export function HelpModal() {
-  const { isHelpOpen, toggleHelp } = useAppStore();
-  const [activeSection, setActiveSection] = useState('image'); 
+  const { isHelpOpen, helpSection, toggleHelp } = useAppStore();
+  const [activeSection, setActiveSection] = useState(helpSection || 'general'); 
+
+  // Sync activeSection when store's helpSection changes (e.g., from ModelHelpLink)
+  useEffect(() => {
+    if (helpSection && isHelpOpen) {
+      setActiveSection(helpSection);
+    }
+  }, [helpSection, isHelpOpen]);
 
   if (!isHelpOpen) return null;
 
@@ -491,13 +791,13 @@ export function HelpModal() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={toggleHelp}>
       <div 
-        className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden"
+        className="bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sidebar / Top Nav */}
-        <div className="w-full md:w-64 bg-slate-950 border-b md:border-b-0 md:border-r border-slate-800 flex flex-row md:flex-col shrink-0 overflow-x-auto md:overflow-visible">
-          <div className="p-4 border-r md:border-r-0 md:border-b border-slate-800 flex items-center gap-2 font-semibold text-slate-200 shrink-0 sticky left-0 bg-slate-950 z-10">
-            <Book size={20} className="text-primary-400" />
+        <div className="w-full md:w-64 bg-primary border-b md:border-b-0 md:border-r border-border flex flex-row md:flex-col shrink-0 overflow-x-auto md:overflow-visible">
+          <div className="p-4 border-r md:border-r-0 md:border-b border-border flex items-center gap-2 font-semibold text-primary shrink-0 sticky left-0 bg-primary z-10 h-16">
+            <Book size={20} className="text-brand-600 dark:text-brand-400" />
             <span className="hidden md:inline">Help Guide</span>
             <span className="md:hidden">Help</span>
           </div>
@@ -509,8 +809,8 @@ export function HelpModal() {
                 onClick={() => setActiveSection(section.id)}
                 className={`flex items-center gap-2 md:gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left shrink-0 md:w-full ${
                   activeSection === section.id 
-                    ? 'bg-primary-500/10 text-primary-400 border border-primary-500/20' 
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent'
+                    ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/20' 
+                    : 'text-secondary hover:bg-tertiary hover:text-primary border border-transparent'
                 }`}
               >
                 {section.icon}
@@ -521,15 +821,15 @@ export function HelpModal() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden min-w-0">
-          <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
-            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2 truncate">
+        <div className="flex-1 flex flex-col bg-secondary overflow-hidden min-w-0">
+          <div className="flex items-center justify-between p-4 border-b border-border shrink-0 h-16">
+            <h2 className="text-xl font-bold text-primary flex items-center gap-2 truncate">
               {activeItem.icon}
               <span className="truncate">{activeItem.label}</span>
             </h2>
             <button 
               onClick={toggleHelp}
-              className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors shrink-0"
+              className="p-1 hover:bg-tertiary rounded-lg text-secondary transition-colors shrink-0"
             >
               <X size={24} />
             </button>

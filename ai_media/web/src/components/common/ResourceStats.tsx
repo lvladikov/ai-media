@@ -12,7 +12,7 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
   if (!resources) {
     return (
-      <div className={`flex items-center gap-2 text-slate-500 text-xs ${className}`}>
+      <div className={`flex items-center gap-2 text-tertiary text-xs ${className}`}>
         <Activity size={12} className="animate-pulse" />
         <span>Loading resources...</span>
       </div>
@@ -60,8 +60,8 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
   const getUsageColor = (value: number) => {
     if (value > 80) return 'text-red-400';
-    if (value > 50) return 'text-yellow-400';
-    return 'text-green-400';
+    if (value > 50) return 'text-amber-700';
+    return 'text-green-700';
   };
 
   // Responsive grid classes
@@ -78,16 +78,16 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
   const labelClass = "hidden md:inline";
 
   return (
-    <div className={`flex flex-col gap-1.5 ${textSize} text-slate-400 ${className}`}>
+    <div className={`flex flex-col gap-1.5 ${textSize} text-secondary ${className}`}>
 
       {/* --- GRID HEADER / GLOBAL --- */}
       <div className={gridClass}>
 
         {/* Label Column */}
         <div className="flex items-center gap-1 md:gap-2 pr-2">
-          <Server size={12} className="text-slate-500 shrink-0" />
+          <Server size={12} className="text-tertiary shrink-0" />
           <span 
-            className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] whitespace-nowrap cursor-help hidden md:inline"
+            className="font-semibold text-tertiary uppercase tracking-wider text-[10px] whitespace-nowrap cursor-help hidden md:inline"
             title="Global System Resources"
           >
             Global
@@ -98,14 +98,14 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
         <div className="flex items-center gap-1 md:gap-1.5">
           <Cpu size={iconSize} className="text-primary-400/70 shrink-0" />
           <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>CPU</span>
-          <span className="font-bold text-white">{resources.global.cpu_percent.toFixed(0)}%</span>
+          <span className="font-bold text-primary">{resources.global.cpu_percent.toFixed(0)}%</span>
         </div>
 
         {/* RAM */}
-        <div className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-green-400">
+        <div className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-green-700">
           <HardDrive size={iconSize} className="shrink-0" />
           <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>RAM</span>
-          <span className="font-bold text-white whitespace-nowrap">
+          <span className="font-bold text-primary whitespace-nowrap">
             {resources.global.ram_used_gb.toFixed(1)} <span className="opacity-50">/</span> {resources.global.ram_total_gb.toFixed(1)}
             <span className="opacity-70 text-[10px] font-normal ml-0.5">GB</span>
           </span>
@@ -114,24 +114,24 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
         {/* GPU */}
         {showGpu ? (
           <div 
-            className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-purple-400"
+            className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-purple-700"
             title={isMacMPS ? "GPU usage monitoring is not available on Apple Silicon (MPS)." : undefined}
           >
             <Activity size={iconSize} className="shrink-0" />
             <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>GPU</span>
-            <span className="font-bold text-white">{(resources.global.gpu_percent || 0).toFixed(0)}%</span>
+            <span className="font-bold text-primary">{(resources.global.gpu_percent || 0).toFixed(0)}%</span>
           </div>
         ) : <div className="hidden md:block" />}
 
         {/* VRAM */}
         {showVram ? (
           <div 
-            className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-yellow-400"
+            className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-amber-700"
             title={isMacMPS ? "Max VRAM is limited by macOS (~75% of System RAM) to prevent system instability." : undefined}
           >
             <Gpu size={iconSize} className="shrink-0" />
             <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>VRAM</span>
-            <span className="font-bold text-white whitespace-nowrap">
+            <span className="font-bold text-primary whitespace-nowrap">
               {resources.global.vram_used_gb.toFixed(1)} <span className="opacity-50">/</span> {resources.global.vram_total_gb.toFixed(1)}
               <span className="opacity-70 text-[10px] font-normal ml-0.5">GB</span>
             </span>
@@ -140,10 +140,10 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
 
         {/* Swap */}
         {resources.global.swap_used_gb !== undefined && resources.global.swap_used_gb > 0 ? (
-          <div className="flex items-center gap-1 md:gap-2 md:px-2 md:border-l border-slate-800/30 text-orange-400">
+          <div className="flex items-center gap-1 md:gap-2 md:px-2 md:border-l border-border/30 text-orange-700">
             <Activity size={12} className="shrink-0" />
             <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>Swap</span>
-            <span className="text-white font-bold whitespace-nowrap">
+            <span className="text-primary font-bold whitespace-nowrap">
               {resources.global.swap_used_gb.toFixed(1)} <span className="text-[10px] font-normal">GB</span>
             </span>
           </div>
@@ -151,10 +151,10 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
       </div>
 
       {/* --- FEATURE ROW --- */}
-      <div className={`${gridClass} border-t border-slate-800/40 pt-1.5 opacity-90`}>
+      <div className={`${gridClass} border-t border-border/40 pt-1.5 opacity-90`}>
 
         {/* Label Column */}
-        <div className="flex items-center text-blue-400 pr-2 gap-1 md:gap-2">
+        <div className="flex items-center text-blue-700 pr-2 gap-1 md:gap-2">
           <Zap size={12} className="shrink-0" />
           <span 
             className="font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap cursor-help hidden md:inline" 
@@ -168,14 +168,14 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
         <div className="flex items-center gap-1 md:gap-1.5">
           <Cpu size={iconSize} className={`${getUsageColor(resources.process.cpu_percent)} shrink-0`} />
           <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>CPU</span>
-          <span className="font-bold text-white">{resources.process.cpu_percent.toFixed(0)}%</span>
+          <span className="font-bold text-primary">{resources.process.cpu_percent.toFixed(0)}%</span>
         </div>
 
         {/* RAM */}
-        <div className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-green-400">
+        <div className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-green-700">
           <HardDrive size={iconSize} className="shrink-0" />
           <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>RAM</span>
-          <span className="font-bold text-white whitespace-nowrap">
+          <span className="font-bold text-primary whitespace-nowrap">
             {resources.process.ram_used_gb.toFixed(1)}
             <span className="opacity-70 text-[10px] font-normal ml-0.5">GB</span>
           </span>
@@ -184,24 +184,24 @@ export function ResourceStats({ className = '', variant = 'full' }: ResourceStat
         {/* GPU */}
         {showGpu ? (
           <div 
-            className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-purple-400"
+            className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-purple-700"
             title={isMacMPS ? "GPU usage monitoring is not available on Apple Silicon (MPS)." : undefined}
           >
             <Activity size={iconSize} className="shrink-0" />
             <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>GPU</span>
-            <span className="font-bold text-white">{(resources.process.gpu_percent || 0).toFixed(0)}%</span>
+            <span className="font-bold text-primary">{(resources.process.gpu_percent || 0).toFixed(0)}%</span>
           </div>
         ) : <div className="hidden md:block" />}
 
         {/* VRAM */}
         {showVram ? (
           <div 
-            className="flex items-center gap-1 md:gap-1.5 md:border-l border-slate-800/30 md:pl-2 text-yellow-400"
+            className="flex items-center gap-1 md:gap-1.5 md:border-l border-border/30 md:pl-2 text-amber-700"
             title={isMacMPS ? "Max VRAM is limited by macOS (~75% of System RAM) to prevent system instability." : undefined}
           >
             <Gpu size={iconSize} className="shrink-0" />
             <span className={`${labelClass} ${variant === 'compact' ? 'md:hidden' : ''}`}>VRAM</span>
-            <span className="font-bold text-white whitespace-nowrap">
+            <span className="font-bold text-primary whitespace-nowrap">
               {(resources.process.vram_used_gb || 0).toFixed(1)}
               <span className="opacity-70 text-[10px] font-normal ml-0.5">GB</span>
             </span>

@@ -27,15 +27,15 @@ export function Tooltip({ content, children, align = 'center' }: TooltipProps) {
       <div
         onMouseEnter={() => setIsVisible(true)}
         onMouseLeave={() => setIsVisible(false)}
-        className="cursor-help text-slate-400 hover:text-primary-400 transition-colors"
+        className="cursor-help text-secondary hover:text-primary-400 transition-colors"
       >
         {children || <Info size={14} />}
       </div>
       
       {isVisible && (
-        <div className={`absolute bottom-full mb-2 w-48 p-2 bg-slate-900 border border-slate-700 rounded shadow-xl text-xs text-slate-200 z-50 pointer-events-none ${alignClasses[align]}`}>
+        <div className={`absolute bottom-full mb-2 w-48 p-2 bg-primary border border-border rounded shadow-xl text-xs text-primary z-50 pointer-events-none ${alignClasses[align]}`}>
           {content}
-          <div className={`absolute top-full border-4 border-transparent border-t-slate-900 ${arrowClasses[align]}`} />
+          <div className={`absolute top-full border-4 border-transparent border-t-border ${arrowClasses[align]}`} />
         </div>
       )}
     </div>

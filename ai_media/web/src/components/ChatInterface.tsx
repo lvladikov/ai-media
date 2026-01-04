@@ -12,26 +12,25 @@ import { formatDuration } from '../utils/formatTime';
 
 // Clipboard CSS mapping for rich-text copy (inline styles for external apps)
 const TAILWIND_TO_CSS: Record<string, string> = {
-  'text-slate-600': 'color: #475569;',
+  'text-tertiary': 'color: #475569;',
   'text-red-400': 'color: #f87171;',
   'text-green-400': 'color: #4ade80;',
   'text-yellow-400': 'color: #facc15;',
   'text-blue-400': 'color: #60a5fa;',
   'text-purple-400': 'color: #c084fc;',
   'text-cyan-400': 'color: #22d3ee;',
-  'text-slate-200': 'color: #e2e8f0;',
-  'text-slate-400': 'color: #94a3b8;',
+  'text-primary': 'color: #e2e8f0;',
+  'text-secondary': 'color: #94a3b8;',
   'text-red-300': 'color: #fca5a5;',
   'text-green-300': 'color: #86efac;',
   'text-yellow-300': 'color: #fde047;',
   'text-blue-300': 'color: #93c5fd;',
   'text-purple-300': 'color: #d8b4fe;',
   'text-cyan-300': 'color: #67e8f9;',
-  'text-white': 'color: #ffffff;',
   'font-bold': 'font-weight: bold;',
   'italic': 'font-style: italic;',
   'underline': 'text-decoration: underline;',
-  'bg-slate-800': 'background-color: #1e293b;',
+  'bg-secondary': 'background-color: #1e293b;',
   'bg-red-500/20': 'background-color: rgba(239, 68, 68, 0.2);',
   'bg-green-500/20': 'background-color: rgba(34, 197, 94, 0.2);',
   'bg-yellow-500/20': 'background-color: rgba(234, 179, 8, 0.2);',
@@ -93,17 +92,17 @@ const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="border-l-2 border-slate-600/50 pl-3 my-1 bg-slate-800/10 py-1 pr-2 rounded-r">
+    <div className="border-l-2 border-border/50 pl-3 my-1 bg-secondary/10 py-1 pr-2 rounded-r">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 font-semibold text-xs opacity-50 text-slate-300 mb-0.5 hover:opacity-100 transition-opacity w-full text-left"
+        className="flex items-center gap-2 font-semibold text-xs text-slate-600 dark:text-slate-400 mb-0.5 hover:text-slate-900 dark:hover:text-slate-200 transition-colors w-full text-left"
       >
         {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>💭 Reasoning</span>
       </button>
 
       {isOpen && (
-        <div className="prose prose-invert max-w-none text-slate-400/90 leading-tight [&>p]:!text-xs [&>p]:italic [&>p]:my-0.5 [&>pre]:not-italic [&>pre]:my-1 mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="prose dark:prose-invert max-w-none text-secondary/90 leading-tight [&>p]:!text-xs [&>p]:italic [&>p]:my-0.5 [&>pre]:not-italic [&>pre]:my-1 mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
           <MarkdownWithAnsiNoHtml>{reasoning}</MarkdownWithAnsiNoHtml>
         </div>
       )}
@@ -118,20 +117,20 @@ const FileContextAccordion = ({ filename, content }: { filename: string; content
   const hasMore = lines.length > 5;
 
   return (
-    <div className="border-l-2 border-blue-600/50 pl-3 my-1 bg-slate-800/10 py-1 pr-2 rounded-r">
+    <div className="border-l-2 border-blue-600/50 pl-3 my-1 bg-secondary/10 py-1 pr-2 rounded-r">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 font-semibold text-xs opacity-70 text-slate-300 mb-0.5 hover:opacity-100 transition-opacity w-full text-left"
+        className="flex items-center gap-2 font-semibold text-xs text-slate-600 dark:text-slate-400 mb-0.5 hover:text-slate-900 dark:hover:text-slate-200 transition-colors w-full text-left"
       >
         {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>📄 File: {filename}</span>
-        {hasMore && !isOpen && <span className="text-slate-500 ml-1">({lines.length} lines)</span>}
+        {hasMore && !isOpen && <span className="text-tertiary ml-1">({lines.length} lines)</span>}
       </button>
 
-      <div className={`prose prose-invert max-w-none text-slate-400/90 leading-tight text-xs font-mono mt-2 ${isOpen ? '' : 'max-h-[120px] overflow-hidden'}`}>
+      <div className={`prose dark:prose-invert max-w-none text-secondary/90 leading-tight text-xs font-mono mt-2 ${isOpen ? '' : 'max-h-[120px] overflow-hidden'}`}>
         <pre className="!bg-transparent !p-0 !m-0 whitespace-pre-wrap">
           {isOpen ? content : previewLines}
-          {!isOpen && hasMore && <span className="text-slate-500 italic">...</span>}
+          {!isOpen && hasMore && <span className="text-tertiary italic">...</span>}
         </pre>
       </div>
     </div>
@@ -263,7 +262,7 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
   };
 
   const renderContent = (markdown: string) => (
-    <div ref={answerRef} className="prose prose-invert prose-sm max-w-none">
+    <div ref={answerRef} className="prose dark:prose-invert prose-sm max-w-none">
       <MarkdownWithAnsi>{markdown}</MarkdownWithAnsi>
     </div>
   );
@@ -274,24 +273,24 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       <div className="font-sans font-normal whitespace-pre-wrap">
         <ReasoningAccordion reasoning={reasoning} />
         {thinkingTime && (
-          <div className="mt-2 mb-2 text-xs text-slate-500 italic">
+          <div className="mt-2 mb-2 text-xs text-slate-500 dark:text-slate-400 italic">
             Thought for {thinkingTime}
           </div>
         )}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1">
-            <div className="font-bold text-slate-100 italic">Answer:</div>
+            <div className="font-bold text-primary italic">Answer:</div>
             <div className="flex gap-1">
               <button
                 onClick={copyAsImage}
-                className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
+                className="p-1 hover:bg-tertiary/50 rounded transition-colors text-secondary hover:text-primary"
                 title="Copy answer as image"
               >
                 {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
               </button>
               <button
                 onClick={copyRichText}
-                className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
+                className="p-1 hover:bg-tertiary/50 rounded transition-colors text-secondary hover:text-primary"
                 title="Copy answer with formatting"
               >
                 {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
@@ -314,25 +313,25 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       <div className="font-sans font-normal whitespace-pre-wrap">
         <ReasoningAccordion reasoning={r} />
         {thinkingTime && (
-          <div className="mt-2 mb-2 text-xs text-slate-500 italic">
+          <div className="mt-2 mb-2 text-xs text-slate-500 dark:text-slate-400 italic">
             Thought for {thinkingTime}
           </div>
         )}
         {a && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1">
-              <div className="font-bold text-slate-100 italic">Answer:</div>
+              <div className="font-bold text-primary italic">Answer:</div>
               <div className="flex gap-1">
                 <button
                   onClick={copyAsImage}
-                  className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
+                  className="p-1 hover:bg-tertiary/50 rounded transition-colors text-secondary hover:text-primary"
                   title="Copy answer as image"
                 >
                   {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
                 </button>
                 <button
                   onClick={copyRichText}
-                  className="p-1 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-white"
+                  className="p-1 hover:bg-tertiary/50 rounded transition-colors text-secondary hover:text-primary"
                   title="Copy answer with formatting"
                 >
                   {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
@@ -353,14 +352,14 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       <div className="absolute -top-3 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
         <button
           onClick={copyAsImage}
-          className="p-1 bg-slate-800/80 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white border border-slate-700/50"
+          className="p-1 bg-secondary/80 hover:bg-tertiary rounded transition-colors text-secondary hover:text-primary border border-border/50"
           title="Copy as image"
         >
           {copiedImage ? <Check size={14} className="text-green-400" /> : <Image size={14} />}
         </button>
         <button
           onClick={copyRichText}
-          className="p-1 bg-slate-800/80 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white border border-slate-700/50"
+          className="p-1 bg-secondary/80 hover:bg-tertiary rounded transition-colors text-secondary hover:text-primary border border-border/50"
           title="Copy formatted text"
         >
           {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
@@ -368,7 +367,7 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
       </div>
       {/* Show timing for all responses */}
       {thinkingTime && (
-        <div className="mb-2 text-xs text-slate-500 italic">
+        <div className="mb-2 text-xs text-slate-500 dark:text-slate-400 italic">
           {content.includes('🌍') ? `Searched for ${thinkingTime}` : `Responded in ${thinkingTime}`}
         </div>
       )}
@@ -387,7 +386,7 @@ const UserMessage = ({ content }: { content: string }) => {
     let fileContent = content.replace(/```markdown\n?\[File Context:[^\]]+\]\n?```\n?/, '').replace(/```\n?/g, '').trim();
 
     return (
-      <div className="prose prose-invert prose-sm max-w-none">
+      <div className="prose dark:prose-invert prose-sm max-w-none">
         <FileContextAccordion filename={filename} content={fileContent} />
       </div>
     );
@@ -400,10 +399,10 @@ const UserMessage = ({ content }: { content: string }) => {
     const args = parts.slice(1).join(' ');
 
     return (
-      <div className="prose prose-invert prose-sm max-w-none">
-        <span className="text-yellow-400 font-mono italic font-bold">{command}</span>
+      <div className="prose dark:prose-invert prose-sm max-w-none">
+        <span className="text-yellow-600 dark:text-yellow-400 font-mono italic font-bold">{command}</span>
         {' '}
-        <span className="text-slate-300">
+        <span className="text-secondary">
           {args}
         </span>
       </div>
@@ -411,7 +410,7 @@ const UserMessage = ({ content }: { content: string }) => {
   }
 
   return (
-    <div className="prose prose-invert prose-sm max-w-none">
+    <div className="prose dark:prose-invert prose-sm max-w-none">
       <MarkdownWithAnsi>{content}</MarkdownWithAnsi>
     </div>
   );
@@ -692,8 +691,15 @@ export function ChatInterface() {
     setIsModelReady(false);
     setLoadError(null);
 
-    socketRef.current = new WebSocket(`${API_BASE.replace('http', 'ws')}/ws/chat?model=${model}`); // Pass model param!
+    // Connect using dynamically loaded API_BASE
+    const wsBaseUrl = API_BASE();
+    if (!wsBaseUrl) {
+       console.error("API_BASE is empty despite init check!");
+       return;
+    }
 
+    // Ensure correct protocol (http->ws, https->wss)
+    socketRef.current = new WebSocket(`${wsBaseUrl.replace(/^http/, 'ws')}/ws/chat?model=${model}`); // Pass model param!
     socketRef.current.onopen = () => {
       // Trigger model loading immediately
       socketRef.current?.send(JSON.stringify({ type: 'load', model }));
@@ -935,7 +941,7 @@ export function ChatInterface() {
 
   const handleExport = async (options: SaveOptions) => {
     try {
-      const response = await fetch(`${API_BASE}/api/text/export`, {
+      const response = await fetch(`${API_BASE()}/api/text/export`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1038,16 +1044,16 @@ export function ChatInterface() {
 
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar - hidden when collapsed */}
       {!isSidebarCollapsed && (
-        <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+        <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
                 <MessageSquare className="text-brand-400" /> Chat
               </h2>
-              <p className="text-xs text-slate-500">Chat with AI models locally</p>
+              <p className="text-xs text-tertiary">Chat with AI models locally</p>
             </div>
             {/* Collapse button - only show when model is ready */}
             {isModelReady && (
@@ -1060,9 +1066,9 @@ export function ChatInterface() {
                     setIsSidebarCollapsed(true);
                   }
                 }}
-                className={`p-2 rounded-lg transition-all text-slate-400 hover:text-white -mr-2 ${showCollapseHint
-                  ? 'animate-pulse bg-slate-700/30 hover:bg-slate-700/50'
-                  : 'hover:bg-slate-700/50'
+                className={`p-2 rounded-lg transition-all text-secondary hover:text-primary -mr-2 ${showCollapseHint
+                  ? 'animate-pulse bg-tertiary/30 hover:bg-tertiary/50'
+                  : 'hover:bg-tertiary/50'
                   }`}
                 title={showCollapseHint ? "Collapse sidebar (Ctrl+Click to stop animation)" : "Collapse sidebar"}
               >
@@ -1073,9 +1079,9 @@ export function ChatInterface() {
 
           {/* Model Selector with Connect/Disconnect */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400">Model</label>
+            <label className="text-sm font-medium text-secondary">Model</label>
             <select
-              className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-brand-500"
+              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               disabled={!!chatSessionId}
@@ -1146,7 +1152,7 @@ export function ChatInterface() {
             </div>
             <textarea
               ref={!isSidebarCollapsed ? inputRef : undefined}
-              className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
+              className={`w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
               placeholder={isConnecting ? "Connecting..." : "Type a message... (Shift+Enter for new line, Enter to send)"}
               value={input}
               onChange={(e) => {
@@ -1163,7 +1169,7 @@ export function ChatInterface() {
 
           {/* Send Button */}
           <button
-            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            className="w-full bg-gradient-to-r from-brand-600 to-cyan-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-brand-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
             onClick={() => sendMessage()}
             disabled={!isModelReady || !input.trim()}
           >
@@ -1173,13 +1179,13 @@ export function ChatInterface() {
       )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/30 min-h-[500px] lg:min-h-0 relative">
+      <div className="flex-1 flex flex-col overflow-hidden bg-primary/30 min-h-[500px] lg:min-h-0 relative">
         {/* Expand button header when collapsed */}
         {isSidebarCollapsed && (
-          <div className="flex items-center gap-2 p-4 border-b border-slate-800">
+          <div className="flex items-center gap-2 p-4 border-b border-border">
             <button
               onClick={() => setIsSidebarCollapsed(false)}
-              className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-400 hover:text-white"
+              className="p-2 hover:bg-tertiary/50 rounded-lg transition-colors text-secondary hover:text-primary"
               title="Expand sidebar"
             >
               <ChevronRight size={20} />
@@ -1192,21 +1198,21 @@ export function ChatInterface() {
 
         <div className={`flex-1 overflow-y-auto p-6 space-y-4 ${isSidebarCollapsed ? 'pb-48' : ''}`}>
           {chatMessages.length === 0 && (
-            <div className="text-center text-slate-500 mt-20 px-4">
+            <div className="text-center text-tertiary mt-20 px-4">
 
               {/* State 1: Loading / Connecting */}
               {((isConnecting || loadingLogs.length > 0) && !isModelReady && !loadError) && (
                 <>
                   <Loader2 className="w-12 h-12 mx-auto mb-2 text-yellow-500/80 animate-spin" />
-                  <p className="text-lg font-semibold text-slate-300">Loading Model...</p>
+                  <p className="text-lg font-semibold text-secondary">Loading Model...</p>
                   <p className="text-sm mt-1 mb-6">Initializing {MODEL_DISPLAY_INFO[model]?.label || model}...</p>
 
                   <div className="flex items-center justify-between mb-2 w-full max-w-none">
-                    <span className="text-xs font-mono text-slate-500 uppercase tracking-wider">Server Logs</span>
+                    <span className="text-xs font-mono text-tertiary uppercase tracking-wider">Server Logs</span>
                     {loadingLogs.length > 0 && (
                       <button
                         onClick={() => setLoadingLogs([])}
-                        className="text-xs flex items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors"
+                        className="text-xs flex items-center gap-1 text-tertiary hover:text-secondary transition-colors"
                         title="Clear logs"
                       >
                         <Trash2 size={12} /> Clear
@@ -1215,7 +1221,7 @@ export function ChatInterface() {
                   </div>
 
                   {/* Embedded Logs */}
-                  <div className="mx-auto w-full max-w-none bg-slate-900/50 p-4 rounded-lg text-left font-mono text-xs text-slate-400 max-h-64 overflow-y-auto border border-slate-700/50 shadow-inner">
+                  <div className="mx-auto w-full max-w-none bg-primary/50 p-4 rounded-lg text-left font-mono text-xs text-secondary max-h-64 overflow-y-auto border border-border/50 shadow-inner">
                     {loadingLogs.length === 0 && <span className="opacity-50 italic">Waiting for server...</span>}
                     {loadingLogs.map((log, i) => (
                       <div key={i} className="whitespace-pre-wrap">{log}</div>
@@ -1229,7 +1235,7 @@ export function ChatInterface() {
               {(!isConnecting && isModelReady) && (
                 <>
                   <MessageSquare className="w-12 h-12 mx-auto mb-2 text-green-500/80" />
-                  <p className="text-lg font-semibold text-slate-300">Model Ready!</p>
+                  <p className="text-lg font-semibold text-secondary">Model Ready!</p>
                   <p className="text-sm mt-2">Type a message below to start chatting with {MODEL_DISPLAY_INFO[model]?.label || model}.</p>
                 </>
               )}
@@ -1239,7 +1245,7 @@ export function ChatInterface() {
                 <div className="mx-auto w-full max-w-2xl bg-red-950/20 border border-red-500/30 rounded-xl p-8 text-center animate-in fade-in zoom-in duration-300">
                   <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
                   <h3 className="text-xl font-bold text-red-100 mb-2">Model Loading Failed</h3>
-                  <div className="bg-slate-950/50 p-4 rounded-lg text-red-200 font-mono text-sm text-left mb-6 border border-red-500/20 whitespace-pre-wrap">
+                  <div className="bg-primary/50 p-4 rounded-lg text-red-200 font-mono text-sm text-left mb-6 border border-red-500/20 whitespace-pre-wrap">
                     {loadError}
                   </div>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -1252,7 +1258,7 @@ export function ChatInterface() {
                     </button>
                     <button
                       onClick={handleClear}
-                      className="btn-secondary text-slate-400 hover:text-white"
+                      className="btn-secondary text-secondary hover:text-primary"
                     >
                       Choose Different Model
                     </button>
@@ -1286,7 +1292,7 @@ export function ChatInterface() {
                 )}
 
                 {/* Content */}
-                <div className={`pl-0 ${msg.role === 'system' ? 'text-slate-500 italic bg-slate-800/30 p-2 rounded border-l-2 border-slate-700' : 'text-slate-300'}`}>
+                <div className={`pl-0 ${msg.role === 'system' ? 'text-tertiary italic bg-secondary/30 p-2 rounded border-l-2 border-border' : 'text-secondary'}`}>
                   {msg.role === 'assistant' ? (
                     <ThinkingMessage content={msg.content} reasoning={msg.reasoning} thinkingTime={msg.thinkingTime} />
                   ) : msg.role === 'user' ? (
@@ -1319,11 +1325,11 @@ export function ChatInterface() {
 
             return (
               <div className="flex justify-start mb-6 -mt-2">
-                <div className="bg-slate-700/50 rounded-lg px-4 py-2 flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                <div className="bg-tertiary/50 rounded-lg px-4 py-2 flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
                   <Loader2 className="animate-spin text-primary-400" size={16} />
-                  <span className="text-slate-400 italic font-light">
+                  <span className="text-secondary italic font-light">
                     {statusMessage || 'Thinking...'}
-                    {elapsedTime && <span className="ml-2 text-slate-500 text-sm font-mono">{elapsedTime}</span>}
+                    {elapsedTime && <span className="ml-2 text-tertiary text-sm font-mono">{elapsedTime}</span>}
                   </span>
                 </div>
               </div>
@@ -1336,17 +1342,17 @@ export function ChatInterface() {
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-blue-400/70">You:</span>
-                  <span className="bg-slate-700/50 text-[10px] uppercase px-1.5 py-0.5 rounded text-slate-400 tracking-wider font-bold border border-slate-600/30">Pending</span>
+                  <span className="bg-tertiary/50 text-[10px] uppercase px-1.5 py-0.5 rounded text-secondary tracking-wider font-bold border border-border/30">Pending</span>
                 </div>
                 <button
                   onClick={() => cancelQueuedMessage(i)}
-                  className="p-1 hover:bg-red-500/20 hover:text-red-400 text-slate-500 rounded transition-all"
+                  className="p-1 hover:bg-red-500/20 hover:text-red-400 text-tertiary rounded transition-all"
                   title="Remove from queue"
                 >
                   <Trash2 size={14} />
                 </button>
               </div>
-              <div className="pl-0 text-slate-400 italic">
+              <div className="pl-0 text-secondary italic">
                 <UserMessage content={content} />
               </div>
             </div>
@@ -1357,7 +1363,7 @@ export function ChatInterface() {
 
         {/* Collapsed mode input bar at bottom */}
         {isSidebarCollapsed && (
-          <div className="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 p-4">
+          <div className="absolute bottom-0 left-0 right-0 bg-primary/95 backdrop-blur-sm border-t border-border p-4">
             <div className="flex flex-wrap gap-2 mb-2">
               <button
                 className="btn-secondary px-3 py-1 text-xs flex items-center gap-1"
@@ -1394,7 +1400,7 @@ export function ChatInterface() {
             <div className="flex gap-2">
               <textarea
                 ref={isSidebarCollapsed ? inputRef : undefined}
-                className={`flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-none min-h-[60px] max-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
+                className={`flex-1 bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-none min-h-[60px] max-h-[120px] ${historyGhost ? 'opacity-60' : ''}`}
                 placeholder="Type a message... (Shift+Enter for new line, Enter to send)"
                 value={input}
                 onChange={(e) => {
@@ -1408,7 +1414,7 @@ export function ChatInterface() {
                 disabled={!isModelReady}
               />
               <button
-                className="bg-gradient-to-r from-brand-600 to-cyan-600 hover:brightness-110 text-white font-bold px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                className="bg-gradient-to-r from-brand-600 to-cyan-600 hover:brightness-110 text-primary font-bold px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
                 onClick={() => sendMessage()}
                 disabled={!isModelReady || !input.trim()}
               >

@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Platform info
   platform: process.platform,
   isElectron: true,
+  
+  // Navigation
+  onNavigate: (callback) => ipcRenderer.on('navigate-to', (_event, value) => callback(value)),
 });

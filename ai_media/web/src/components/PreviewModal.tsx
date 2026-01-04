@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Download, Loader2, Copy, Check, Image, Code, FileText } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import domToImage from 'dom-to-image';
@@ -72,6 +73,7 @@ const getLanguage = (fileName: string) => {
     'jsx': 'jsx',
     'css': 'css',
     'html': 'html',
+    'xhtml': 'html',
     'bash': 'bash',
     'sh': 'bash',
     'sql': 'sql',
@@ -105,7 +107,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'render' | 'code'>('render');
   
-  const fileUrl = `http://localhost:8000/api/files/${filePath}`;
+  const fileUrl = `${API_BASE_URL()}/api/files/${filePath}`;
   const fileType = getFileType(fileName);
 
   // Handle loading state for static/unsupported types
@@ -202,7 +204,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         return (
           <div className="text-center p-8 flex flex-col items-center justify-center h-full">
             <p className="text-lg mb-4">Cannot preview this file type in browser</p>
-            <p className="text-slate-400 mb-6">{fileName}</p>
+            <p className="text-secondary mb-6">{fileName}</p>
             <button className="btn-primary flex items-center gap-2 mx-auto" onClick={handleDownload}>
               <Download size={18} />
               Download File
@@ -217,7 +219,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
       <div 
-        className="relative bg-slate-800 rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col" 
+        className="relative bg-secondary rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col" 
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '90vw', maxHeight: '90vh' }}
       >
@@ -231,7 +233,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                 {fileType === 'pdf' && <FileText className="text-red-400 shrink-0" size={18} />}
                 {fileType === 'markdown' && <FileText className="text-blue-400 shrink-0" size={18} />}
                 {fileType === 'html' && <Code className="text-orange-400 shrink-0" size={18} />}
-                {fileType === 'text' && <FileText className="text-slate-400 shrink-0" size={18} />}
+                {fileType === 'text' && <FileText className="text-secondary shrink-0" size={18} />}
                 <span className="truncate">{fileName}</span>
              </h3>
           </div>
@@ -243,8 +245,8 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                     onClick={() => setViewMode('render')}
                     className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${
                       viewMode === 'render' 
-                        ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
-                        : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
+                        ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10' 
+                        : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
                     }`}
                   >
                     <FileText size={14} /> <span className="hidden md:inline">Preview</span>
@@ -253,8 +255,8 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                     onClick={() => setViewMode('code')}
                     className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ml-[-1px] ${
                       viewMode === 'code' 
-                        ? 'bg-[#1e1e1e] text-primary border-slate-600 border-b-[#1e1e1e] z-10' 
-                        : 'bg-slate-800 text-slate-400 border-transparent hover:bg-slate-750 hover:text-slate-300 border-b-slate-600'
+                        ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10' 
+                        : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
                     }`}
                   >
                     <Code size={14} /> <span className="hidden md:inline">Code</span>
@@ -262,11 +264,11 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                </div>
             )}
           
-            <div className="flex items-center gap-2 pb-0 sm:pb-3 mb-1 pl-4 sm:border-l border-slate-700/50">
+            <div className="flex items-center gap-2 pb-0 sm:pb-3 mb-1 pl-4 sm:border-l border-border/50">
               <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center" onClick={handleDownload} title="Download">
                 <Download size={16} />
               </button>
-              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center hover:bg-red-500/20 hover:text-red-200 hover:border-red-500/50" onClick={onClose} title="Close">
+              <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-200 hover:border-red-500/50" onClick={onClose} title="Close">
                 <X size={16} />
               </button>
             </div>
@@ -274,9 +276,9 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         </div>
 
         {/* Content */}
-        <div className={`relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-[#1e1e1e] border border-slate-600 ${showViewToggle ? 'rounded-b-lg rounded-tr-lg' : 'rounded-lg mt-4'}`}>
+        <div className={`relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-white dark:bg-zinc-950 border border-border ${showViewToggle ? 'rounded-b-lg rounded-tr-lg' : 'rounded-lg mt-4'}`}>
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center z-10 bg-[#1e1e1e]">
+            <div className="absolute inset-0 flex items-center justify-center z-10 bg-zinc-100 dark:bg-zinc-950">
               <Loader2 className="animate-spin" size={32} />
             </div>
           )}
@@ -293,6 +295,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
 
 function MarkdownPreview({ url, onLoad, onError }: { url: string; onLoad: () => void; onError: () => void }) {
   const [content, setContent] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch(url)
@@ -304,10 +307,16 @@ function MarkdownPreview({ url, onLoad, onError }: { url: string; onLoad: () => 
       .catch(() => onError());
   }, [url]);
 
+  useEffect(() => {
+    if (content && containerRef.current) {
+        Prism.highlightAllUnder(containerRef.current);
+    }
+  }, [content]);
+
   if (!content) return null;
 
   return (
-    <div className="p-8 prose prose-invert prose-slate max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-slate-100 prose-code:text-primary-300 prose-code:bg-slate-800/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-700">
+    <div ref={containerRef} className="p-8 prose dark:prose-invert prose-slate max-w-none prose-headings:text-primary prose-p:text-secondary prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-primary prose-code:text-primary-300 prose-code:bg-secondary/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-primary prose-pre:border prose-pre:border-border [&_pre>code]:bg-transparent [&_pre>code]:p-0 [&_pre>code]:text-inherit">
       <ReactMarkdown 
          remarkPlugins={[remarkGfm]} 
          rehypePlugins={[rehypeRaw]}
@@ -415,19 +424,19 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
   if (!content) return null;
 
   return (
-    <div className="relative group h-full flex flex-col bg-[#2d2d2d]">
+    <div className="relative group h-full flex flex-col bg-white dark:bg-[#2d2d2d] rounded-b-lg">
       {/* Action buttons */}
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button 
           onClick={handleCopyAsImage}
-          className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200"
+          className="p-2 bg-tertiary hover:bg-tertiary rounded-lg text-primary"
           title="Copy as image"
         >
           {copiedImage ? <Check size={16} className="text-green-400" /> : <Image size={16} />}
         </button>
         <button 
           onClick={handleCopy}
-          className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200"
+          className="p-2 bg-tertiary hover:bg-tertiary rounded-lg text-primary"
           title="Copy to clipboard"
         >
           {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}

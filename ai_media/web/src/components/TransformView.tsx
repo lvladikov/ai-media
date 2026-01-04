@@ -9,6 +9,7 @@ import { ErrorAlert } from './common/ErrorAlert';
 import { Tooltip } from './common/Tooltip';
 import { DragDropZone } from './common/DragDropZone';
 import { formatDuration } from '../utils/formatTime';
+import { ModelHelpLink } from './common/ModelHelpLink';
 
 // Check if a file extension can't be previewed in browsers
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -38,12 +39,23 @@ const TRANSFORM_RECIPES = [
   { name: "Fantasy Scene", instruction: "transform into a magical fantasy scene with glowing elements" },
 ];
 
+const REMOVE_RECIPES = [
+  { name: "Remove Text", instruction: "remove the text" },
+  { name: "Remove Objects", instruction: "remove the objects" },
+  { name: "Remove People", instruction: "remove the people" },
+  { name: "Remove Background", instruction: "remove the background" },
+  { name: "Remove Wires", instruction: "remove the power lines and wires" },
+  { name: "Remove Watermark", instruction: "remove the watermark" },
+];
+
 export function TransformView() {
   const { addJob } = useAppStore();
   const [instruction, setInstruction] = useState('');
   const [model, setModel] = useState('instruct-pix2pix');
-  const [removeBg, setRemoveBg] = useState(false);
-  const [guidanceScale, setGuidanceScale] = useState(1.5);
+  const [activeTab, setActiveTab] = useState<'instruction' | 'rembg' | 'remove-object'>('instruction');
+  const [silhouette, setSilhouette] = useState(false);
+  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [imageGuidanceScale, setImageGuidanceScale] = useState(1.5);
   const [showRecipes, setShowRecipes] = useState(false);
 
   const [inputImage, setInputImage] = useState<string | null>(null);
@@ -70,6 +82,20 @@ export function TransformView() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Update guidance defaults when model changes to match CLI/Backend best practices
+  useEffect(() => {
+    if (model === 'instruct-pix2pix') {
+      setGuidanceScale(7.5);
+      setImageGuidanceScale(1.5);
+    } else if (model === 'qwen-image-edit') {
+      setGuidanceScale(4.0);
+      setImageGuidanceScale(1.5);
+    } else if (model === 'qwen-image-edit-lightning') {
+      setGuidanceScale(2.0);
+      setImageGuidanceScale(1.5);
+    }
+  }, [model]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -98,7 +124,7 @@ export function TransformView() {
       formData.append('file', selectedFile);
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        const response = await fetch(`${API_BASE_URL()}/api/upload`, {
           method: 'POST',
           body: formData,
         });
@@ -141,7 +167,7 @@ export function TransformView() {
     formData.append('file', droppedFile);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      const response = await fetch(`${API_BASE_URL()}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -164,8 +190,8 @@ export function TransformView() {
       return;
     }
 
-    if (!instruction && !removeBg) {
-      alert("Please enter an instruction or select 'Remove Background'");
+    if (!instruction && activeTab !== 'rembg') {
+      alert("Please enter an instruction or select a preset");
       return;
     }
 
@@ -174,22 +200,21 @@ export function TransformView() {
     setGenDuration(null);
 
     // Determine effective model/instruction
-    let effectiveModel = model;
-    let effectiveInstruction = instruction;
-
-    if (removeBg) {
-      effectiveModel = 'remove-bg';
-      effectiveInstruction = 'remove-bg';
-    }
+    const isRembg = activeTab === 'rembg';
+    const effectiveModel = isRembg ? "remove-bg" : model;
+    const effectiveInstruction = isRembg ? "remove-bg" : instruction;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/transform`, {
+      const response = await fetch(`${API_BASE_URL()}/api/transform`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input_path: serverFilePath,
           instruction: effectiveInstruction,
           model: effectiveModel,
+          guidance_scale: guidanceScale,
+          image_guidance_scale: imageGuidanceScale,
+          silhouette: silhouette,
         }),
       });
 
@@ -228,9 +253,13 @@ export function TransformView() {
   useEffect(() => {
     if (!currentJobId) return;
 
+    let hasSeenJob = false;
+
     const unsubscribe = useAppStore.subscribe((state) => {
       const job = state.jobs.find(j => j.job_id === currentJobId);
       if (job) {
+        hasSeenJob = true;
+
         if (job.status === 'complete') {
           setResult(job.result_path);
 
@@ -255,8 +284,8 @@ export function TransformView() {
           setError("Job cancelled.");
           setTimeout(() => setError(null), 6000);
         }
-      } else {
-        // Job not found in store (removed on cancellation)
+      } else if (hasSeenJob) {
+        // Job was in store but now removed (e.g., cancelled)
         setIsSubmitting(false);
         setCurrentJobId(null);
       }
@@ -265,19 +294,19 @@ export function TransformView() {
   }, [currentJobId]);
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col lg:flex-row h-full bg-primary text-primary">
       {/* Parameters Sidebar */}
-      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
+      <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
             <Wand2 className="text-pink-400" /> Transform
           </h2>
-          <p className="text-xs text-slate-500">Edit images with AI instructions</p>
+          <p className="text-xs text-tertiary">Edit images with AI instructions</p>
         </div>
 
         {/* Upload Area */}
         <DragDropZone
-          className="border-2 border-dashed border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-primary-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer relative group"
+          className="border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-primary-500/50 hover:bg-secondary/50 transition-colors cursor-pointer relative group"
           draggingClassName="border-primary-500 bg-primary-500/10"
           onFileDrop={handleFileDrop}
           accept="image/*,.tiff,.tif"
@@ -292,28 +321,34 @@ export function TransformView() {
 
           {file && isNonPreviewableFormat(file.name) ? (
             <div className="flex flex-col items-center gap-2 py-4">
-              <div className="w-20 h-20 bg-slate-900 rounded overflow-hidden flex items-center justify-center border border-slate-700">
-                <ImageIcon size={32} className="text-slate-600" />
+              <div className="w-20 h-20 bg-primary rounded overflow-hidden flex items-center justify-center border border-border">
+                <ImageIcon size={32} className="text-tertiary" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-slate-400">{file.name.split('.').pop()?.toUpperCase()}</p>
-                <p className="text-[10px] text-slate-500 uppercase">No Preview</p>
+                <p className="text-sm font-medium text-secondary">{file.name.split('.').pop()?.toUpperCase()}</p>
+                <p className="text-[10px] text-tertiary uppercase">No Preview</p>
               </div>
             </div>
           ) : inputImage ? (
-            <div className="relative w-full aspect-square bg-slate-950 rounded overflow-hidden">
-              <img src={inputImage} alt="Input" className="w-full h-full object-contain" />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <span className="text-white font-medium flex items-center gap-2"><Upload size={16} /> Change</span>
+            <div className="flex flex-col gap-2 w-full">
+              <div className="relative w-full aspect-square bg-primary rounded overflow-hidden border border-border">
+                <img src={inputImage} alt="Input" className="w-full h-full object-contain" />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <span className="text-white font-medium flex items-center gap-2"><Upload size={16} /> Change</span>
+                </div>
+              </div>
+              <div className="text-center w-full px-1">
+                 <p className="font-medium text-primary text-xs truncate" title={file?.name}>{file?.name}</p>
+                 <p className="text-xs text-secondary">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}</p>
               </div>
             </div>
           ) : (
             <>
-              <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
+              <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-secondary">
                 <ImageIcon size={24} />
               </div>
               <p className="text-sm font-medium">Click or Drag & Drop</p>
-              <p className="text-xs text-slate-500">JPG, PNG, WEBP, TIFF</p>
+              <p className="text-xs text-tertiary">JPG, PNG, WEBP, TIFF</p>
             </>
           )}
 
@@ -325,147 +360,275 @@ export function TransformView() {
         </DragDropZone>
 
         {/* Options */}
+        {/* Mode Toggle */}
         <div className="space-y-4">
-          {/* Mode Toggle */}
-          <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div className="flex bg-primary p-1 rounded-lg border border-border">
             <button
-              className={`flex-1 py-1.5 text-xs font-medium rounded ${!removeBg ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-              onClick={() => setRemoveBg(false)}
+              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${activeTab === 'instruction' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+              onClick={() => setActiveTab('instruction')}
             >
-              With Instruction
+              Edit
             </button>
             <button
-              className={`flex-1 py-1.5 text-xs font-medium rounded ${removeBg ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-              onClick={() => setRemoveBg(true)}
+              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${activeTab === 'rembg' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+              onClick={() => setActiveTab('rembg')}
             >
               Remove BG
             </button>
+            <button
+              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${activeTab === 'remove-object' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+              onClick={() => setActiveTab('remove-object')}
+            >
+              Remove Object
+            </button>
           </div>
 
-          {!removeBg && (
-            <>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-400">Instruction</label>
-                  {/* Recipe Book Button */}
-                  <div className="relative" ref={recipeRef}>
-                    <button
-                      onClick={() => setShowRecipes(!showRecipes)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showRecipes ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-700'}`}
-                      title="Recipe Book - Click for preset transformations"
-                    >
-                      <BookOpen size={14} />
-                      <span>Recipes</span>
-                    </button>
+          <div className="space-y-4">
+            {activeTab === 'instruction' ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-secondary">Instruction</label>
+                    <div className="relative" ref={recipeRef}>
+                      <button
+                        onClick={() => setShowRecipes(!showRecipes)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showRecipes ? 'bg-indigo-100 dark:bg-amber-500/20 text-indigo-700 dark:text-amber-400' : 'bg-secondary text-secondary hover:text-indigo-700 dark:hover:text-amber-400 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+                      >
+                        <BookOpen size={14} />
+                        <span>Recipes</span>
+                      </button>
 
-                    {/* Recipe Dropdown */}
-                    {showRecipes && (
-                      <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto scrollbar-themed">
-                        <div className="sticky top-0 z-10 bg-slate-800 px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                            <BookOpen size={12} /> Transform Recipes
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <Tooltip content="Click here to use a random recipe" align="left">
-                              <button
-                                onClick={() => {
-                                  const randomRecipe = TRANSFORM_RECIPES[Math.floor(Math.random() * TRANSFORM_RECIPES.length)];
-                                  setInstruction(randomRecipe.instruction);
-                                  setShowRecipes(false);
-                                }}
-                                className="p-1 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded transition-colors"
-                                title="Random Recipe"
-                              >
-                                <Dices size={14} />
+                      {showRecipes && (
+                        <div className="absolute right-0 top-full mt-2 w-72 bg-secondary border border-border rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto scrollbar-themed">
+                          <div className="sticky top-0 z-10 bg-secondary px-3 py-2 border-b border-border flex items-center justify-between">
+                            <span className="text-xs font-semibold text-indigo-700 dark:text-amber-400 flex items-center gap-1.5">
+                              <BookOpen size={12} /> Edit Recipes
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Tooltip content="Random Recipe" align="left">
+                                <button
+                                  onClick={() => {
+                                    const r = TRANSFORM_RECIPES[Math.floor(Math.random() * TRANSFORM_RECIPES.length)];
+                                    setInstruction(r.instruction);
+                                    setShowRecipes(false);
+                                  }}
+                                  className="p-1 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded"
+                                >
+                                  <Dices size={14} />
+                                </button>
+                              </Tooltip>
+                              <button onClick={() => setShowRecipes(false)} className="p-1 text-tertiary hover:text-primary transition-colors">
+                                <X size={14} />
                               </button>
-                            </Tooltip>
-                            <button onClick={() => setShowRecipes(false)} className="p-1 text-slate-500 hover:text-white transition-colors">
-                              <X size={14} />
-                            </button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="p-1">
-                          {TRANSFORM_RECIPES.map((recipe, idx) => (
-                            <Tooltip key={idx} content={recipe.instruction} align="left">
+                          <div className="p-1">
+                            {TRANSFORM_RECIPES.map((recipe, idx) => (
                               <button
+                                key={idx}
                                 onClick={() => {
                                   setInstruction(recipe.instruction);
                                   setShowRecipes(false);
                                 }}
-                                className="w-full text-left px-3 py-2 text-xs rounded hover:bg-slate-700 transition-colors group"
+                                className="w-full text-left px-3 py-2 text-xs rounded hover:bg-tertiary transition-colors group"
                               >
-                                <span className="font-medium text-slate-200 group-hover:text-amber-400">{recipe.name}</span>
-                                <p className="text-slate-500 mt-0.5 line-clamp-1">{recipe.instruction}</p>
+                                <span className="font-medium text-primary group-hover:text-indigo-700 dark:group-hover:text-amber-400">{recipe.name}</span>
+                                <p className="text-tertiary mt-0.5 line-clamp-1">{recipe.instruction}</p>
                               </button>
-                            </Tooltip>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
+                  <textarea
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    placeholder="E.g. Make it look like a van gogh painting..."
+                    rows={3}
+                    className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500 resize-none"
+                  />
                 </div>
-                <textarea
-                  value={instruction}
-                  onChange={(e) => setInstruction(e.target.value)}
-                  placeholder="E.g. Make it look like a van gogh painting, add fireworks, turn day into night..."
-                  rows={3}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500 resize-none"
-                />
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Model</label>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="select w-full bg-slate-950 border-slate-700 text-sm focus:border-primary-500"
-                >
-                  <option value="instruct-pix2pix">InstructPix2Pix (Creative)</option>
-                  <option value="qwen-image-edit">Qwen-Image-Edit (Base 2511, Precise)</option>
-                  <option value="qwen-image-edit-lightning">Qwen-Edit-Lightning (Fast 2512)</option>
-                  <option value="magic-mix">MagicMix</option>
-                </select>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-secondary">Model</label>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="select w-full bg-primary border-border text-sm focus:border-primary-500"
+                  >
+                    <option value="instruct-pix2pix">InstructPix2Pix (Creative)</option>
+                    <option value="qwen-image-edit">Qwen-Image-Edit (Precise)</option>
+                    <option value="qwen-image-edit-lightning">Qwen-Edit-Lightning (Fast)</option>
+                  </select>
+                </div>
               </div>
+            ) : activeTab === 'remove-object' ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-secondary">What to remove?</label>
+                    <div className="relative" ref={recipeRef}>
+                      <button
+                        onClick={() => setShowRecipes(!showRecipes)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showRecipes ? 'bg-red-500/20 text-red-600 dark:text-red-400' : 'bg-secondary text-secondary hover:text-red-600 dark:hover:text-red-400 hover:bg-tertiary'}`}
+                      >
+                        <Wand2 size={12} />
+                        <span>Removal Presets</span>
+                      </button>
 
-              {/* 
-                    Note: Guidance Scale is not explicitly passed to /api/transform yet in Python server.
-                    For now UI is here but it's cosmetic until server supports it.
-                 */}
-              <div className="space-y-2 opacity-50 pointer-events-none" title="Guidance Scale support coming soon to server">
-                <label className="text-sm font-medium text-slate-400 flex justify-between">
-                  Guidance Scale (CFG)
-                  <span className="text-primary-400">{guidanceScale}</span>
-                </label>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="5.0"
-                  step="0.1"
-                  value={guidanceScale}
-                  onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
-                  className="w-full accent-primary-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-not-allowed"
-                />
+                      {showRecipes && (
+                        <div className="absolute right-0 top-full mt-2 w-72 bg-secondary border border-border rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto scrollbar-themed">
+                          <div className="sticky top-0 z-10 bg-secondary px-3 py-2 border-b border-border flex items-center justify-between">
+                            <span className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                              <X size={12} /> Common Removals
+                            </span>
+                            <button onClick={() => setShowRecipes(false)} className="p-1 text-tertiary hover:text-primary transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="p-1">
+                            {REMOVE_RECIPES.map((recipe, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setInstruction(recipe.instruction);
+                                  setShowRecipes(false);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs rounded hover:bg-tertiary transition-colors group"
+                              >
+                                <span className="font-medium text-primary group-hover:text-red-600 dark:group-hover:text-red-400">{recipe.name}</span>
+                                <p className="text-tertiary mt-0.5 line-clamp-1">Instruction: "{recipe.instruction}"</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <textarea
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    placeholder="E.g. Remove the cup, remove the red car..."
+                    rows={2}
+                    className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-red-500/50 resize-none"
+                  />
+                  <p className="text-[10px] text-tertiary italic flex items-center gap-1">
+                    <span className="text-amber-500">⚠️</span> Experimental feature using instruction-based editing.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-secondary flex items-center">
+                    Model
+                    <ModelHelpLink section="transform" />
+                  </label>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="select w-full bg-primary border-border text-sm focus:border-red-500/50"
+                  >
+                    <option value="qwen-image-edit">Qwen-Image-Edit (Recommended)</option>
+                    <option value="instruct-pix2pix">InstructPix2Pix (Fast)</option>
+                  </select>
+                </div>
               </div>
-            </>
-          )}
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-secondary">Remove Background Mode</label>
+                  <div className="flex p-1 bg-primary rounded-lg border border-border">
+                    <button
+                      onClick={() => setSilhouette(false)}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        !silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
+                      }`}
+                    >
+                      Transparent
+                    </button>
+                    <button
+                      onClick={() => setSilhouette(true)}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
+                      }`}
+                    >
+                      Silhouette
+                    </button>
+                  </div>
+                  <p className="text-xs text-tertiary italic">
+                    {silhouette ? "Creates a black shape on transparent background" : "Removes background, keeping the subject transparent"}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-primary/50 border border-border rounded-lg">
+                  <p className="text-xs text-secondary leading-relaxed">
+                    <span className="text-primary-400 font-medium italic block mb-1">Automatic Model</span>
+                    High-speed precise background removal using RMBG-1.4.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {activeTab !== 'rembg' && (
+              <div className="space-y-4 pt-2 border-t border-border/50">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-secondary flex justify-between items-center">
+                    <span className="flex items-center gap-1.5">
+                      Text Guidance (CFG)
+                      <Tooltip content="Controls adherence. High = strict, Low = subtle." align="left" />
+                    </span>
+                    <span className="text-primary-400">{guidanceScale.toFixed(1)}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="1.0"
+                    max="15.0"
+                    step="0.5"
+                    value={guidanceScale}
+                    onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
+                    className="w-full accent-primary-500 h-1 bg-secondary rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-secondary flex justify-between items-center">
+                    <span className="flex items-center gap-1.5">
+                      Image Preservation
+                      <Tooltip content="Fidelity to original structure." align="left" />
+                    </span>
+                    <span className="text-primary-400">{imageGuidanceScale.toFixed(1)}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="1.0"
+                    max="3.0"
+                    step="0.1"
+                    value={imageGuidanceScale}
+                    onChange={(e) => setImageGuidanceScale(parseFloat(e.target.value))}
+                    className="w-full accent-primary-500 h-1 bg-secondary rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
         <ValidationTooltip
-          error={!serverFilePath ? "Please upload an image first" : (!instruction && !removeBg ? "Please enter an instruction or select Remove BG" : null)}
+          error={!serverFilePath ? "Please upload an image first" : (!instruction && activeTab !== 'rembg' ? "Please enter an instruction or select a preset" : null)}
           className="w-full mt-auto"
         >
           <button
             onClick={handleTransform}
-            disabled={!serverFilePath || (!instruction && !removeBg) || isSubmitting || isUploading}
-            className="w-full bg-gradient-to-r from-primary-600 via-indigo-500 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
+            disabled={!serverFilePath || (!instruction && activeTab !== 'rembg') || isSubmitting || isUploading}
+            className="w-full bg-gradient-to-r from-primary-600 via-indigo-500 to-purple-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-primary font-bold py-3 rounded-lg shadow-lg shadow-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
           >
             {isSubmitting ? (
               <><Loader2 className="animate-spin" size={18} /> Processing...</>
             ) : (
-              <><Wand2 size={18} /> {removeBg ? 'Remove Background' : 'Transform'}</>
+              <><Wand2 size={18} /> {activeTab === 'rembg' ? 'Remove Background' : (activeTab === 'remove-object' ? 'Remove Object' : 'Transform')}</>
             )}
           </button>
         </ValidationTooltip>
@@ -473,40 +636,40 @@ export function TransformView() {
       </div>
 
       {/* Main Preview Area */}
-      <div className="flex-1 p-6 flex items-center justify-center bg-slate-950/30">
+      <div className="flex-1 p-6 flex items-center justify-center bg-primary/30">
         {file && isNonPreviewableFormat(file.name) ? (
           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
             <div className="flex flex-col md:flex-row items-stretch gap-4">
               {/* TIFF/Non-Previewable Placeholder */}
-              <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-slate-900/50 min-w-[280px] min-h-[320px]">
-                <ImageIcon size={64} className="text-slate-600 mb-4" />
+              <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-primary/50 min-w-[280px] min-h-[320px]">
+                <ImageIcon size={64} className="text-tertiary mb-4" />
                 <div className="flex flex-col items-center text-center">
-                  <span className="text-lg font-bold text-slate-300">{file.name.split('.').pop()?.toUpperCase()} File</span>
-                  <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                  <span className="text-lg font-bold text-secondary">{file.name.split('.').pop()?.toUpperCase()} File</span>
+                  <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
                 </div>
-                <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-primary border border-white/10 uppercase tracking-tighter">
                   Original
                 </div>
               </div>
 
               {/* Arrow if result available */}
-              {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+              {result && <ArrowRight className="hidden md:block text-tertiary" size={32} />}
 
               {/* Result Preview */}
               {result && (
-                <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-slate-900/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+                <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-primary/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
                   {isNonPreviewableFormat(result) ? (
                     <>
-                      <ImageIcon size={64} className="text-slate-600 mb-4" />
+                      <ImageIcon size={64} className="text-tertiary mb-4" />
                       <div className="flex flex-col items-center text-center">
-                        <span className="text-lg font-bold text-slate-300">{result.split('.').pop()?.toUpperCase()} File</span>
-                        <span className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                        <span className="text-lg font-bold text-secondary">{result.split('.').pop()?.toUpperCase()} File</span>
+                        <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
                       </div>
                     </>
                   ) : (
-                    <img src={`http://localhost:8000/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
+                    <img src={`${API_BASE_URL()}/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
                   )}
-                  <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-[10px] sm:text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
+                  <div className="absolute top-2 left-2 bg-brand-600 px-2 py-1 rounded text-[10px] sm:text-xs text-primary shadow-lg flex flex-col items-start leading-none gap-0.5">
                     <span className="font-bold uppercase tracking-wider">Result</span>
                     {genDuration && <span className="opacity-80 font-medium">in {formatDuration(genDuration * 1000)}</span>}
                   </div>
@@ -521,7 +684,7 @@ export function TransformView() {
           <div className="flex flex-col items-center justify-center max-w-full h-full gap-4">
             <div className="flex flex-col md:flex-row items-center gap-4">
               {/* Input */}
-              <div className="relative border-4 border-slate-800 rounded-xl overflow-hidden shadow-xl max-h-[70vh]">
+              <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-xl max-h-[70vh]">
                 <img src={inputImage} alt="Original" className="max-h-[70vh] object-contain" />
                 <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
                   Original
@@ -529,12 +692,12 @@ export function TransformView() {
               </div>
 
               {/* Arrow if result available */}
-              {result && <ArrowRight className="hidden md:block text-slate-600" size={32} />}
+              {result && <ArrowRight className="hidden md:block text-tertiary" size={32} />}
 
               {/* Result Preview */}
               {result && (
                 <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl max-h-[70vh] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
-                  <img src={`http://localhost:8000/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
+                  <img src={`${API_BASE_URL()}/api/files/${result}`} alt="Transformed" className="max-h-[70vh] object-contain" />
                   <div className="absolute top-4 left-4 bg-brand-600 backdrop-blur-md px-3 py-1.5 rounded-lg border border-brand-400/20 shadow-lg flex flex-col items-start leading-none gap-0.5">
                     <span className="text-[10px] font-mono text-white uppercase tracking-tighter">Result</span>
                     {genDuration && <span className="text-[9px] opacity-80 font-medium uppercase tracking-widest">in {formatDuration(genDuration * 1000)}</span>}
@@ -547,10 +710,10 @@ export function TransformView() {
             </div>
           </div>
         ) : (
-          <div className="text-center text-slate-500">
+          <div className="text-center text-tertiary">
             <Wand2 size={48} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-medium mb-2">Ready to transform</h3>
-            <p className="text-slate-400 max-w-sm">
+            <p className="text-secondary max-w-sm">
               Upload an image from the <span className="lg:hidden">controls above</span><span className="hidden lg:inline">sidebar</span> to start editing with AI instructions.
             </p>
           </div>
