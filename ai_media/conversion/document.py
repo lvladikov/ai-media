@@ -72,6 +72,10 @@ def _read_to_markdown(input_path, input_format):
             for page in reader.pages:
                 text_parts.append(page.extract_text() or "")
             markdown_content = "\n\n".join(text_parts)
+            
+            if not markdown_content.strip():
+                raise ValueError("No text found in PDF. The file might be a scanned image (OCR not supported).")
+                
             print("   ⚠️ PDF conversion extracts text only (formatting/images lost)")
         except ImportError:
             raise ImportError("pypdf required for PDF reading. Install: pip install pypdf")
@@ -279,22 +283,16 @@ def convert_document(input_path, target):
         # Step 1: Read to Markdown
         markdown_content = _read_to_markdown(input_path, input_format)
         
-        if not markdown_content.strip():
-            print("❌ No content extracted from input file")
-            return False
+        # Determine output format early for writing
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         # Step 2: Write to target format
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         _write_from_markdown(markdown_content, output_path, output_format)
         
         print(f"✅ Saved to {output_path}")
         return True
         
-    except ImportError as e:
-        print(f"❌ {e}")
-        return False
     except Exception as e:
-        print(f"❌ Conversion failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        # Re-raise the exception so the task runner gets the specific error message
+        # The runner will handle logging and status update
+        raise e

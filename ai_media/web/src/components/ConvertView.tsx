@@ -1,7 +1,8 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { Upload, RefreshCw, FileType, Loader2, Zap } from 'lucide-react';
+import { Upload, RefreshCw, FileType, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { DragDropZone } from './common/DragDropZone';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
 import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
@@ -22,7 +23,6 @@ export function ConvertView() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const availableFormats = useMemo(() => {
@@ -55,10 +55,8 @@ export function ConvertView() {
 
     return [];
   }, [file]);
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
+  
+  const processFile = async (selectedFile: File) => {
       setFile(selectedFile);
       setTargetFormat(''); // Reset format selection
       setResult(null); // Reset previous result
@@ -93,7 +91,6 @@ export function ConvertView() {
       } finally {
         setIsUploading(false);
       }
-    }
   };
 
   const handleConvert = async () => {
@@ -206,38 +203,56 @@ export function ConvertView() {
         {/* File Upload */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-400">Input File</label>
-          <div
-            className={`border border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer relative overflow-hidden ${file ? 'border-primary-500/50 bg-primary-500/5' : 'border-slate-700 hover:border-slate-600 hover:bg-slate-950'
-              }`}
-            onClick={() => fileInputRef.current?.click()}
+          <DragDropZone
+            onFileDrop={processFile}
+            className="border border-dashed rounded-lg p-6 text-center transition-all cursor-pointer relative overflow-hidden border-slate-700 hover:border-slate-600 hover:bg-slate-950"
+            draggingClassName="border-blue-400 bg-blue-500/10 scale-[1.02] shadow-xl"
+            rejectClassName="border-red-500 bg-red-500/10"
+            // Simple generic accept string for now
+            accept="image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,.pdf,.docx,.txt,.md"
           >
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-
-            {file ? (
-              <div className="flex flex-col items-center justify-center gap-2">
-                 <div className="w-10 h-10 bg-slate-800 rounded flex items-center justify-center text-primary-400 mb-1">
-                  <FileType size={20} />
-                </div>
-                <div className="text-center w-full">
-                  <p className="font-semibold text-white text-sm truncate max-w-[250px] mx-auto">{file.name}</p>
-                  <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-                <div className="text-xs text-primary-400 font-medium">Click to change</div>
-                {isUploading && <div className="absolute top-2 right-2"><Loader2 className="animate-spin text-slate-500" size={16} /></div>}
-              </div>
-            ) : (
-              <>
-                <Upload size={24} className="mx-auto mb-2 text-slate-500" />
-                <p className="font-medium text-sm">Click to select file</p>
-                <p className="text-[10px] text-slate-500 mt-1">Supports img, vid, audio, docs</p>
-              </>
+            {({ isDragging, isDragReject }) => (
+               // Wrapper renders children, state is passed
+               <>
+                 {file ? (
+                   <div className={`flex flex-col items-center justify-center gap-2 ${isDragging ? 'opacity-50' : ''}`}>
+                      {inputPreviewUrl ? (
+                        <div className="relative h-20 w-auto min-w-[5rem] mb-1 rounded overflow-hidden border border-slate-700 bg-slate-950 shadow-sm group-hover:border-slate-500 transition-colors">
+                           <img src={inputPreviewUrl} alt="Preview" className="h-full w-full object-contain" />
+                        </div>
+                      ) : (
+                         <div className="w-10 h-10 bg-slate-800 rounded flex items-center justify-center text-primary-400 mb-1">
+                           <FileType size={20} />
+                         </div>
+                      )}
+                     <div className="text-center w-full">
+                       <p className="font-medium text-white text-xs truncate max-w-[200px] mx-auto" title={file.name}>{file.name}</p>
+                       <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                     </div>
+                     <div className="text-xs text-primary-400 font-medium">
+                        {isDragReject ? 'Format Not Supported' : (isDragging ? 'Drop to replace' : 'Click to change')}
+                     </div>
+                     {isUploading && <div className="absolute top-2 right-2"><Loader2 className="animate-spin text-slate-500" size={16} /></div>}
+                   </div>
+                 ) : (
+                   <>
+                     {isDragReject ? (
+                        <>
+                            <Upload size={24} className="mx-auto mb-2 text-red-400 transition-colors" />
+                            <p className="font-medium text-sm text-red-200 transition-colors">Format Not Supported</p>
+                        </>
+                     ) : (
+                        <>
+                            <Upload size={24} className={`mx-auto mb-2 transition-colors ${isDragging ? 'text-blue-400' : 'text-slate-500'}`} />
+                            <p className={`font-medium text-sm transition-colors ${isDragging ? 'text-blue-200' : ''}`}>Click or Drag & Drop</p>
+                        </>
+                     )}
+                     <p className="text-[10px] text-slate-500 mt-1">Supports img, vid, audio, docs</p>
+                   </>
+                 )}
+               </>
             )}
-          </div>
+          </DragDropZone>
         </div>
 
         {/* Target Format */}
