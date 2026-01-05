@@ -12,9 +12,9 @@ from .state import jobs, job_manager, MAIN_LOOP
 router = APIRouter(tags=["Jobs"])
 
 
-def create_job(job_type: str, prompt: str = None, model: str = None, params: Dict[str, Any] = None) -> Dict[str, Any]:
+def create_job(job_type: str, prompt: str = None, model: str = None, params: Dict[str, Any] = None, job_id: str = None) -> Dict[str, Any]:
     """Create a new job entry with optional metadata."""
-    job_id = str(uuid.uuid4())
+    job_id = job_id or str(uuid.uuid4())
     now = datetime.now().isoformat()
     job = {
         "job_id": job_id,
@@ -160,7 +160,8 @@ async def cancel_job(job_id: str):
             "audio": "audio",
             "video": "video",
             "transform": "transform",
-            "upscale": "upscale"
+            "upscale": "upscale",
+            "vision": "vision"
         }
         
         category = type_map.get(job["type"])

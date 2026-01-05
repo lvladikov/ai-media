@@ -3,7 +3,7 @@ import { create } from 'zustand';
 // --- Types ---
 
 export type TabId =
-  | 'image' | 'video' | 'audio' | 'article' | 'code' | 'chat'
+  | 'image' | 'video' | 'audio' | 'article' | 'code' | 'chat' | 'vision'
   | 'transform' | 'convert' | 'upscale' | 'jobs' | 'settings';
 
 export interface Job {
@@ -121,7 +121,7 @@ const getInitialTab = (): TabId => {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
   const validTabs: TabId[] = [
-    'image', 'video', 'audio', 'article', 'code', 'chat',
+    'image', 'video', 'vision', 'audio', 'article', 'code', 'chat',
     'transform', 'convert', 'upscale', 'jobs', 'settings'
   ];
   return (validTabs.includes(tab as TabId) ? tab as TabId : 'image');

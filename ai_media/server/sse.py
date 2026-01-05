@@ -20,6 +20,39 @@ win_gpu_cache = {
     "last_updated": 0
 }
 
+win_vram_cache = {
+    "data": None,
+    "last_updated": 0
+}
+
+def get_windows_vram_metrics():
+    global win_vram_cache
+    now = time.time()
+    # Cache for 2.0 seconds (VRAM changes less rapidly than load)
+    if win_vram_cache["data"] is not None and (now - win_vram_cache["last_updated"] < 2.0):
+        return win_vram_cache["data"]
+    
+    try:
+        # Query Dedicated GPU Memory usage per process
+        script = "Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object InstanceName, CookedValue | ConvertTo-Json"
+        res = subprocess.run(["powershell", "-Command", script], capture_output=True, text=True, timeout=3.0)
+        
+        vram_data = []
+        if res.stdout.strip():
+            try:
+                vram_data = json.loads(res.stdout)
+                if not isinstance(vram_data, list):
+                    vram_data = [vram_data]
+            except Exception:
+                pass
+        
+        win_vram_cache["data"] = vram_data
+        win_vram_cache["last_updated"] = now
+        return vram_data
+    except Exception:
+        return []
+
+
 def get_windows_gpu_metrics():
     global win_gpu_cache
     now = time.time()
@@ -31,7 +64,7 @@ def get_windows_gpu_metrics():
         # Query 3D Engine utilization (matches Task Manager GPU column)
         # This is the most accurate representation of AI/Rendering activity on Windows
         script = "Get-Counter '\\GPU Engine(*3d*)\\Utilization Percentage' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object InstanceName, CookedValue | ConvertTo-Json"
-        res = subprocess.run(["powershell", "-Command", script], capture_output=True, text=True, timeout=2.0)
+        res = subprocess.run(["powershell", "-Command", script], capture_output=True, text=True, timeout=3.0)
         
         gpu_data = []
         if res.stdout.strip():
@@ -207,58 +240,78 @@ async def resource_stream():
                                         p_pids = {proc_pid}
 
                                     found_vram = 0.0
+                                    process_on_gpu = False
                                     # Use a single nvidia-smi call for efficiency
                                     try:
                                         res = subprocess.run(
                                             ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                                            capture_output=True, text=True, timeout=0.5
+                                            capture_output=True, text=True, timeout=1.0
                                         )
                                         if res.returncode == 0:
                                             for line in res.stdout.strip().split("\n"):
-                                                if not line.strip(): continue
+                                                if not line.strip() or line.startswith("pid"): continue
                                                 parts = [p.strip() for p in line.split(",")]
                                                 if len(parts) >= 2:
                                                     try:
                                                         chk_pid = int(parts[0])
                                                         if chk_pid in p_pids:
-                                                            found_vram += float(parts[1])
-                                                            # If process is in nvidia-smi apps, it's using the GPU
-                                                            # We attribute global GPU load to it if it's the active generator
-                                                            proc_gpu_percent = gpu_percent
+                                                            process_on_gpu = True
+                                                            # Handle cases where memory usage is [N/A] (common with quantized models)
+                                                            mem_str = parts[1].replace('MiB', '').strip()
+                                                            if mem_str.replace('.', '', 1).isdigit():
+                                                                found_vram += float(mem_str)
                                                     except (ValueError, IndexError):
                                                         continue
                                     except Exception:
                                         pass
                                     
                                     # If not in compute-apps, check graphics-apps (rare for ML but possible)
-                                    if found_vram == 0:
+                                    if not process_on_gpu:
                                         try:
                                             res = subprocess.run(
                                                 ["nvidia-smi", "--query-graphics-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                                                capture_output=True, text=True, timeout=0.5
+                                                capture_output=True, text=True, timeout=1.0
                                             )
                                             if res.returncode == 0:
                                                 for line in res.stdout.strip().split("\n"):
-                                                    if not line.strip(): continue
+                                                    if not line.strip() or line.startswith("pid"): continue
                                                     parts = [p.strip() for p in line.split(",")]
                                                     if len(parts) >= 2:
                                                         try:
                                                             chk_pid = int(parts[0])
                                                             if chk_pid in p_pids:
-                                                                found_vram += float(parts[1])
-                                                                proc_gpu_percent = gpu_percent
+                                                                process_on_gpu = True
+                                                                mem_str = parts[1].replace('MiB', '').strip()
+                                                                if mem_str.replace('.', '', 1).isdigit():
+                                                                    found_vram += float(mem_str)
                                                         except (ValueError, IndexError):
                                                             continue
                                         except Exception:
                                             pass
                                     
-                                    # SPECIAL CASE: nvidia-smi returns [N/A] for processes with allocated VRAM but not actively computing
-                                    # If we found no VRAM from nvidia-smi but the process is the server with a cached model,
-                                    # use torch.cuda.memory_allocated() which accurately tracks PyTorch allocations
-                                    if found_vram > 0:
+                                    # Update stats if process was found on GPU
+                                    if process_on_gpu:
                                         proc_vram_gb = round(found_vram / 1024, 2)
-                                        proc_gpu_percent = gpu_percent  # Attribute GPU load to this process
-                                    elif proc_pid == current_pid:
+                                        proc_gpu_percent = gpu_percent
+                                        
+                                        # FALLBACK for Windows: If nvidia-smi failed to show VRAM or showed low value
+                                        # but process is known to be active on GPU.
+                                        if platform.system() == "Windows":
+                                            win_vram_metrics = get_windows_vram_metrics()
+                                            power_vram = 0.0
+                                            for pid in p_pids:
+                                                pid_str = f"pid_{pid}_"
+                                                for m in win_vram_metrics:
+                                                    if pid_str in m.get('InstanceName', ''):
+                                                        power_vram += float(m.get('CookedValue', 0))
+                                            
+                                            # If powershell found significant VRAM, prefer it over [N/A] from smi
+                                            if power_vram > (proc_vram_gb * 1024 * 1024):
+                                                proc_vram_gb = round(power_vram / (1024**3), 2)
+
+                                    # SPECIAL CASE: If we found no VRAM from nvidia-smi but the process is the server with a cached model,
+                                    # use torch.cuda.memory_allocated() which accurately tracks PyTorch allocations
+                                    if proc_vram_gb == 0 and proc_pid == current_pid:
                                         # This is the server process - check if we have a model allocated via torch
                                         try:
                                             # Get accurate VRAM from torch inside the server process

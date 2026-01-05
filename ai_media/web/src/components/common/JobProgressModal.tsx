@@ -78,13 +78,13 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
     setIsCancelling(true);
     try {
       await cancelJob(jobId);
-      // Immediately remove from store and close modal for responsive feel
-      removeJob(jobId!);
-      if (onClose) onClose();
     } catch (err) {
-      console.error('Failed to cancel job:', err);
-      setIsCancelling(false);
+      // Job may not exist on server yet (optimistic UI) - that's ok
+      console.warn('Cancel request failed (job may not exist on server):', err);
     }
+    // Always remove from store and close modal for responsive feel
+    removeJob(jobId!);
+    if (onClose) onClose();
   };
 
   // Format progress percentage
@@ -106,7 +106,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
               {isComplete ? 'Generation Complete' :
                 isFailed ? 'Generation Failed' :
                   isCancelled ? 'Generation Cancelled' :
-                    job.type + ' Generation'}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
+                    (job.type === 'vision' ? 'Vision/Description' : job.type) + ' Generation'}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
             </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}
@@ -162,7 +162,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
           {!isComplete && !isFailed && (
             <div className="space-y-2">
               <div className="h-2 w-full bg-tertiary rounded-full overflow-hidden relative">
-                {(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (
+                {(job.type === 'code' || job.type === 'article' || job.type === 'vision' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (
                   <div className="h-full bg-brand-500 w-1/3 absolute rounded-full animate-progress-bounce" />
                 ) : (
                   <div
@@ -174,7 +174,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                 )}
               </div>
               <div className="flex justify-between text-xs text-secondary">
-                <span>{(job.type === 'code' || job.type === 'article' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
+                <span>{(job.type === 'code' || job.type === 'article' || job.type === 'vision' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
                 {percent < 100 && <span>Please wait...</span>}
               </div>
             </div>

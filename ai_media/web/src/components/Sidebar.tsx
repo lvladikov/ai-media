@@ -13,11 +13,13 @@ import {
   History,
   Settings,
   Book,
+  Eye,
 } from 'lucide-react';
 
 const navItems: { id: TabId; label: string; icon: React.ReactNode; section: string }[] = [
   { id: 'image', label: 'Image', icon: <Image size={18} />, section: 'Generate' },
   { id: 'video', label: 'Video', icon: <Film size={18} />, section: 'Generate' },
+  { id: 'vision', label: 'Vision', icon: <Eye size={18} />, section: 'Generate' },
   { id: 'audio', label: 'Audio', icon: <Music size={18} />, section: 'Generate' },
   { id: 'article', label: 'Article', icon: <FileText size={18} />, section: 'Generate' },
   { id: 'code', label: 'Code', icon: <Code size={18} />, section: 'Generate' },

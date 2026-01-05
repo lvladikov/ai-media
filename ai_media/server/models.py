@@ -157,3 +157,13 @@ class TextExportRequest(BaseModel):
     content: str = Field(..., description="Content to export")
     format: str = Field(..., description="Target format")
     filename: str = Field(..., description="Target filename")
+
+
+class VisionRequest(BaseModel):
+    """Vision/Description request."""
+    input_path: str = Field(..., description="Path to input image or video")
+    model: str = Field("default", description="Model name (e.g., 'florence', 'blip', 'qwen-vl')")
+    job_id: Optional[str] = Field(None, description="Optional pre-defined job ID")
+    output_filename: Optional[str] = Field(None, description="Custom output filename (optional)")
+    force: bool = Field(False, description="Force execution")
+    bypass_warning: bool = Field(False, description="Skip resource warnings")

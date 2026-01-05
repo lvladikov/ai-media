@@ -118,7 +118,7 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
             # Qwen3-VL uses ImageTextToText class (AutoModelForVision2Seq is deprecated)
             model = AutoModelForImageTextToText.from_pretrained(
                 caption_model_id,
-                dtype=dtype,
+                torch_dtype=dtype,
                 device_map="auto",
                 trust_remote_code=True
             )

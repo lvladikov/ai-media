@@ -31,11 +31,11 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
-export function ComparisonPreviewModal({ 
-  isOpen, 
-  onClose, 
-  originalPath, 
-  resultPath, 
+export function ComparisonPreviewModal({
+  isOpen,
+  onClose,
+  originalPath,
+  resultPath,
   fileName,
   resultLabel = 'Result',
   originalFormat,
@@ -49,7 +49,7 @@ export function ComparisonPreviewModal({
   const [resultMeta, setResultMeta] = useState<ImageMetadata | null>(null);
   const [originalError, setOriginalError] = useState(false);
   const [resultError, setResultError] = useState(false);
-  
+
   if (!isOpen) return null;
 
   // Check for formats that can't be previewed in browsers
@@ -83,18 +83,18 @@ export function ComparisonPreviewModal({
   // If factor > 1 (Upscale): Result is 100% height, Original is (1/factor)% height
   // If factor < 1 (Downscale): Original is 100% height, Result is (factor)% height
   const getRelativeHeight = (isOriginal: boolean) => {
-      // Base styles
-      const base = "max-w-full object-contain rounded-lg border shadow-xl";
-      
-      if (factor >= 1) {
-          // Upscaling
-          if (!isOriginal) return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
-          return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: `${(1/factor) * 100}%` } };
-      } else {
-          // Downscaling
-          if (isOriginal) return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
-          return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: `${factor * 100}%` } };
-      }
+    // Base styles
+    const base = "max-w-full object-contain rounded-lg border shadow-xl";
+
+    if (factor >= 1) {
+      // Upscaling
+      if (!isOriginal) return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
+      return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: `${(1 / factor) * 100}%` } };
+    } else {
+      // Downscaling
+      if (isOriginal) return { className: `${base} border-border`, style: { maxHeight: 'calc(100% - 2rem)', height: '100%' } };
+      return { className: `${base} border-primary-500/30 shadow-primary-900/10`, style: { maxHeight: 'calc(100% - 2rem)', height: `${factor * 100}%` } };
+    }
   };
 
   const originalStyle = getRelativeHeight(true);
@@ -102,8 +102,8 @@ export function ComparisonPreviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
-      <div 
-        className="relative bg-secondary rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col" 
+      <div
+        className="relative bg-secondary rounded-xl p-4 w-[90vw] h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '90vw', maxHeight: '90vh' }}
       >
@@ -115,25 +115,24 @@ export function ComparisonPreviewModal({
               {fileName}
             </h3>
           </div>
-          
+
           <div className="flex items-end gap-4 h-full relative top-[1px]">
             {/* Tab buttons */}
             <div className="flex items-end">
               {tabs.map((tab, idx) => (
-                <button 
+                <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${idx > 0 ? 'ml-[-1px]' : ''} ${
-                    activeTab === tab.id 
-                      ? 'bg-zinc-100 dark:bg-zinc-950 text-primary border-zinc-300 dark:border-zinc-800 border-b-zinc-100 dark:border-b-zinc-950 z-10' 
+                  className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${idx > 0 ? 'ml-[-1px]' : ''} ${activeTab === tab.id
+                      ? 'bg-zinc-100 dark:bg-zinc-950 text-primary border-zinc-300 dark:border-zinc-800 border-b-zinc-100 dark:border-b-zinc-950 z-10'
                       : 'bg-secondary text-secondary border-transparent hover:bg-tertiary hover:text-primary border-b-zinc-300 dark:border-b-zinc-800'
-                  }`}
+                    }`}
                 >
                   {tab.icon} {tab.label}
                 </button>
               ))}
             </div>
-          
+
             <div className="flex items-center gap-2 pb-3 mb-1 pl-4 border-l border-border/50">
               <button className="btn-secondary p-1.5 h-8 w-8 flex items-center justify-center" onClick={handleDownload} title={`Download ${resultLabel}`}>
                 <Download size={16} />
@@ -158,12 +157,12 @@ export function ComparisonPreviewModal({
                     {resultCannotPreview ? `${resultFormat?.toUpperCase()} files cannot be previewed` : 'Failed to load image'}
                   </h4>
                   <p className="text-sm text-tertiary max-w-sm">
-                    {resultCannotPreview 
+                    {resultCannotPreview
                       ? 'This format is not supported for browser preview. Download the file to view it in an image editor.'
                       : 'There was an error loading the result image. It may be corrupted or missing.'}
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={handleDownload}
                   className="btn-primary flex items-center gap-2"
                 >
@@ -188,7 +187,7 @@ export function ComparisonPreviewModal({
               </div>
             )
           )}
-          
+
           {activeTab === 'original' && (
             (originalCannotPreview || originalError) ? (
               <div className="flex flex-col items-center gap-4 text-center p-8">
@@ -200,7 +199,7 @@ export function ComparisonPreviewModal({
                     {originalCannotPreview ? `${originalFormat?.toUpperCase() || 'This'} file cannot be previewed` : 'Failed to load original image'}
                   </h4>
                   <p className="text-sm text-tertiary max-w-sm">
-                    {originalCannotPreview 
+                    {originalCannotPreview
                       ? 'This format is not supported for browser preview.'
                       : 'There was an error loading the original image.'}
                   </p>
@@ -223,14 +222,14 @@ export function ComparisonPreviewModal({
               </div>
             )
           )}
-          
+
           {activeTab === 'sideBySide' && (
             <div className="flex flex-col md:flex-row gap-4 w-full h-full items-center justify-center">
               <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
                 <div className="flex flex-col items-center shadow-sm">
-                  <span className="text-xs font-medium text-secondary bg-white dark:bg-secondary px-2 py-1 rounded-t border border-b-0 border-border">Original</span>
+                  <span className="text-xs font-medium text-secondary bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-t border border-b-0 border-border">Original</span>
                   {(originalMeta || originalFileSize) && (
-                    <span className="text-[10px] text-tertiary bg-white/80 dark:bg-secondary/80 px-2 py-0.5 rounded-b border border-t-0 border-border">
+                    <span className="text-[10px] text-tertiary bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5 rounded-b border border-t-0 border-border">
                       {originalMeta && `${originalMeta.width}×${originalMeta.height}`}
                       {originalMeta && originalFileSize && ' • '}
                       {originalFileSize && formatFileSize(originalFileSize)}
@@ -257,9 +256,9 @@ export function ComparisonPreviewModal({
               </div>
               <div className="flex-1 flex flex-col items-center gap-2 h-full justify-center min-h-0 w-full">
                 <div className="flex flex-col items-center shadow-sm">
-                  <span className="text-xs font-medium text-primary-600 dark:text-primary-400 bg-white dark:bg-primary-500/10 px-2 py-1 rounded-t border border-b-0 border-primary-200 dark:border-primary-500/30">{resultLabel}</span>
+                  <span className="text-xs font-medium text-brand-600 dark:text-brand-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-t border border-b-0 border-brand-200 dark:border-brand-500/30">{resultLabel}</span>
                   {!resultCannotPreview && (resultMeta || resultFileSize) && (
-                    <span className="text-[10px] text-primary-500/70 dark:text-primary-300/70 bg-white/90 dark:bg-primary-500/5 px-2 py-0.5 rounded-b border border-t-0 border-primary-200 dark:border-primary-500/20">
+                    <span className="text-[10px] text-brand-500/70 dark:text-brand-300/70 bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5 rounded-b border border-t-0 border-brand-200 dark:border-brand-500/20">
                       {resultMeta && `${resultMeta.width}×${resultMeta.height}`}
                       {resultMeta && resultFileSize && ' • '}
                       {resultFileSize && formatFileSize(resultFileSize)}
@@ -273,8 +272,8 @@ export function ComparisonPreviewModal({
                       {resultCannotPreview ? `${resultFormat?.toUpperCase()} preview unavailable` : 'Failed to load result'}
                     </span>
                     <button onClick={handleDownload} className="btn-primary text-xs py-1 px-3 flex items-center gap-1.5 mt-2">
-                       <Download size={12} />
-                       Download
+                      <Download size={12} />
+                      Download
                     </button>
                   </div>
                 ) : (

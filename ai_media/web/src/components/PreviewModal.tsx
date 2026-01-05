@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Download, Loader2, Copy, Check, Image, Code, FileText } from 'lucide-react';
+import { X, Download, Loader2, Copy, Check, Image, Code, FileText, WrapText } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
@@ -246,8 +246,8 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                 <button
                   onClick={() => setViewMode('render')}
                   className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ${viewMode === 'render'
-                      ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10'
-                      : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
+                    ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10'
+                    : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
                     }`}
                 >
                   <FileText size={14} /> <span className="hidden md:inline">Preview</span>
@@ -255,8 +255,8 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
                 <button
                   onClick={() => setViewMode('code')}
                   className={`px-3 md:px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-2 transition-all border-t border-x ml-[-1px] ${viewMode === 'code'
-                      ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10'
-                      : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
+                    ? 'bg-white dark:bg-zinc-950 text-primary border-border border-b-white dark:border-b-zinc-950 z-10'
+                    : 'bg-secondary text-secondary border-transparent hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-secondary border-b-border'
                     }`}
                 >
                   <Code size={14} /> <span className="hidden md:inline">Code</span>
@@ -348,6 +348,7 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
   const [content, setContent] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
+  const [wordWrap, setWordWrap] = useState(true); // Default ON for vision descriptions
   const codeRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const language = getLanguage(fileName);
@@ -428,6 +429,13 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
       {/* Action buttons */}
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button
+          onClick={() => setWordWrap(!wordWrap)}
+          className={`p-2 rounded-lg transition-colors ${wordWrap ? 'bg-brand-500/20 text-brand-400' : 'bg-tertiary hover:bg-tertiary text-primary'}`}
+          title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+        >
+          <WrapText size={16} />
+        </button>
+        <button
           onClick={handleCopyAsImage}
           className="p-2 bg-tertiary hover:bg-tertiary rounded-lg text-primary"
           title="Copy as image"
@@ -447,8 +455,8 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
         className="flex-1 overflow-auto scrollbar-themed"
       >
         <pre
-          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm`}
-          style={{ minWidth: 'max-content', fontFamily: 'JetBrains Mono, monospace' }}
+          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm ${wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'}`}
+          style={{ minWidth: wordWrap ? undefined : 'max-content', fontFamily: 'JetBrains Mono, monospace' }}
         >
           <code ref={codeRef} className={`language-${language}`}>
             {content}

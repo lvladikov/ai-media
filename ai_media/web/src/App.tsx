@@ -18,6 +18,7 @@ import './index.css';
 import { TransformView } from './components/TransformView';
 import { ConvertView } from './components/ConvertView';
 import { UpscaleView } from './components/UpscaleView';
+import { VisionView } from './components/VisionView';
 
 function MainContent() {
   const { activeTab } = useAppStore();
@@ -42,6 +43,8 @@ function MainContent() {
         return <ConvertView />;
       case 'upscale':
         return <UpscaleView />;
+      case 'vision':
+        return <VisionView />;
       case 'jobs':
         return <JobsView />;
       case 'settings':
@@ -58,15 +61,15 @@ import { Menu, X } from 'lucide-react';
 
 function MobileHeader() {
   const { toggleMobileMenu, isMobileMenuOpen } = useAppStore();
-  
+
   return (
     <div className="md:hidden h-14 bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 z-20 relative">
       <div className="flex items-center gap-2">
-         {/* Hamburger */}
-         <button onClick={toggleMobileMenu} className="text-secondary hover:text-primary p-1">
-           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-         </button>
-         <span className="font-semibold text-lg">AI-Media</span>
+        {/* Hamburger */}
+        <button onClick={toggleMobileMenu} className="text-secondary hover:text-primary p-1">
+          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+        <span className="font-semibold text-lg">AI-Media</span>
       </div>
     </div>
   );
@@ -93,13 +96,13 @@ function App() {
   // Listen for Electron navigation events (Menu)
   useEffect(() => {
     if ((window as any).electronAPI?.onNavigate) {
-        (window as any).electronAPI.onNavigate((id: string) => {
-            if (id === 'help') {
-                useAppStore.getState().toggleHelp();
-            } else {
-                setActiveTab(id as any);
-            }
-        });
+      (window as any).electronAPI.onNavigate((id: string) => {
+        if (id === 'help') {
+          useAppStore.getState().toggleHelp();
+        } else {
+          setActiveTab(id as any);
+        }
+      });
     }
   }, [setActiveTab]);
 

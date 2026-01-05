@@ -367,7 +367,7 @@ def run_interactive(jump_point=None):
             ("🖼️   Generate Image", "image"),
             ("🎬  Generate Video", "video"),
             ("🎵  Generate Audio", "audio"),
-            ("📝  Generate Description", "caption"),
+            ("📝  Vision", "caption"),
             ("📰  Generate Article", "article"),
             ("💻  Generate Code", "code"),
             ("💬  Chat", "chat"),
@@ -1010,7 +1010,7 @@ def run_interactive(jump_point=None):
     def caption_menu(preset_model=None):
         """Generate caption submenu."""
         clear_screen()
-        show_header("Generate Description")
+        show_header("Vision")
         
         # Input file
         print("📂 Select input image or video:\n")

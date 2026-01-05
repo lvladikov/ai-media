@@ -661,71 +661,71 @@
       "description": "Generate audio in WAV format"
     },
     {
-      "name": "Caption - BLIP",
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm blip -o ai_media/testing/data/outputs/caption_blip.txt --force",
+      "name": "Vision - BLIP",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm blip -o ai_media/testing/data/outputs/vision_blip.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_blip.txt"
+        "ai_media/testing/data/outputs/vision_blip.txt"
       ],
       "description": "Generate caption using BLIP model"
     },
     {
-      "name": "Caption - Florence (Default)",
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -o ai_media/testing/data/outputs/caption_florence.txt --force",
+      "name": "Vision - Florence (Default)",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -o ai_media/testing/data/outputs/vision_florence.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_florence.txt"
+        "ai_media/testing/data/outputs/vision_florence.txt"
       ],
       "description": "Generate caption using Florence model (default)"
     },
     {
-      "name": "Caption - Florence Explicit",
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm florence -o ai_media/testing/data/outputs/caption_florence_exp.txt --force",
+      "name": "Vision - Florence Explicit",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm florence -o ai_media/testing/data/outputs/vision_florence_exp.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_florence_exp.txt"
+        "ai_media/testing/data/outputs/vision_florence_exp.txt"
       ],
       "description": "Generate caption with explicit Florence model"
     },
     {
-      "name": "Caption - Qwen3 VL 8B",
+      "name": "Vision - Qwen3 VL 8B",
       "timeout": 600,
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-8b -o ai_media/testing/data/outputs/caption_qwen_vl_8b.txt --force",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-8b -o ai_media/testing/data/outputs/vision_qwen_vl_8b.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_qwen_vl_8b.txt"
+        "ai_media/testing/data/outputs/vision_qwen_vl_8b.txt"
       ],
       "description": "Generate caption using Qwen3-VL 8B Vision-Language model"
     },
     {
-      "name": "Caption - Qwen3 VL 4B",
+      "name": "Vision - Qwen3 VL 4B",
       "timeout": 600,
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-4b -o ai_media/testing/data/outputs/caption_qwen_vl_4b.txt --force",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-4b -o ai_media/testing/data/outputs/vision_qwen_vl_4b.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_qwen_vl_4b.txt"
+        "ai_media/testing/data/outputs/vision_qwen_vl_4b.txt"
       ],
       "description": "Generate caption using Qwen3-VL 4B (balanced size)"
     },
     {
-      "name": "Caption - Qwen3 VL 2B",
+      "name": "Vision - Qwen3 VL 2B",
       "timeout": 600,
-      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-2b -o ai_media/testing/data/outputs/caption_qwen_vl_2b.txt --force",
+      "command": "-gd ai_media/testing/data/inputs/sample.jpg -cm qwen3-vl-2b -o ai_media/testing/data/outputs/vision_qwen_vl_2b.txt --force",
       "expectedInputItems": [
         "ai_media/testing/data/inputs/sample.jpg"
       ],
       "expectedOutputItems": [
-        "ai_media/testing/data/outputs/caption_qwen_vl_2b.txt"
+        "ai_media/testing/data/outputs/vision_qwen_vl_2b.txt"
       ],
       "description": "Generate caption using Qwen3-VL 2B (lightweight)"
     },
@@ -1249,7 +1249,7 @@
       "command": "--interactive 4",
       "interactive": true,
       "expectedStdoutItems": [
-        "Generate Description"
+        "Vision"
       ],
       "description": "Test interactive menu jump to Caption/Description"
     },
@@ -1456,7 +1456,7 @@
       "command": "--interactive caption",
       "interactive": true,
       "expectedStdoutItems": [
-        "Generate Description"
+        "Vision"
       ],
       "description": "Test interactive menu jump by name (caption)"
     },

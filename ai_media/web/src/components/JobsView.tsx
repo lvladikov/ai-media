@@ -4,6 +4,8 @@ import type { Job } from '../store';
 import { History, Clock, CheckCircle, XCircle, Loader2, Eye, StopCircle } from 'lucide-react';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
+import { VisionPreviewModal } from './common/VisionPreviewModal';
+import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { cancelJob } from '../hooks/useApi';
 
 function JobCard({ job, onOpen }: { job: Job; onOpen: (job: Job) => void }) {
@@ -55,27 +57,27 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: (job: Job) => void }) {
               {job.status}
             </span>
           </div>
-          
+
           {/* Prompt */}
           {job.prompt && (
             <p className="text-sm text-secondary mt-2 line-clamp-2" title={job.prompt}>
               "{job.prompt}"
             </p>
           )}
-          
+
           {/* Params */}
           {paramsStr && (
             <p className="text-xs text-tertiary mt-1">
               {paramsStr}
             </p>
           )}
-          
+
           <p className="text-sm text-secondary mt-1">{job.message}</p>
           <p className="text-xs text-tertiary mt-1">
             {new Date(job.created_at).toLocaleString()}
           </p>
         </div>
-        
+
         <div className="flex gap-2 flex-shrink-0">
           {(job.status === 'complete' || job.status === 'loading' || job.status === 'generating' || job.status === 'pending') && (
             <button
@@ -164,19 +166,50 @@ export function JobsView() {
       )}
 
       {selectedJob && viewType === 'progress' && (
-        <JobProgressModal 
-          jobId={selectedJob.job_id} 
-          onClose={handleClose} 
+        <JobProgressModal
+          jobId={selectedJob.job_id}
+          onClose={handleClose}
         />
       )}
 
       {selectedJob && viewType === 'preview' && selectedJob.result_path && (
-        <PreviewModal 
-          isOpen={true}
-          onClose={handleClose}
-          filePath={selectedJob.result_path}
-          fileName={selectedJob.result_path.split('/').pop() || 'file'}
-        />
+        <>
+          {/* Vision jobs use VisionPreviewModal */}
+          {selectedJob.type === 'vision' && (
+            <VisionPreviewModal
+              isOpen={true}
+              onClose={handleClose}
+              originalPath={String(selectedJob.params?.input || '')}
+              resultPath={selectedJob.result_path}
+              resultText={(selectedJob as any).result || null}
+              fileName={selectedJob.result_path.split('/').pop() || 'description.txt'}
+              originalIsVideo={String(selectedJob.params?.input || '').match(/\.(mp4|webm|mov|mkv)$/i) !== null}
+            />
+          )}
+
+          {/* Upscale/Transform jobs use ComparisonPreviewModal */}
+          {(selectedJob.type === 'upscale' || selectedJob.type === 'transform') && (
+            <ComparisonPreviewModal
+              isOpen={true}
+              onClose={handleClose}
+              originalPath={String(selectedJob.params?.input || '')}
+              resultPath={selectedJob.result_path}
+              fileName={selectedJob.result_path.split('/').pop() || 'result'}
+              resultLabel={selectedJob.type === 'upscale' ? 'Upscaled' : 'Transformed'}
+              factor={Number(selectedJob.params?.factor) || 1}
+            />
+          )}
+
+          {/* Article/Code and other jobs use generic PreviewModal (has Code/Preview toggle for md/html) */}
+          {selectedJob.type !== 'vision' && selectedJob.type !== 'upscale' && selectedJob.type !== 'transform' && (
+            <PreviewModal
+              isOpen={true}
+              onClose={handleClose}
+              filePath={selectedJob.result_path}
+              fileName={selectedJob.result_path.split('/').pop() || 'file'}
+            />
+          )}
+        </>
       )}
     </div>
   );

@@ -262,6 +262,7 @@ import sys
 import re
 import argparse
 import time
+
 from datetime import datetime
 from datetime import datetime
 import shutil
@@ -405,7 +406,7 @@ Examples:
   python ai-media.py -gc 'Write a Snake game in Python' (Code Gen)
   python ai-media.py -ga -p "Story about a cat" -o story.docx -atm mistral-nemo-12b
 
-  -- Generate Description --
+  -- Vision --
   python ai-media.py -gd -ii video.mp4
   python ai-media.py -gd -ii image.jpg -cm blip (Use simpler model)
 
@@ -485,7 +486,7 @@ Supported Models (Code : Download Size | Description):
     - qwen-coder-7b              : ~6GB  | Qwen 2.5 Lightweight Code Gen.
     - qwen3-coder-30b            : ~10GB | MoE (3.3B active). Efficient SOTA.
 
-  Description Generation:
+  Vision (Description Generation):
     - florence (default)         : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene. Fast.
     - qwen-vl                    : ~30GB  | Qwen3-VL 8B. High precision OCR & captioning.
     - blip                       : ~1GB   | Simple, concise captions. Faster but less detailed. (Not for OCR)
@@ -520,7 +521,7 @@ Supported Models (Code : Download Size | Description):
     mode_group.add_argument("-gc", "--generate-code", nargs="?", const=True, default=False, 
                             help="Generate code. Supports multi-file projects & auto-naming. E.g.: -gc 'Write a REST API'")
     
-    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Generate Description (Caption) for Image or Video.")
+    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Vision - Generate Description for Image or Video.")
     mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
     
     # Common Parameters (applies to most modes)
@@ -575,9 +576,9 @@ Supported Models (Code : Download Size | Description):
     text_group.add_argument("-al", "--article-length", choices=["quick", "standard", "detailed"], default="quick",
                             help="Article length: quick (fast, ~500 words, default), standard (~1500 words), detailed (comprehensive, ~3000 words).")
 
-    # Description Generation Options
-    caption_group = parser.add_argument_group("Description Generation Options")
-    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip", "qwen-vl", "qwen3-vl-8b", "qwen3-vl-4b", "qwen3-vl-2b"], help="Model for description generation: 'florence' (default), 'blip', 'qwen-vl' (Qwen3-VL-8B), or 'qwen3-vl-2b/4b/8b'.")
+    # Vision (Description Generation) Options
+    caption_group = parser.add_argument_group("Vision Options")
+    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip", "qwen-vl", "qwen3-vl-8b", "qwen3-vl-4b", "qwen3-vl-2b"], help="Vision models: 'florence' (default), 'blip', 'qwen-vl' (Qwen3-VL-8B), or 'qwen3-vl-2b/4b/8b'.")
     
     # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")

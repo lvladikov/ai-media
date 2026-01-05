@@ -1,4 +1,4 @@
-# Description Generation
+# Vision
 
 Use Vision-Language Models (VLMs) to give eyes to your AI. This module analyzes images and videos and returns text descriptions of what it sees.
 
@@ -28,7 +28,7 @@ Summarize the content of a video file.
 | `-ii, --input-image` | Path to the image or video file to describe. |
 | `-o, --output` | Output text filename (optional). The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 
-See [Description Generation Examples](#examples) and [Models](#models).
+See [Vision Examples](#examples) and [Models](#models).
 
 ## Models
 

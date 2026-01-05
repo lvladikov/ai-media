@@ -66,7 +66,7 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `3/3` | | `audio/musicgen-large` | MusicGen Large (Quality) |
 | `3/4` | | `audio/audioldm2` | AudioLDM2 (SFX) |
 | `3/5` | | `audio/bark` | Bark (TTS) |
-| `4` | **Description** | `caption` | Description Generation Menu |
+| `4` | **Vision** | `caption` | Vision Menu |
 | `5` | **Article** | `article` | Article/Research Menu |
 | `5/1` | | `article/offline` | Offline Article |
 | `5/2` | | `article/online` | Online Research |

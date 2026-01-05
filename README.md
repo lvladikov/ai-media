@@ -18,7 +18,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 🎨 **Image Generation** - **Text-to-Image** using models like Flux/SDXL (via `diffusers`). See [Image Options](docs/image-generation.md#options), [Examples](docs/image-generation.md#examples) and [Models](docs/image-generation.md#models).
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Text/Image + Audio (prompt) to Video**. See [Video Options](docs/video-generation.md#options), [Examples](docs/video-generation.md#examples) and [Models](docs/video-generation.md#models).
 - 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning + Audio Generation). Models: MusicGen, AudioLDM 2. See [Audio Options](docs/audio-generation.md#options), [Examples](docs/audio-generation.md#examples) and [Models](docs/audio-generation.md#models).
-- 📝 **Description Generation** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](docs/description-generation.md#options), [Examples](docs/description-generation.md#examples) and [Models](docs/description-generation.md#models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+- 📝 **Vision** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](docs/vision.md#options), [Examples](docs/vision.md#examples) and [Models](docs/vision.md#models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
 - ✍️ **Article/Research/Code Generation** - Generate comprehensive **Articles** (offline), perform **Deep Research** (online search + summary), and generate **Code** for scripts, including multi file and folder projects (offline). Includes an interactive **Chat** session that runs on **fully offline models** but can dynamically pull live web content via the `/search` command. Chat can **read, discuss, generate, and save content (code or otherwise)**. See [Article Options](docs/article-generation.md#article--text-options), [Code Options](docs/article-generation.md#code-options), [Examples](docs/article-generation.md#examples) and [Models](docs/article-generation.md#text-models).
 - 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Transform Options](docs/creative-transformations.md#options), [Examples](docs/creative-transformations.md#examples) and [Models](docs/creative-transformations.md#models).
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](docs/media-conversion.md#media-conversion-options) and [Examples](docs/media-conversion.md#examples).
@@ -174,10 +174,10 @@ cd ai-media
 # 3. Activate environment
 source venv/bin/activate
     # Windows:
-    .venv\Scripts\activate.bat
+    .\venv\Scripts\activate.bat (or venv\Scripts\activate.bat depending on your terminal)
     # or for PowerShell:
     # if needed: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-    .venv\Scripts\Activate.ps1
+    .\venv\Scripts\Activate.ps1 (or venv\Scripts\Activate.ps1 depending on your terminal)
 
 # 4. Install dependencies
 pip install -r requirements.txt
@@ -239,7 +239,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 - `-gr, --generate-research`: Generate an article with Deep Research (Online)
 - `-c, --chat`: Interactive chat mode
 - `-gc, --generate-code`: Generate code (scripts, projects, etc.)
-- `-gd, --generate-description`: Describe an image or video
+- `-gd, --generate-description`: Describe an image or video (Vision tools)
 - `-ti, --transform-image`: Creatively transform/edit an image
 - `-ci/-cv/-ca`: Convert media formats (GIF, PNG, MP4, WAV, MP3).
 - `-cd, --convert-document`: Convert document formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON).
@@ -285,7 +285,7 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 🎬 **Video Generation** | [docs/video-generation.md](docs/video-generation.md) |
 | 🎵 **Audio Generation** | [docs/audio-generation.md](docs/audio-generation.md) |
 | ✍️ **Article, Chat & Code** | [docs/article-generation.md](docs/article-generation.md) |
-| 📝 **Description Generation** | [docs/description-generation.md](docs/description-generation.md) |
+| 📝 **Vision** | [docs/vision.md](docs/vision.md) |
 | 🪄 **Creative Transformations** | [docs/creative-transformations.md](docs/creative-transformations.md) |
 | 🔄 **Media & Document Conversion** | [docs/media-conversion.md](docs/media-conversion.md) |
 | 📈 **Upscaling** | [docs/upscaling.md](docs/upscaling.md) |
