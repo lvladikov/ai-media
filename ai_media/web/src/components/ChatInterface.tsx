@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
-import { fetchModels } from '../hooks/useApi';
+import { useModels } from '../hooks/useApi';
 import { API_BASE_URL as API_BASE } from '../config';
 import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Trash2, Image, AlertCircle, RefreshCw } from 'lucide-react';
 import domToImage from 'dom-to-image';
@@ -52,14 +52,8 @@ const TAILWIND_TO_CSS: Record<string, string> = {
 
 
 
-interface ModelInfo {
-  name: string;
-  model_id: string;
-  vram_required: number | null;
-  ram_required: number | null;
-  max_resolution: [number, number] | null;
-  is_default?: boolean;
-}
+
+
 
 // Display names matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
@@ -70,7 +64,8 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
-  'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
+  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning - 16GB VRAM)', vram: '~16GB' },
+  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning - 28GB VRAM)', vram: '~28GB' },
   'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
   'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
   'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B', vram: '~12GB' },
@@ -83,10 +78,12 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
-  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b',
+  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b',
   'qwen3-coder-30b', 'qwen-coder-32b', 'qwen-coder-14b', 'qwen-coder-7b',
   'qwen-vl', 'qwen3-vl-4b', 'qwen3-vl-2b'
 ];
+
+import { TranslateOptions } from './common/TranslateOptions';
 
 const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -104,6 +101,29 @@ const ReasoningAccordion = ({ reasoning }: { reasoning: string }) => {
       {isOpen && (
         <div className="prose dark:prose-invert max-w-none text-secondary/90 leading-tight [&>p]:!text-xs [&>p]:italic [&>p]:my-0.5 [&>pre]:not-italic [&>pre]:my-1 mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
           <MarkdownWithAnsiNoHtml>{reasoning}</MarkdownWithAnsiNoHtml>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Translation accordion - shows translated input or original English
+const TranslationAccordion = ({ label, content, icon = "🌐" }: { label: string; content: string; icon?: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="border-l-2 border-cyan-600/40 pl-3 my-1 bg-cyan-900/10 py-1 pr-2 rounded-r">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 font-semibold text-[11px] text-cyan-600 dark:text-cyan-400 mb-0.5 hover:text-cyan-800 dark:hover:text-cyan-200 transition-colors w-full text-left"
+      >
+        {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <span>{icon} {label}</span>
+      </button>
+
+      {isOpen && (
+        <div className="prose dark:prose-invert max-w-none text-secondary/80 leading-tight text-xs italic mt-1 animate-in fade-in slide-in-from-top-1 duration-200">
+          {content}
         </div>
       )}
     </div>
@@ -137,7 +157,7 @@ const FileContextAccordion = ({ filename, content }: { filename: string; content
   );
 };
 
-const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { content: string, reasoning?: string, thinkingTime?: string }) => {
+const ThinkingMessage = React.memo(({ content, originalContent, reasoning, thinkingTime }: { content: string, originalContent?: string, reasoning?: string, thinkingTime?: string }) => {
   const [copied, setCopied] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
   const answerRef = useRef<HTMLDivElement>(null);
@@ -277,6 +297,12 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
             Thought for {thinkingTime}
           </div>
         )}
+        {originalContent && (
+          <TranslationAccordion
+            label="Original (English response before translation)"
+            content={originalContent}
+          />
+        )}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1">
             <div className="font-bold text-primary italic">Answer:</div>
@@ -372,12 +398,19 @@ const ThinkingMessage = React.memo(({ content, reasoning, thinkingTime }: { cont
         </div>
       )}
       {renderContent(content)}
+      {/* Show "Original" accordion when output was translated */}
+      {originalContent && (
+        <TranslationAccordion
+          label="Original (English response before translation)"
+          content={originalContent}
+        />
+      )}
     </div>
   );
 });
 
 
-const UserMessage = ({ content }: { content: string }) => {
+const UserMessage = ({ content, translatedInput }: { content: string; translatedInput?: string }) => {
   // Check if message contains file context (added via Read File button)
   const fileContextMatch = content.match(/\[File Context: ([^\]]+)\]/);
   if (fileContextMatch) {
@@ -412,6 +445,13 @@ const UserMessage = ({ content }: { content: string }) => {
   return (
     <div className="prose dark:prose-invert prose-sm max-w-none">
       <MarkdownWithAnsi>{content}</MarkdownWithAnsi>
+      {/* Show "Translated" accordion when input was auto-translated to English */}
+      {translatedInput && (
+        <TranslationAccordion
+          label="Translated (English sent to model)"
+          content={translatedInput}
+        />
+      )}
     </div>
   );
 };
@@ -421,6 +461,7 @@ const SearchModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose: 
   const [limit, setLimit] = useState(3);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -521,7 +562,7 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
 };
 
 export function ChatInterface() {
-  const { chatSessionId, chatMessages, setChatSessionId, addChatMessage, clearChat } = useAppStore();
+  const { chatSessionId, chatMessages, setChatSessionId, addChatMessage, updateLastUserMessage, clearChat } = useAppStore();
   const [model, setModel] = useState(''); // Initial value empty, set after fetch
   const [defaultModelId, setDefaultModelId] = useState(''); // Store default model ID from backend
   const [input, setInput] = useState('');
@@ -531,7 +572,6 @@ export function ChatInterface() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<string>('');
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isModelReady, setIsModelReady] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState<string[]>([]);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -539,6 +579,18 @@ export function ChatInterface() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [fileData, setFileData] = useState<{ name: string; content: string } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+
+  // Translation State
+  const [autoTranslateInput, setAutoTranslateInput] = useState(false);
+  const [translateOutput, setTranslateOutput] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('spa_Latn');
+  const [translationModel, setTranslationModel] = useState('nllb-200-3.3b');
+  const [inputTranslationModel, setInputTranslationModel] = useState('nllb-200-3.3b');
+  const [inputSourceLanguage, setInputSourceLanguage] = useState('auto'); // Auto-detect by default
+
+  // Use global models cache
+  const { models } = useModels();
+  const availableModels = models?.text || [];
 
   const socketRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -554,33 +606,24 @@ export function ChatInterface() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showCollapseHint, setShowCollapseHint] = useState(true); // Pulsating hint animation
 
-  // Fetch models on mount
+  // Set default model when models are loaded from global cache
+  useEffect(() => {
+    if (availableModels.length > 0 && !model) {
+      // Find default model based on backend flag
+      const defaultModel = availableModels.find((m: any) => m.is_default);
+      const initialModel = defaultModel?.name || availableModels[0]?.name || '';
+
+      if (initialModel) {
+        setModel(initialModel);
+        setDefaultModelId(initialModel);
+      }
+    }
+  }, [availableModels, model]);
+
+  // Session cleanup on mount
   useEffect(() => {
     // Session is lost on refresh since backend generates new ID on connect
     setChatSessionId('');
-
-    fetchModels()
-      .then((data) => {
-        if (data.text) {
-          const models = data.text;
-          setAvailableModels(models);
-
-          // Find default model based on backend flag
-          let initialModel = '';
-          const defaultModel = models.find((m: ModelInfo) => m.is_default);
-
-          if (defaultModel) {
-            initialModel = defaultModel.name;
-          } else if (models.length > 0) {
-            // Fallback if no default flag
-            initialModel = models[0].name;
-          }
-
-          setModel(initialModel);
-          setDefaultModelId(initialModel);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch models:', err));
 
     // Cleanup: Disconnect when component unmounts (navigating away)
     return () => {
@@ -643,7 +686,13 @@ export function ChatInterface() {
       type: 'message',
       content: contentToSend,
       model: model,
-      session_id: chatSessionId
+      session_id: chatSessionId,
+      translate_input: autoTranslateInput,
+      translate_output: translateOutput,
+      target_language: targetLanguage,
+      translation_model: translationModel,
+      input_translation_model: inputTranslationModel,
+      input_source_language: inputSourceLanguage,  // Source language for input translation
     }));
 
     // Only clear input if we sent from the text area
@@ -694,8 +743,8 @@ export function ChatInterface() {
     // Connect using dynamically loaded API_BASE
     const wsBaseUrl = API_BASE();
     if (!wsBaseUrl) {
-       console.error("API_BASE is empty despite init check!");
-       return;
+      console.error("API_BASE is empty despite init check!");
+      return;
     }
 
     // Ensure correct protocol (http->ws, https->wss)
@@ -730,9 +779,16 @@ export function ChatInterface() {
         addChatMessage({
           role: 'assistant',
           content: data.content,
+          originalContent: data.original_content,
           reasoning: data.reasoning, // Store reasoning from server
           thinkingTime: finalThinkingTime
         });
+
+        // Update the last user message with translated input if translation occurred
+        if (data.translated_input) {
+          updateLastUserMessage({ translatedInput: data.translated_input });
+        }
+
         setIsProcessing(false);
         thinkingStartTimeRef.current = null;
       } else if (data.type === 'command_response') {
@@ -1039,7 +1095,7 @@ export function ChatInterface() {
 
   // Sort models
   const sortedModels = MODEL_ORDER.filter(name =>
-    name === 'default' || availableModels.some(m => m.name === name)
+    name === 'default' || availableModels.some((m) => m.name === name)
   );
 
 
@@ -1112,6 +1168,44 @@ export function ChatInterface() {
                 <LogOut size={16} /> Disconnect
               </button>
             )}
+          </div>
+
+          {/* Translation Parameters */}
+          <div className="border border-border rounded-lg bg-secondary/30 p-3 space-y-3 shrink-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Globe size={14} className="text-brand-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-secondary">Translation</span>
+            </div>
+
+            <TranslateOptions
+              title="Auto-Translate Input to English"
+              enabled={autoTranslateInput}
+              onEnabledChange={setAutoTranslateInput}
+              selectedModel={inputTranslationModel}
+              onModelChange={setInputTranslationModel}
+              targetLanguage="" // Not used when source language shown
+              onLanguageChange={() => { }}
+              hideLanguageSelector={true}
+              showToggle={true}
+              showSourceLanguage={true}
+              sourceLanguage={inputSourceLanguage}
+              onSourceLanguageChange={setInputSourceLanguage}
+              infoMessage="NLLB-200: Fast with auto-detect, best for quick translations. LLM models: Better nuance, tone and context awareness - ideal for professional or creative content. LLMs require explicit source language."
+            />
+
+            <div className="border-t border-border/50 pt-3">
+              <TranslateOptions
+                title="Translate Output"
+                enabled={translateOutput}
+                onEnabledChange={setTranslateOutput}
+                selectedModel={translationModel}
+                onModelChange={setTranslationModel}
+                targetLanguage={targetLanguage}
+                onLanguageChange={setTargetLanguage}
+                showToggle={true}
+                infoMessage="Choose NLLB for speed and broad language coverage. Use LLM models for more natural, context-aware translations - especially valuable for professional or creative content."
+              />
+            </div>
           </div>
 
           {/* Chat Input Area */}
@@ -1294,9 +1388,9 @@ export function ChatInterface() {
                 {/* Content */}
                 <div className={`pl-0 ${msg.role === 'system' ? 'text-tertiary italic bg-secondary/30 p-2 rounded border-l-2 border-border' : 'text-secondary'}`}>
                   {msg.role === 'assistant' ? (
-                    <ThinkingMessage content={msg.content} reasoning={msg.reasoning} thinkingTime={msg.thinkingTime} />
+                    <ThinkingMessage content={msg.content} originalContent={msg.originalContent} reasoning={msg.reasoning} thinkingTime={msg.thinkingTime} />
                   ) : msg.role === 'user' ? (
-                    <UserMessage content={msg.content} />
+                    <UserMessage content={msg.content} translatedInput={msg.translatedInput} />
                   ) : (
                     <div className="text-sm font-sans flex items-center gap-2">
                       {msg.content}
@@ -1449,3 +1543,7 @@ export function ChatInterface() {
     </div>
   );
 }
+
+
+
+

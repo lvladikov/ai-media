@@ -1,23 +1,23 @@
-"""Vision and description routes."""
+"""Analysis and description routes."""
 
 from datetime import datetime
 import os
 
 from fastapi import APIRouter
 
-from ..models import VisionRequest
+from ..models import AnalysisRequest
 from ..config import CONFIG
 from ..jobs import create_job
 from ..process_manager import spawn_job_process
-from ..tasks import description as vision_tasks
+from ..tasks import description as analysis_tasks
 
-router = APIRouter(tags=["Vision"])
+router = APIRouter(tags=["Analysis"])
 
-@router.post("/api/vision/describe")
-async def generate_description(request: VisionRequest):
-    """Start a vision/description job."""
+@router.post("/api/analysis/describe")
+async def generate_description(request: AnalysisRequest):
+    """Start an analysis/description job."""
     job = create_job(
-        "vision",
+        "analysis",
         model=request.model,
         params={"input": request.input_path, "force": request.force},
         job_id=request.job_id
@@ -29,7 +29,7 @@ async def generate_description(request: VisionRequest):
     
     spawn_job_process(
         job["job_id"],
-        vision_tasks.run_description,
+        analysis_tasks.run_description,
         (
             job["job_id"],
             request.input_path,

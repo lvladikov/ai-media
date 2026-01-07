@@ -41,8 +41,8 @@ export function useResourceMonitor() {
       // Determine correct SSE URL
       let sseBaseUrl = API_BASE();
       if (!sseBaseUrl) {
-         console.error("API_BASE is empty despite init check!");
-         // Let it fail naturally or return
+        console.error("API_BASE is empty despite init check!");
+        // Let it fail naturally or return
       }
 
       eventSourceRef.current = new EventSource(`${sseBaseUrl}/sse/resources`);
@@ -120,13 +120,13 @@ export function useJobSocket() {
       // Use string cast to avoid TS getting confused if API_BASE is empty literal
       const baseStr = API_BASE();
       let wsUrl = '';
-      
+
       if (baseStr) {
         wsUrl = `${baseStr.replace(/^http/, 'ws')}/ws/jobs`;
       } else {
-         console.error("API_BASE is empty, cannot connect to job socket");
+        console.error("API_BASE is empty, cannot connect to job socket");
       }
-      
+
       const ws = new WebSocket(wsUrl);
       socketRef.current = ws;
 
@@ -137,19 +137,19 @@ export function useJobSocket() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'job_list') {
-             // Initial load
-             setJobs(data.jobs);
+            // Initial load
+            setJobs(data.jobs);
           } else if (data.type === 'job_update') {
-             const job = data.job;
-             // Check if we already have this job
-             const exists = useAppStore.getState().jobs.some(j => j.job_id === job.job_id);
-             if (exists) {
-                updateJob(job.job_id, job);
-             } else {
-                addJob(job);
-             }
+            const job = data.job;
+            // Check if we already have this job
+            const exists = useAppStore.getState().jobs.some(j => j.job_id === job.job_id);
+            if (exists) {
+              updateJob(job.job_id, job);
+            } else {
+              addJob(job);
+            }
           }
         } catch (e) {
           console.error("Failed to parse job socket message:", e);
@@ -159,7 +159,7 @@ export function useJobSocket() {
       ws.onerror = (err) => {
         // Only log if not immediately closed (suppress dev warning)
         if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
-            console.error("Job socket error:", err);
+          console.error("Job socket error:", err);
         }
       };
 
@@ -168,8 +168,8 @@ export function useJobSocket() {
         socketRef.current = null;
         // Only reconnect if we haven't been unmounted/cleaned up
         if (!isUnmounting) {
-            console.log("Reconnecting job socket in 2s...");
-            reconnectTimeoutRef.current = setTimeout(connect, 2000);
+          console.log("Reconnecting job socket in 2s...");
+          reconnectTimeoutRef.current = setTimeout(connect, 2000);
         }
       };
     };
@@ -185,7 +185,7 @@ export function useJobSocket() {
         socketRef.current.onmessage = null;
         socketRef.current.onerror = null;
         socketRef.current.onclose = null;
-        
+
         socketRef.current.close();
         socketRef.current = null;
       }
@@ -258,6 +258,9 @@ export async function generateArticle(params: {
   length?: string;  // short, medium, long
   research_iterations?: number;
   max_images?: number;
+  translate?: boolean;
+  target_language?: string;
+  translation_model?: string;
   output_filename?: string;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/article`, {
@@ -302,6 +305,47 @@ export async function fetchModels() {
 }
 
 /**
+ * Hook to fetch and cache models globally.
+ * Models are fetched once on first use and cached in the store.
+ * All components using this hook will share the same cached data.
+ */
+export function useModels() {
+  const { models, modelsLoading, setModels, setModelsLoading, isConnected } = useAppStore();
+
+  useEffect(() => {
+    // Skip if already loaded or currently loading
+    if (models || modelsLoading) return;
+
+    // Skip if not connected to server yet
+    if (!isConnected) return;
+
+    setModelsLoading(true);
+
+    fetchModels()
+      .then((data) => {
+        setModels({
+          image: data.image || [],
+          video: data.video || [],
+          audio: data.audio || [],
+          text: data.text || [],
+          upscale: data.upscale || [],
+          transform: data.transform || [],
+          analysis: data.analysis || [],
+          transcription: data.transcription || [],
+          ocr: data.ocr || [],
+          translation: data.translation || [],
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to fetch models:', err);
+        setModelsLoading(false);
+      });
+  }, [models, modelsLoading, isConnected, setModels, setModelsLoading]);
+
+  return { models, isLoading: modelsLoading };
+}
+
+/**
  * Hook to apply theme from config
  */
 export function useConfig() {
@@ -323,30 +367,30 @@ export async function updateConfig(params: { theme?: string }) {
   // Electron Strategy: Use IPC
   if ((window as any).electronAPI) {
     try {
-        // We need to pass the full config structure or just the updates
-        // The main process implementation takes 'config' and writes it. 
-        // We should first GET, then UDPATE, then SAVE to be safe, 
-        // OR checks if main process 'save-config' handles merging.
-        // Looking at main.js logic (not shown fully but likely overwrites), 
-        // let's trust the IPC is smart or we just pass what we want to change if it supports partials.
-        // Actually, main.js usually just writes what receives.
-        
-        // Let's safe-guard: Get current config -> Merge -> Save
-        const currentConfig = await (window as any).electronAPI.getConfig();
-        if (!currentConfig.preferences) currentConfig.preferences = {};
-        if (params.theme) currentConfig.preferences.theme = params.theme;
-        
-        await (window as any).electronAPI.saveConfig(currentConfig);
-        
-        // Apply immediately
-        if (params.theme) {
-          if (params.theme === 'dark') document.documentElement.classList.add('dark');
-          else document.documentElement.classList.remove('dark');
-        }
-        return { success: true };
+      // We need to pass the full config structure or just the updates
+      // The main process implementation takes 'config' and writes it. 
+      // We should first GET, then UDPATE, then SAVE to be safe, 
+      // OR checks if main process 'save-config' handles merging.
+      // Looking at main.js logic (not shown fully but likely overwrites), 
+      // let's trust the IPC is smart or we just pass what we want to change if it supports partials.
+      // Actually, main.js usually just writes what receives.
+
+      // Let's safe-guard: Get current config -> Merge -> Save
+      const currentConfig = await (window as any).electronAPI.getConfig();
+      if (!currentConfig.preferences) currentConfig.preferences = {};
+      if (params.theme) currentConfig.preferences.theme = params.theme;
+
+      await (window as any).electronAPI.saveConfig(currentConfig);
+
+      // Apply immediately
+      if (params.theme) {
+        if (params.theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+      }
+      return { success: true };
     } catch (e) {
-        console.error("IPC save config failed:", e);
-        throw e;
+      console.error("IPC save config failed:", e);
+      throw e;
     }
   }
 
@@ -356,18 +400,18 @@ export async function updateConfig(params: { theme?: string }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  
+
   if (response.ok) {
-     const data = await response.json();
-     // Apply immediately
-     if (params.theme) {
-        if (params.theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-     }
-     return data;
+    const data = await response.json();
+    // Apply immediately
+    if (params.theme) {
+      if (params.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    return data;
   }
   throw new Error('Failed to update config');
 }

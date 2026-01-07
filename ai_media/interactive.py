@@ -138,7 +138,7 @@ def run_interactive(jump_point=None):
         'audio/musicgen-large': ('audio', 'musicgen-large'),
         'audio/audioldm2': ('audio', 'audioldm2'),
         'audio/bark': ('audio', 'bark'),
-        'caption': ('caption', None),
+        'analysis': ('analysis', None),
         'article': ('article', None),
         'article/offline': ('article', 'offline'),
         'article/online': ('article', 'online'),
@@ -151,6 +151,8 @@ def run_interactive(jump_point=None):
         'transform/silhouette': ('transform', 'silhouette'),
         'upscale': ('upscale', None),
         'convert': ('convert', None),
+        'doc_convert': ('doc_convert', None),
+        'translate': ('translate', None),
         'test': ('test', None),
         'test/unit': ('test', 'unit'),
         'test/integration': ('test', 'integration'),
@@ -174,7 +176,7 @@ def run_interactive(jump_point=None):
         '3/3': ('audio', 'musicgen-large'),
         '3/4': ('audio', 'audioldm2'),
         '3/5': ('audio', 'bark'),
-        '4': ('caption', None),
+        '4': ('analysis', None),
         '5': ('article', None),
         '5/1': ('article', 'offline'),
         '5/2': ('article', 'online'),
@@ -185,13 +187,15 @@ def run_interactive(jump_point=None):
         '8/2': ('transform', 'rembg'),
         '8/3': ('transform', 'silhouette'),
         '9': ('convert', None),
-        '10': ('upscale', None),
-        '11': ('test', None),
-        '11/1': ('test', 'unit'),
-        '11/2': ('test', 'integration'),
-        '11/3': ('test', 'codec'),
-        '12': ('sysinfo', None),
-        '13': ('web', None),
+        '10': ('doc_convert', None),
+        '11': ('translate', None),
+        '12': ('upscale', None),
+        '13': ('test', None),
+        '13/1': ('test', 'unit'),
+        '13/2': ('test', 'integration'),
+        '13/3': ('test', 'codec'),
+        '14': ('sysinfo', None),
+        '15': ('web', None),
     }
     
     # Parse jump point
@@ -367,13 +371,14 @@ def run_interactive(jump_point=None):
             ("🖼️   Generate Image", "image"),
             ("🎬  Generate Video", "video"),
             ("🎵  Generate Audio", "audio"),
-            ("📝  Vision", "caption"),
+            ("📝  Analysis", "analysis"),
             ("📰  Generate Article", "article"),
             ("💻  Generate Code", "code"),
             ("💬  Chat", "chat"),
             ("✨  Transform/Edit Image", "transform"),
             ("🔄  Convert Media", "convert"),
             ("📄  Convert Document", "doc_convert"),
+            ("🌐  Translate", "translate"),
             ("📈  Upscale Media", "upscale"),
             ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
@@ -1007,39 +1012,234 @@ def run_interactive(jump_point=None):
         run_self_command(cmd)
         wait_for_back()
     
-    def caption_menu(preset_model=None):
-        """Generate caption submenu."""
+    def translate_menu():
+        """Translate submenu."""
         clear_screen()
-        show_header("Vision")
+        show_header("Translate")
         
-        # Input file
-        print("📂 Select input image or video:\n")
-        input_file = prompt_file("Enter file path")
-        if input_file is None:
-            return
+        # Define supported file types
+        IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tiff']
+        AUDIO_EXTS = ['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac']
+        DOC_EXTS = ['.pdf', '.docx', '.doc', '.rtf', '.txt', '.md', '.html']
         
-        # Model (skip if preset)
-        if preset_model:
-            model = preset_model
-            print(f"📦 Model: {model}\n")
+        # 1. Select Mode
+        print("🌐 Select Translation Mode:\n")
+        mode_options = [
+            ("Text (Enter text directly)", "text"),
+            (f"File (Images: {', '.join(IMAGE_EXTS[:4])}... | Audio: {', '.join(AUDIO_EXTS[:3])}... | Docs: {', '.join(DOC_EXTS[:3])}...)", "file"),
+        ]
+        mode = prompt_choice("Mode", mode_options)
+        if mode is None: return
+
+        # 2. Input Data
+        input_data = None
+        ocr_model = None
+        detected_type = None  # "image", "audio", "document", "text"
+        
+        if mode == "text":
+            print()
+            input_data = prompt_text("📝 Enter text to translate")
+            if not input_data: return
+            detected_type = "text"
         else:
-            print("\n📦 Select Caption Model:\n")
-            model_options = [
-                ("Florence-2 (Default, SOTA)", "florence"),
-                ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
-                ("Qwen3-VL 4B (Balanced)", "qwen3-vl-4b"),
-                ("Qwen3-VL 2B (Lightweight)", "qwen3-vl-2b"),
-                ("BLIP", "blip"),
-            ]
-            model = prompt_choice("Model", model_options)
-            if model is None:
-                return
+            print()
+            input_data = prompt_file("Input File (Image, Audio, or Document)")
+            if not input_data: return
+            
+            # Detect file type by extension
+            ext = os.path.splitext(input_data)[1].lower()
+            
+            if ext in IMAGE_EXTS:
+                detected_type = "image"
+                print(f"\n🖼️  Detected: Image file")
+                
+                # OCR Model selection for images
+                print("\n📦 Select OCR Model:\n")
+                ocr_options = [
+                    ("Florence-2 (Fast, Lightweight, Default)", "florence"),
+                    ("Qwen-VL (High Precision, ~30GB)", "qwen-vl"),
+                ]
+                ocr_model = prompt_choice("OCR Model", ocr_options)
+                if ocr_model is None: return
+                
+            elif ext in AUDIO_EXTS:
+                detected_type = "audio"
+                print(f"\n🎤 Detected: Audio file (Speech Translation)")
+                
+            elif ext in DOC_EXTS:
+                detected_type = "document"
+                print(f"\n📄 Detected: Document file")
+                
+            else:
+                # Unknown type - try as text file
+                detected_type = "document"
+                print(f"\n📄 Treating as text document")
         
-        # Build command
-        cmd = f"-gd \"{input_file}\" -cm {model}"
+        # 3. Select Translation Model (from models.py)
+        print("\n📦 Select Translation Model:\n")
+        from ai_media.models import TRANSLATION_MODELS
         
+        # Build model options from TRANSLATION_MODELS (exclude defaults)
+        model_labels = {
+            "nllb-200-3.3b": "NLLB 200 - 3.3B (High Quality, Default)",
+            "nllb-200-distilled": "NLLB 200 - Distilled (Fast)",
+            "alma-13b": "ALMA 13B (Professional Text)",
+            "qwen3-8b": "Qwen 3 8B (Natural Output)",
+            "qwen3-14b": "Qwen 3 14B (Best Context)",
+            "llama-3.1-8b": "Llama 3.1 8B (Idioms & Nuance)",
+            "seamless-m4t-v2-large": "Seamless M4T v2 (Speech Only)",
+        }
+        
+        # Filter models based on detected type
+        if detected_type == "audio":
+            # Audio: show Seamless first (best for speech), then others
+            model_keys = ["seamless-m4t-v2-large"]  # Only Seamless for speech
+        else:
+            # Text/Image/Document: show text models, exclude Seamless
+            model_keys = [k for k in TRANSLATION_MODELS.keys() 
+                         if not k.startswith("default") and k != "seamless-m4t-v2-large"]
+        
+        model_options = [(model_labels.get(k, k), k) for k in model_keys]
+        model = prompt_choice("Model", model_options)
+        if model is None: return
+
+        # 4. Target Language
+        print("\n🗣️  Select Target Language:\n")
+        
+        # Get languages with full names from pycountry (cached)
+        from ai_media.models import get_nllb_languages_with_names
+        
+        lang_list = list(get_nllb_languages_with_names())
+        lang_list.append(("Other (Manual Entry)", "manual"))
+        
+        target_lang = prompt_menu("Target Language", lang_list, page_size=30)
+            
+        if target_lang is None: return
+        
+        if target_lang == "manual":
+            target_lang = prompt_text("Enter NLLB language code (e.g. eng_Latn, fra_Latn)")
+            if not target_lang: return
+
+        # Build Command based on detected type
+        if detected_type == "text":
+            cmd = f'-tr --target-language {target_lang} --translation-model {model} -p "{input_data}"'
+        elif detected_type == "image":
+            # Image translation uses document convert with OCR + translate
+            cmd = f'-cd "{input_data}" -cdt png --translate --target-language {target_lang} --translation-model {model} -om {ocr_model}'
+        elif detected_type == "audio":
+            # Audio uses speech translation
+            cmd = f'-tr --target-language {target_lang} --translation-model {model} -ii "{input_data}"'
+        else:
+            # Document translation
+            cmd = f'-tr --target-language {target_lang} --translation-model {model} -ii "{input_data}"'
+             
         run_self_command(cmd)
         wait_for_back()
+
+    def analysis_menu(preset_model=None):
+        """Analysis submenu (Caption & Subtitles)."""
+        clear_screen()
+        show_header("Analysis Tools")
+        
+        # Select Task
+        print("👁️  Select Analysis Task:\n")
+        task_options = [
+            ("Generate Description (Image/Video)", "analysis"),
+            ("Generate Subtitles (Auto-Subtitles + Translation)", "subtitles"),
+        ]
+        task = prompt_choice("Task", task_options)
+        
+        if task is None:
+            return
+
+        if task == "analysis":
+            # --- Caption Flow ---
+            print("\n📂 Select input image or video:\n")
+            input_file = prompt_file("Enter file path")
+            if input_file is None:
+                return
+            
+            if preset_model:
+                model = preset_model
+                print(f"📦 Model: {model}\n")
+            else:
+                print("\n📦 Select Caption Model:\n")
+                model_options = [
+                    ("Florence-2 (Default, SOTA)", "florence"),
+                    ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
+                    ("Qwen3-VL 4B (Balanced)", "qwen3-vl-4b"),
+                    ("Qwen3-VL 2B (Lightweight)", "qwen3-vl-2b"),
+                    ("BLIP", "blip"),
+                ]
+                model = prompt_choice("Model", model_options)
+                if model is None:
+                    return
+            
+            cmd = f"-gd \"{input_file}\" -cm {model}"
+            run_self_command(cmd)
+            wait_for_back()
+
+        elif task == "subtitles":
+            # --- Subtitles Flow ---
+            print("\n🎬 Select input video or audio file:\n")
+            input_file = prompt_file("Enter file path")
+            if input_file is None:
+                return
+
+            print("\n📦 Select Whisper Model (Transcription):\n")
+            w_options = [
+                ("Small (Balanced)", "small"),
+                ("Medium (Better)", "medium"),
+                ("Large-v3 (Best)", "large-v3"),
+                ("Base (Fast)", "base"),
+                ("Tiny (Lightweight)", "tiny"),
+            ]
+            w_model = prompt_choice("Whisper Model", w_options)
+            if w_model is None:
+                return
+            
+            # Subtitle Format
+            print("\n📄 Select Output Format:\n")
+            fmt_options = [
+                ("SRT (Universal, default)", "srt"),
+                ("VTT (Web browsers)", "vtt"),
+                ("ASS (Styled subtitles)", "ass"),
+                ("SUB (MicroDVD, frame-based)", "sub"),
+                ("TXT (Plain text, no timestamps)", "txt"),
+                ("JSON (Structured data)", "json"),
+            ]
+            sub_format = prompt_choice("Format", fmt_options)
+            if sub_format is None:
+                sub_format = "srt"
+            
+            # VAD Preset
+            print("\n🔊 VAD Preset (Voice Activity Detection):\n")
+            vad_options = [
+                ("Normal (Default)", "normal"),
+                ("Noisy (Strict, for noisy recordings)", "noisy"),
+                ("Sensitive (For quiet/faint speech)", "sensitive"),
+            ]
+            vad_preset = prompt_choice("VAD Preset", vad_options)
+            if vad_preset is None:
+                vad_preset = "normal"
+            
+            # Translation
+            print()
+            translate = input("🌐 Translate subtitles? [y/N]: ").strip().lower()
+            target_langs = ""
+            if translate in ['y', 'yes']:
+                print("\n   Enter target language codes (comma separated).")
+                print("   Common: es (Spanish), fr (French), de (German), ja (Japanese), zh (Chinese)")
+                target_langs = prompt_text("Target Languages (e.g. 'fr,es')")
+            
+            cmd = f"-gs -ii \"{input_file}\" --whisper-model {w_model} --subtitle-format {sub_format}"
+            if vad_preset != "normal":
+                cmd += f" --subtitle-vad-preset {vad_preset}"
+            if target_langs:
+                cmd += f" --subtitle-translate-to \"{target_langs}\""
+
+            run_self_command(cmd)
+            wait_for_back()
     
     def article_menu(preset_mode=None):
         """Generate article/research submenu."""
@@ -1081,8 +1281,8 @@ def run_interactive(jump_point=None):
                 ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
                 ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
                 ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
-                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
+                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
                 ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
                 ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
                 ("Mistral Nemo-12B", "mistral-nemo-12b"),
@@ -1184,8 +1384,8 @@ def run_interactive(jump_point=None):
                 ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
                 ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
                 ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
-                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
+                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
             ]
             model = prompt_choice("Model", model_options)
             if model is None:
@@ -1224,8 +1424,8 @@ def run_interactive(jump_point=None):
                 ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
                 ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
                 ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen3-8B (Newer knowledge)", "qwen3-8b"),
-                ("Qwen 2.5-14B (Larger)", "qwen-2.5-14b"),
+                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
+                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
                 ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
                 ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
                 ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
@@ -1644,8 +1844,10 @@ def run_interactive(jump_point=None):
             convert_menu()
         elif action == "doc_convert":
             document_convert_menu()
-        elif action == "caption":
-            caption_menu(initial_model if first_run or initial_action == 'caption' else None)
+        elif action == "translate":
+            translate_menu()
+        elif action == "analysis":
+            analysis_menu(initial_model if first_run or initial_action == 'analysis' else None)
             initial_model = None
         elif action == "article":
             article_menu(initial_model if first_run or initial_action == 'article' else None)

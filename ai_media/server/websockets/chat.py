@@ -117,6 +117,12 @@ async def websocket_chat(websocket: WebSocket):
             elif data.get("type") == "message":
                 user_message = data.get("content", "")
                 model = data.get("model", "default")
+                translate_input = data.get("translate_input", False)
+                translate_output = data.get("translate_output", False)
+                target_language = data.get("target_language", "eng_Latn")
+                input_source_language = data.get("input_source_language", "auto")  # Source language for input translation
+                input_translation_model = data.get("input_translation_model", "nllb-200-3.3b")  # Model for input translation
+                translation_model = data.get("translation_model", "nllb-200-3.3b")  # Model for output translation
                 
                 # Check for slash commands
                 if user_message.startswith("/"):
@@ -148,11 +154,46 @@ async def websocket_chat(websocket: WebSocket):
                         })
                         continue
 
-                # Add to history
+                # Auto-Translate Input
+                original_user_message = user_message
+                if translate_input:
+                    try:
+                        from ai_media.generators.text import ArticleGenerator
+                         # Ensure generator is loaded (or reusable static method?)
+                         # We need an instance to access the pipeline logic.
+                        generator = model_cache.get("text", model)
+                        if generator is None:
+                            generator = ArticleGenerator(model_name=model, bypass_warning=True)
+                            model_cache.set("text", model, generator)
+                            
+                        # Translate to English using specified source language (or auto-detect for NLLB models)
+                        # Keep model loaded for potential follow-up messages in chat
+                        source_lang_for_translation = input_source_language if input_source_language != "auto" else "auto"
+                        
+                        # Notify client
+                        await safe_send_json({"type": "status", "status": "processing", "message": f"Translating input ({source_lang_for_translation} -> en)..."})
+                        
+                        translated_input = generator.translate_text(
+                            user_message, 
+                            "en", 
+                            source_lang=source_lang_for_translation, 
+                            model_id=input_translation_model,
+                            keep_loaded=True  # Chat: keep loaded for follow-up messages
+                        )
+                        if translated_input:
+                             user_message = translated_input
+                             await safe_send_json({"type": "log", "message": f"🌍 Input translated: {original_user_message} -> {user_message}"})
+                    except Exception as e:
+                        print(f"Server translation error: {e}")
+
+                # Add to history (store English version for LLM context)
                 chat_sessions[session_id].append({"role": "user", "content": user_message})
                 
                 # Send acknowledgment
-                await safe_send_json({"type": "status", "status": "processing", "message": "Thinking..."})
+                # Send acknowledgment with specific status
+                is_cached = model_cache.get("text", model) is not None
+                status_msg = "Thinking..." if is_cached else f"Loading {model}..."
+                await safe_send_json({"type": "status", "status": "loading" if not is_cached else "processing", "message": status_msg})
                 
                 # Generate response (in thread pool to not block)
                 # Generate response (in thread pool to not block)
@@ -172,11 +213,51 @@ async def websocket_chat(websocket: WebSocket):
                 # Add to history (store CLEAN content without reasoning to save context tokens)
                 chat_sessions[session_id].append({"role": "assistant", "content": parsed["content"]})
                 
+                # Translate Output if requested
+                final_content = parsed["content"]
+                original_content = None # Only set if we translated
+                
+                if translate_output and target_language:
+                     await safe_send_json({"type": "status", "status": "processing", "message": f"Translating output (en -> {target_language})..."})
+                     try:
+                        from ai_media.generators.text import ArticleGenerator
+                        generator = model_cache.get("text", model)
+                        if generator:
+                             # Translate English Output -> Target
+                             translated_output = generator.translate_text(
+                                 parsed["content"], 
+                                 target_language, 
+                                 source_lang="en", 
+                                 model_id=translation_model, 
+                                 keep_loaded=True,
+                                 is_chat=True
+                             )
+                             
+                             if translated_output:
+                                 # Extract reasoning from translation if present
+                                 trans_parsed = ArticleGenerator.extract_reasoning(translated_output)
+                                 
+                                 if trans_parsed["content"] != parsed["content"]:
+                                     original_content = parsed["content"]
+                                     final_content = trans_parsed["content"]
+                                     
+                                     # Merge translation reasoning into main reasoning field
+                                     if trans_parsed["reasoning"]:
+                                          if parsed["reasoning"]:
+                                              parsed["reasoning"] += f"\n\n---\n**Translation Reasoning ({translation_model}):**\n{trans_parsed['reasoning']}"
+                                          else:
+                                              parsed["reasoning"] = f"**Translation Reasoning ({translation_model}):**\n{trans_parsed['reasoning']}"
+                     except Exception as e:
+                          print(f"Output translation error: {e}")
+
                 await safe_send_json({
                     "type": "response",
-                    "content": parsed["content"],
+                    "content": final_content,
+                    "original_content": original_content,
                     "reasoning": parsed["reasoning"],
                     "session_id": session_id,
+                    # Include translated input if input was auto-translated to English
+                    "translated_input": user_message if (translate_input and user_message != original_user_message) else None,
                 })
                 
             elif data.get("type") == "clear":
@@ -209,3 +290,4 @@ async def websocket_chat(websocket: WebSocket):
             torch.cuda.empty_cache()
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
+

@@ -36,7 +36,7 @@ Convert between document formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON).
 | :--- | :--- |
 | `-cd, --convert-document` | Input document file (e.g., report.docx). |
 | `-cdt, --convert-document-to` | Output format: md, html, pdf, docx, rtf, txt, json. |
-| `-om, --ocr-model` | OCR Model: 'qwen-vl' (default, precise) or 'florence' (fast, ~1.5GB RAM). |
+| `-om, --ocr-model` | OCR Model: 'florence' (default, fast, ~1.5GB RAM) or 'qwen-vl' (precise). |
 
 ## Conversion Matrix
 
@@ -57,8 +57,8 @@ Convert between document formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON).
 > 
 > | Model | Speed | Accuracy | Req. RAM | Best For |
 > | :--- | :--- | :--- | :--- | :--- |
-> | **Qwen-VL** | Standard (~55s) | **High (SOTA)** | **~30GB** | **Default.** Best for code, exact paths, symbols, emojis. |
-> | **Florence-2** | Fast (~25s) | Moderate | ~1.5GB | Quick scans, high-contrast text. |
+> | **Florence-2** | **Fast (~25s)** | **Moderate** | **~1.5GB** | **Default.** Quick scans, high-contrast text. |
+> | **Qwen-VL** | Standard (~55s) | High (SOTA) | ~30GB | Code, exact paths, symbols, emojis. |
 
 This happens automatically for scanned PDFs or when explicitly selected for images. Use `-om qwen-vl` if accuracy is critical.
 

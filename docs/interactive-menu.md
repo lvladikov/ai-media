@@ -66,7 +66,7 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `3/3` | | `audio/musicgen-large` | MusicGen Large (Quality) |
 | `3/4` | | `audio/audioldm2` | AudioLDM2 (SFX) |
 | `3/5` | | `audio/bark` | Bark (TTS) |
-| `4` | **Vision** | `caption` | Vision Menu |
+| `4` | **Analysis** | `analysis` | Analysis Menu |
 | `5` | **Article** | `article` | Article/Research Menu |
 | `5/1` | | `article/offline` | Offline Article |
 | `5/2` | | `article/online` | Online Research |
@@ -77,13 +77,15 @@ You can jump directly to specific submenus or models using shortcut paths with `
 | `8/2` | | `transform/rembg` | Background Removal |
 | `8/3` | | `transform/silhouette` | Silhouette |
 | `9` | **Convert** | `convert` | Convert Menu |
-| `10` | **Upscale** | `upscale` | Upscale Menu |
-| `11` | **Test** | `test` | Run Tests |
-| `11/1` | | `test/unit` | Unit Tests |
-| `11/2` | | `test/integration` | Integration Tests |
-| `11/3` | | `test/codec` | Codec Limits Test |
-| `12` | **Sysinfo** | `sysinfo` | System Information |
-| `13` | **Web Server** | `web` | Web Server Mode Menu |
+| `10` | **Doc Convert** | `doc_convert` | Convert Document |
+| `11` | **Translate** | `translate` | Translate Menu |
+| `12` | **Upscale** | `upscale` | Upscale Menu |
+| `13` | **Test** | `test` | Run Tests |
+| `13/1` | | `test/unit` | Unit Tests |
+| `13/2` | | `test/integration` | Integration Tests |
+| `13/3` | | `test/codec` | Codec Limits Test |
+| `14` | **Sysinfo** | `sysinfo` | System Information |
+| `15` | **Web Server** | `web` | Web Server Mode Menu |
 
 ```bash
 python ai-media.py --interactive "image/sdxl"

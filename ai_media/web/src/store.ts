@@ -3,8 +3,8 @@ import { create } from 'zustand';
 // --- Types ---
 
 export type TabId =
-  | 'image' | 'video' | 'audio' | 'article' | 'code' | 'chat' | 'vision'
-  | 'transform' | 'convert' | 'upscale' | 'jobs' | 'settings';
+  | 'image' | 'video' | 'audio' | 'article' | 'code' | 'chat' | 'analysis'
+  | 'transform' | 'convert' | 'translate' | 'upscale' | 'jobs' | 'settings';
 
 export interface Job {
   job_id: string;
@@ -26,6 +26,7 @@ export interface Job {
   params?: Record<string, string | number | boolean>;
   generation_started_at?: string;
   reasoning?: string; // Optional reasoning/thinking block from R1 models
+  target_format?: string;
 }
 
 
@@ -65,9 +66,34 @@ export interface SystemInfo {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  originalContent?: string; // For translated bot messages (English before translation)
+  translatedInput?: string; // For translated user messages (English sent to model)
   reasoning?: string; // Optional reasoning block from R1 models
   thinkingTime?: string; // Time taken to generate response (e.g., "45s", "2m 30s")
   timestamp?: string;
+}
+
+// Model info from API
+export interface ModelInfo {
+  name: string;
+  is_default?: boolean;
+  model_id?: string;
+  vram_required?: number | null;
+  ram_required?: number | null;
+}
+
+// All model categories cached globally
+export interface ModelsCache {
+  image: ModelInfo[];
+  video: ModelInfo[];
+  audio: ModelInfo[];
+  text: ModelInfo[];
+  upscale: ModelInfo[];
+  transform: ModelInfo[];
+  analysis: ModelInfo[];
+  transcription: ModelInfo[];
+  ocr: ModelInfo[];
+  translation: ModelInfo[];
 }
 
 // --- Store ---
@@ -96,6 +122,7 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatSessionId: string | null;
   addChatMessage: (message: ChatMessage) => void;
+  updateLastUserMessage: (updates: Partial<ChatMessage>) => void;
   setChatSessionId: (id: string) => void;
   clearChat: () => void;
 
@@ -113,6 +140,16 @@ interface AppState {
   // Server connection
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
+
+  // Models cache (global, fetched once)
+  models: ModelsCache | null;
+  modelsLoading: boolean;
+  setModels: (models: ModelsCache) => void;
+  setModelsLoading: (loading: boolean) => void;
+
+  // Constants cache (resolutions etc)
+  resolutions: Record<string, [number, number]> | null;
+  setResolutions: (resolutions: Record<string, [number, number]>) => void;
 }
 
 // Helper to get initial tab from URL
@@ -121,8 +158,8 @@ const getInitialTab = (): TabId => {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
   const validTabs: TabId[] = [
-    'image', 'video', 'vision', 'audio', 'article', 'code', 'chat',
-    'transform', 'convert', 'upscale', 'jobs', 'settings'
+    'image', 'video', 'analysis', 'audio', 'article', 'code', 'chat',
+    'transform', 'convert', 'translate', 'upscale', 'jobs', 'settings'
   ];
   return (validTabs.includes(tab as TabId) ? tab as TabId : 'image');
 };
@@ -161,6 +198,17 @@ export const useAppStore = create<AppState>((set) => ({
   addChatMessage: (message) => set((state) => ({
     chatMessages: [...state.chatMessages, { ...message, timestamp: new Date().toISOString() }],
   })),
+  updateLastUserMessage: (updates) => set((state) => {
+    // Find the last user message and update it
+    const messages = [...state.chatMessages];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        messages[i] = { ...messages[i], ...updates };
+        break;
+      }
+    }
+    return { chatMessages: messages };
+  }),
   setChatSessionId: (id) => set({ chatSessionId: id }),
   clearChat: () => set({ chatMessages: [], chatSessionId: null }),
 
@@ -178,4 +226,14 @@ export const useAppStore = create<AppState>((set) => ({
   // Server connection
   isConnected: false,
   setConnected: (connected) => set({ isConnected: connected }),
+
+  // Models cache
+  models: null,
+  modelsLoading: false,
+  setModels: (models) => set({ models, modelsLoading: false }),
+  setModelsLoading: (loading) => set({ modelsLoading: loading }),
+
+  // Constants cache
+  resolutions: null,
+  setResolutions: (resolutions) => set({ resolutions }),
 }));

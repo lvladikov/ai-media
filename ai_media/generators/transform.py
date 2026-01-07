@@ -371,7 +371,7 @@ def remove_background(input_path, output_path, model_name="remove-bg", silhouett
             final_image.putalpha(mask_pil)
             
         final_image.save(output_path, "PNG")
-        print(f"✅ Saved to {output_path}")
+        print(f"✅ Saved to: {os.path.normpath(output_path)}")
         return True
         
     except Exception as e:

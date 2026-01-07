@@ -362,3 +362,91 @@ def generate_caption(input_path, device, quiet=False, model_type="florence"):
     except Exception as e:
         print(f"❌ Caption generation failed: {e}")
         return None
+
+
+def generate_ocr(input_path, device, quiet=False):
+    """
+    Generate OCR with bounding boxes using Florence-2.
+    Returns:
+        List of dicts: {'quad_box': [x1,y1,x2,y2,x3,y3,x4,y4], 'text': str, 'box': [x,y,w,h]}
+        or None on failure.
+    """
+    try:
+        from transformers import AutoProcessor, AutoModelForCausalLM
+        from diffusers.utils import load_image
+        import torch
+        from PIL import Image
+        from ..utils.system import is_bfloat16_supported
+        
+        caption_model_id = "microsoft/Florence-2-large"
+        
+        if not quiet:
+            print(f"   Loading OCR Model: {caption_model_id}...")
+        
+        if device.type == "cuda":
+            dtype = torch.bfloat16 if is_bfloat16_supported() else torch.float16
+        else:
+            dtype = torch.float32
+        
+        processor = AutoProcessor.from_pretrained(caption_model_id, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            caption_model_id, 
+            trust_remote_code=True,
+            attn_implementation="eager",
+            torch_dtype=dtype
+        ).to(device)
+        
+        task_prompt = "<OCR_WITH_REGION>"
+        raw_image = load_image(input_path).convert('RGB')
+        
+        inputs = processor(text=task_prompt, images=raw_image, return_tensors="pt")
+        
+        if device.type == "mps":
+            inputs["pixel_values"] = inputs["pixel_values"].to(device, torch.float32)
+            inputs["input_ids"] = inputs["input_ids"].to(device)
+        else:
+            inputs["pixel_values"] = inputs["pixel_values"].to(dtype=dtype, device=device)
+            inputs["input_ids"] = inputs["input_ids"].to(device=device)
+
+        generated_ids = model.generate(
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=1024,
+            do_sample=False,
+            num_beams=3,
+        )
+        
+        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+        parsed_answer = processor.post_process_generation(
+            generated_text, task=task_prompt, 
+            image_size=(raw_image.width, raw_image.height)
+        )
+        
+        # Format: {'<OCR_WITH_REGION>': {'quad_boxes': [[...], ...], 'labels': ['text', ...]}}
+        result = parsed_answer[task_prompt]
+        
+        # Convert to standardized list of dicts
+        ocr_data = []
+        if 'quad_boxes' in result and 'labels' in result:
+             for box, text in zip(result['quad_boxes'], result['labels']):
+                 # Convert quad to simple box [x, y, w, h] for simple usage if needed
+                 # box is [x1, y1, x2, y2, x3, y3, x4, y4]
+                 xs = box[0::2]
+                 ys = box[1::2]
+                 x_min, x_max = min(xs), max(xs)
+                 y_min, y_max = min(ys), max(ys)
+                 
+                 ocr_data.append({
+                     'quad_box': box,
+                     'text': text,
+                     'box': [x_min, y_min, x_max - x_min, y_max - y_min]
+                 })
+                 
+        if not quiet:
+            print(f"   OCR Detected {len(ocr_data)} text regions.")
+            
+        return ocr_data
+
+    except Exception as e:
+        print(f"❌ OCR generation failed: {e}")
+        return None

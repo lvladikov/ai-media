@@ -16,6 +16,7 @@ def load_config() -> Dict[str, Any]:
             "ai_media": str(Path(__file__).parent.parent.parent),
             "ffmpeg": "ffmpeg",
             "media_output": "output",
+            "temp": None,  # Temp folder for intermediate files (default: {media_output}/temp)
         },
         "server": {
             "host": "127.0.0.1",
@@ -49,6 +50,13 @@ def load_config() -> Dict[str, Any]:
 
 # Load config on import
 CONFIG = load_config()
+
+# Set temp folder path (use media_output/temp if not specified)
+if not CONFIG["paths"]["temp"]:
+    CONFIG["paths"]["temp"] = os.path.join(CONFIG["paths"]["media_output"], "temp")
+
+# Create temp directory if it doesn't exist
+os.makedirs(CONFIG["paths"]["temp"], exist_ok=True)
 
 # Set HF Home if configured
 if CONFIG["paths"]["hf_home"]:

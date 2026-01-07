@@ -9,6 +9,7 @@ interface JobProgressModalProps {
   jobId: string | null;
   onClose?: () => void;
   onViewResult?: () => void;
+  title?: string;
 }
 
 
@@ -29,7 +30,7 @@ const getFriendlyModelName = (modelName: string | undefined | null) => {
   return modelName;
 };
 
-export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressModalProps) {
+export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobProgressModalProps) {
   const { jobs, removeJob } = useAppStore();
   const [dots, setDots] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
@@ -103,10 +104,12 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                   <Loader2 className="animate-spin text-brand-400" size={20} />}
 
             <span className="capitalize text-primary">
-              {isComplete ? 'Generation Complete' :
-                isFailed ? 'Generation Failed' :
-                  isCancelled ? 'Generation Cancelled' :
-                    (job.type === 'vision' ? 'Vision/Description' : job.type) + ' Generation'}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
+              {title ? title : (
+                isComplete ? 'Generation Complete' :
+                  isFailed ? 'Generation Failed' :
+                    isCancelled ? 'Generation Cancelled' :
+                      (job.type === 'analysis' ? 'Analysis' : job.type) + ' Generation'
+              )}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
             </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}
@@ -129,9 +132,11 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                     job.phase === 'failed' ? 'Failed' :
                       'Processing...'}
             </p>
-            <p className="text-xs text-secondary uppercase tracking-wider mt-1">
-              {job.phase}
-            </p>
+            {!['complete', 'failed'].includes(job.phase) && (
+              <p className="text-xs text-secondary uppercase tracking-wider mt-1">
+                {job.phase}
+              </p>
+            )}
           </div>
 
           {/* Server Logs Panel - Like Chat */}
@@ -162,7 +167,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
           {!isComplete && !isFailed && (
             <div className="space-y-2">
               <div className="h-2 w-full bg-tertiary rounded-full overflow-hidden relative">
-                {(job.type === 'code' || job.type === 'article' || job.type === 'vision' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (
+                {(job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (
                   <div className="h-full bg-brand-500 w-1/3 absolute rounded-full animate-progress-bounce" />
                 ) : (
                   <div
@@ -174,7 +179,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult }: JobProgressMo
                 )}
               </div>
               <div className="flex justify-between text-xs text-secondary">
-                <span>{(job.type === 'code' || job.type === 'article' || job.type === 'vision' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg')) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
+                <span>{(job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
                 {percent < 100 && <span>Please wait...</span>}
               </div>
             </div>

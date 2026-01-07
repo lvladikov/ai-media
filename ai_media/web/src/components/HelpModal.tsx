@@ -1,6 +1,14 @@
-import { X, Book, Lock, ExternalLink, Image, Film, Music, FileText, Wand2, ScanEye, Monitor, Cpu, Terminal, Palette, FileType, MessageSquare, TrendingUp, Sparkles, Info, ArrowRight } from 'lucide-react';
+import {
+  X, Book, Lock, ExternalLink, Image, Film, Music, FileText, Wand2, ScanEye, Monitor, Cpu, Terminal, Palette, FileType, MessageSquare, TrendingUp, Sparkles, Info, ArrowRight, Globe, Languages, Search,
+  Check,
+  LayoutList,
+  Mic,
+  Code,
+} from 'lucide-react';
 import { useAppStore } from '../store';
 import { useState, useEffect } from 'react';
+import { ALL_LANGUAGES, SEAMLESS_LANGUAGES, LLM_LANGUAGES, ALMA_LANGUAGES } from '../data/languages';
+
 
 // --- Shared UI Components ---
 
@@ -465,41 +473,331 @@ function HelpAudio({ onNavigate }: HelpSectionProps) {
   );
 }
 
-function HelpText() {
+function HelpChat({ onNavigate }: HelpSectionProps) {
   return (
-    <div className="space-y-6 max-w-4xl text-secondary text-sm">
-      <p className="text-base">
-        Unified hub for <strong>Articles</strong>, <strong>Code</strong>, and <strong>Deep Research</strong> using LLMs.
-      </p>
+    <div className="space-y-8 max-w-4xl text-secondary text-sm">
+      {/* 1. Intro */}
+      <div className="bg-primary/5 p-6 rounded-xl border border-border">
+        <h4 className="text-xl font-bold text-primary mb-2">Chat Interface</h4>
+        <p className="text-base leading-relaxed">
+          The <strong>Chat</strong> is your central command center. Use it for quick queries,
+          iterative debugging, translation, and orchestrating other tools.
+        </p>
+      </div>
 
+      {/* 2. Model Highlights */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-primary-500/10 border border-primary-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-primary-600 dark:text-primary-400 mb-1 flex items-center gap-1"><Sparkles size={12} /> General Use</div>
+          <div className="text-lg font-bold text-primary">Llama 3.1 8B</div>
+          <div className="text-xs text-secondary opacity-80">Balanced & Stable</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1"><Cpu size={12} /> Reasoning</div>
+          <div className="text-lg font-bold text-primary">DeepSeek R1</div>
+          <div className="text-xs text-secondary opacity-80">Logic & Math</div>
+        </div>
+        <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-xl opacity-60">
+          <div className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1"><Terminal size={12} /> Coding</div>
+          <div className="text-lg font-bold text-primary">Qwen 3 (Reasoning)</div>
+          <div className="text-xs text-secondary opacity-80">Better in Code Tab</div>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-xl opacity-60">
+          <div className="text-xs font-bold text-purple-600 dark:text-purple-400 mb-1 flex items-center gap-1"><Wand2 size={12} /> Creative</div>
+          <div className="text-lg font-bold text-primary">Mistral Nemo</div>
+          <div className="text-xs text-secondary opacity-80">Better in Article Tab</div>
+        </div>
+      </div>
+
+      {/* 3. Model Table */}
+      <SectionTitle icon={<Cpu size={20} />}>Model Comparison</SectionTitle>
+      <Table
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        rows={[
+          [
+            <span className="font-medium">Llama 3.1 8B</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'General Assistant'
+          ],
+          [
+            <span className="font-medium">Mistral Nemo 12B</span>,
+            '~24GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Creative Writing'
+          ],
+          [
+            <span className="font-medium">Qwen 2.5 32B</span>,
+            '~24GB ⚠️', '120GB', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Coding'
+          ],
+          [
+            <span className="font-medium">Qwen 3 8B (Reasoning)</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Instruction Following'
+          ],
+          [
+            <span className="font-medium">Qwen 3 14B (Reasoning)</span>,
+            '~28GB', '48GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Coding & Logic'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 7B</span>,
+            '~7GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Logic & Math (Fast)'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 14B</span>,
+            '~14GB', '32GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Hard Problems'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 8B</span>,
+            '~8GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'General Reasoning'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
+            '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ]
+        ]}
+      />
+
+      {/* 4. Core Capabilities */}
+      <SectionTitle icon={<Terminal size={20} />}>Core Capabilities</SectionTitle>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="Capabilities" icon={<FileText size={16} className="text-emerald-600 dark:text-emerald-400" />}>
-          <ul className="list-disc pl-4 space-y-1">
-            <li><strong>Article</strong>: Context-aware offline writing.</li>
-            <li><strong>Deep Research</strong>: Autonomous web search (DuckDuckGo).</li>
-            <li><strong>Chat</strong>: Local ChatGPT style with `/read` commands.</li>
-            <li><strong>Code</strong>: Project scaffolding and script generation.</li>
-          </ul>
+        {/* Translation - High Priority in Chat */}
+        <InfoCard title="Smart Translation" icon={<Globe size={16} className="text-blue-500" />}>
+          <p className="mb-2">Real-time, zero-overhead translation integrated directly into chat.</p>
+          <button
+            onClick={() => onNavigate('translate')}
+            className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-medium inline-flex items-center gap-1 transition-colors"
+          >
+            View Translation Models <ArrowRight size={12} />
+          </button>
         </InfoCard>
 
-        <InfoCard title="DeepSeek R1" icon={<Cpu size={16} className="text-blue-600 dark:text-blue-400" />}>
+        {/* Deep Research - Shared */}
+        <InfoCard title="Deep Research" icon={<Search size={16} className="text-green-500" />}>
           <p>
-            We support <strong>DeepSeek R1 Distilled</strong> models (Qwen/Llama).
-            These are "Reasoning" models that output a <code className="text-amber-200">&lt;think&gt;</code> process before answering.
-            Excellent for complex logic, math, and coding.
+            Autonomous agent that browses the web to answer complex questions.
           </p>
+        </InfoCard>
+
+        {/* Links to Other Tools */}
+        <InfoCard title="Article Generator" icon={<FileText size={16} className="text-purple-500" />}>
+          <p className="mb-2">Need to write a blog post or documentation?</p>
+          <button
+            onClick={() => onNavigate('article')}
+            className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-medium inline-flex items-center gap-1 transition-colors"
+          >
+            Switch to Article Guide <ArrowRight size={12} />
+          </button>
+        </InfoCard>
+
+        <InfoCard title="Code Generator" icon={<Code size={16} className="text-orange-500" />}>
+          <p className="mb-2">Starting a new software project?</p>
+          <button
+            onClick={() => onNavigate('code')}
+            className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-medium inline-flex items-center gap-1 transition-colors"
+          >
+            Switch to Code Guide <ArrowRight size={12} />
+          </button>
         </InfoCard>
       </div>
 
-      <SectionTitle icon={<Terminal size={20} />}>Chat Commands</SectionTitle>
+      {/* 5. Commands */}
+      <SectionTitle icon={<LayoutList size={20} />}>Command Reference</SectionTitle>
       <Table
         headers={['Command', 'Description']}
         rows={[
-          [<CodeBadge>/read [file]</CodeBadge>, 'Load local file into context (e.g. valid code, logs).'],
-          [<CodeBadge>/search [query]</CodeBadge>, 'Perform live web search and add results to context.'],
-          [<CodeBadge>/save [name]</CodeBadge>, 'Save conversation or generated content to file.']
+          [<CodeBadge>/search</CodeBadge>, 'Perform a live web search.'],
+          [<CodeBadge>/read</CodeBadge>, 'Load a local file.'],
+          [<CodeBadge>/clear</CodeBadge>, 'Reset history.'],
         ]}
       />
+    </div>
+  );
+}
+
+function HelpArticle({ onNavigate }: HelpSectionProps) {
+  return (
+    <div className="space-y-8 max-w-4xl text-secondary text-sm">
+      <div className="bg-primary/5 p-6 rounded-xl border border-border">
+        <h4 className="text-xl font-bold text-primary mb-2">Article Generator</h4>
+        <p className="text-base leading-relaxed">
+          The <strong>Article</strong> tool is designed for long-form content creation. It generates structured,
+          SEO-optimized articles with automatic markdown formatting.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-purple-600 dark:text-purple-400 mb-1 flex items-center gap-1"><Wand2 size={12} /> Best For Writing</div>
+          <div className="text-lg font-bold text-primary">Mistral Nemo</div>
+          <div className="text-xs text-secondary opacity-80">Excellent Prose</div>
+        </div>
+        <div className="bg-primary-500/10 border border-primary-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-primary-600 dark:text-primary-400 mb-1 flex items-center gap-1"><Sparkles size={12} /> Balanced</div>
+          <div className="text-lg font-bold text-primary">Llama 3.1</div>
+          <div className="text-xs text-secondary opacity-80">Good Structure</div>
+        </div>
+      </div>
+
+      <SectionTitle icon={<FileText size={20} />}>Capabilities</SectionTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Long-Form Generation" icon={<FileText size={16} className="text-purple-500" />}>
+          <p>Generates content in sections, allowing for articles much longer than the context window of standard chats.</p>
+        </InfoCard>
+        <InfoCard title="SEO Optimization" icon={<TrendingUp size={16} className="text-green-500" />}>
+          <p>Automatically structures headings, meta descriptions, and keywords for better readability and reach.</p>
+        </InfoCard>
+      </div>
+
+      <SectionTitle icon={<Cpu size={20} />}>Model Comparison</SectionTitle>
+      <Table
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        rows={[
+          [
+            <span className="font-medium">Llama 3.1 8B</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'General Assistant'
+          ],
+          [
+            <span className="font-medium">Mistral Nemo 12B</span>,
+            '~24GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Creative Writing'
+          ],
+          [
+            <span className="font-medium">Qwen 2.5 32B</span>,
+            '~24GB ⚠️', '120GB', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Coding'
+          ],
+          [
+            <span className="font-medium">Qwen 3 8B (Reasoning - 16GB)</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Instruction Following'
+          ],
+          [
+            <span className="font-medium">Qwen 3 14B (Reasoning - 28GB)</span>,
+            '~28GB', '48GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Coding & Logic'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 7B</span>,
+            '~7GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Logic & Math (Fast)'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 14B</span>,
+            '~14GB', '32GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Hard Problems'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 8B</span>,
+            '~8GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'General Reasoning'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
+            '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ]
+        ]}
+      />
+
+      <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex items-center justify-between">
+        <div>
+          <h4 className="font-bold text-primary text-sm mb-1">Need to Chat?</h4>
+          <p className="text-xs text-secondary">Switch to Chat for brainstorming or quick edits.</p>
+        </div>
+        <button
+          onClick={() => onNavigate('chat')}
+          className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-medium inline-flex items-center gap-1"
+        >
+          Chat Guide <ArrowRight size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HelpCode({ onNavigate }: HelpSectionProps) {
+  return (
+    <div className="space-y-8 max-w-4xl text-secondary text-sm">
+      <div className="bg-primary/5 p-6 rounded-xl border border-border">
+        <h4 className="text-xl font-bold text-primary mb-2">Code Generator</h4>
+        <p className="text-base leading-relaxed">
+          The <strong>Code</strong> tool is a specialized environment for scaffolding complex software projects.
+          Unlike conversational coding in Chat, this tool focuses on structure, file separation, and iterative development.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+        <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1"><Terminal size={12} /> Best For Coding</div>
+          <div className="text-lg font-bold text-primary">Qwen 3 (Reasoning)</div>
+          <div className="text-xs text-secondary opacity-80">SOTA Code Gen</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl">
+          <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1"><Cpu size={12} /> Hard Logic</div>
+          <div className="text-lg font-bold text-primary">DeepSeek R1</div>
+          <div className="text-xs text-secondary opacity-80">Reasoning & Math</div>
+        </div>
+      </div>
+
+      <SectionTitle icon={<Cpu size={20} />}>Model Comparison</SectionTitle>
+      <Table
+        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        rows={[
+          [
+            <span className="font-medium">Llama 3.1 8B</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'General Assistant'
+          ],
+          [
+            <span className="font-medium">Mistral Nemo 12B</span>,
+            '~24GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Creative Writing'
+          ],
+          [
+            <span className="font-medium">Qwen 2.5 32B</span>,
+            '~24GB ⚠️', '120GB', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Coding'
+          ],
+          [
+            <span className="font-medium">Qwen 3 8B (Reasoning - 16GB)</span>,
+            '~16GB', '24GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Instruction Following'
+          ],
+          [
+            <span className="font-medium">Qwen 3 14B (Reasoning - 28GB)</span>,
+            '~28GB', '48GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Coding & Logic'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 7B</span>,
+            '~7GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Logic & Math (Fast)'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Qwen 14B</span>,
+            '~14GB', '32GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'Hard Problems'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 8B</span>,
+            '~8GB', '16GB+', <span className="text-blue-500 font-bold">🧠 Reasoning</span>, 'Mac/CUDA', 'General Reasoning'
+          ],
+          [
+            <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
+            '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ]
+        ]}
+      />
+
+      <SectionTitle icon={<Terminal size={20} />}>Project Scaffolding</SectionTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Multi-File Generation" icon={<FileText size={16} className="text-blue-500" />}>
+          <p>Automatically creates folder structures, configuration files, and source code in one pass.</p>
+        </InfoCard>
+        <InfoCard title="Framework Ready" icon={<Code size={16} className="text-green-500" />}>
+          <p>Presets for React, Python, Node.js, and more. Or define custom stacks.</p>
+        </InfoCard>
+      </div>
+
+      <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-xl flex items-start gap-4">
+        <div className="p-2 bg-orange-500/20 rounded shrink-0 text-orange-600 dark:text-orange-400">
+          <TrendingUp size={20} />
+        </div>
+        <div>
+          <h4 className="font-bold text-primary text-sm mb-1">When to use Code Tool vs Chat?</h4>
+          <p className="text-xs text-secondary leading-normal mb-2">
+            Use <strong>Chat</strong> for quick snippets, debugging, or explaining concepts. <br />
+            Use <strong>Code Tool</strong> when starting a new project or adding a substantial feature that spans multiple files.
+          </p>
+          <button
+            onClick={() => onNavigate('chat')}
+            className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-medium inline-flex items-center gap-1 transition-colors"
+          >
+            Back to Chat Guide <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -544,11 +842,11 @@ function HelpTransform() {
   )
 }
 
-function HelpDescription() {
+function HelpAnalysis() {
   return (
     <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
-        Use Vision-Language Models (VLMs) to give eyes to your AI. Describes images or videos.
+        Use <strong>Computer Vision</strong> and <strong>Speech Recognition</strong> to analyze media content.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -564,6 +862,13 @@ function HelpDescription() {
           <p>
             The script intelligently samples <strong>10 frames</strong> from the video, analyzes each, and synthesizes a full summary of action, setting, and flow.
           </p>
+        </InfoCard>
+
+        <InfoCard title="Speech Recognition" icon={<MessageSquare size={16} className="text-orange-600 dark:text-orange-400" />}>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Auto Subtitles</strong>: Generate <code>.srt</code> files for videos.</li>
+            <li><strong>Transcription</strong>: Convert speech to text (Markdown/JSON) with timestamps.</li>
+          </ul>
         </InfoCard>
       </div>
     </div>
@@ -715,13 +1020,311 @@ function HelpUpscale() {
   );
 }
 
+
+
+
+
+function LanguageTable({ languages, type }: {
+  languages: { label: string; value: string; audioOut?: boolean; code_alias?: string }[],
+  type: 'nllb' | 'seamless' | 'llm' | 'alma'
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filtered = languages.filter(l =>
+    l.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    l.value.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary" />
+        <input
+          type="text"
+          placeholder={`Search ${languages.length} languages...`}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9 pr-3 py-1.5 rounded-lg bg-secondary border border-border text-xs focus:ring-2 focus:ring-brand-500 outline-none w-full md:w-64"
+        />
+      </div>
+
+      <div className="border border-border rounded-lg overflow-hidden bg-secondary/30">
+        <div className="overflow-y-auto max-h-96 custom-scrollbar">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-tertiary dark:bg-primary text-primary font-semibold sticky top-0 z-10 shadow-sm">
+              <tr>
+                <th className="p-3 border-b border-border">Language</th>
+                <th className="p-3 border-b border-border">Code</th>
+                {type === 'seamless' && (
+                  <>
+                    <th className="p-3 border-b border-border w-24 text-center">Audio In</th>
+                    <th className="p-3 border-b border-border w-24 text-center">Audio Out</th>
+                  </>
+                )}
+                <th className="p-3 border-b border-border w-full"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map((lang) => (
+                <tr key={lang.value} className="hover:bg-primary/50 transition-colors">
+                  <td className="p-3 font-medium text-secondary">
+                    {lang.label.split('(')[0].trim()}
+                    <span className="text-[10px] text-tertiary ml-1 opacity-70">
+                      {lang.label.includes('(') ? `(${lang.label.split('(')[1]}` : ''}
+                    </span>
+                  </td>
+                  <td className="p-3 font-mono text-tertiary select-all">
+                    {lang.code_alias || lang.value}
+                  </td>
+                  {type === 'seamless' && (
+                    <>
+                      <td className="p-3 text-center">
+                        <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <Check size={12} />
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        {lang.audioOut ? (
+                          <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                            <Check size={12} />
+                          </div>
+                        ) : (
+                          <span className="text-tertiary/20">-</span>
+                        )}
+                      </td>
+                    </>
+                  )}
+                  <td></td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-tertiary">
+                    No languages found matching "{searchTerm}"
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HelpTranslate(_props: HelpSectionProps) {
+  // Tabs: 'nllb', 'seamless', 'llm', 'alma'
+  const [activeTab, setActiveTab] = useState<'nllb' | 'seamless' | 'llm' | 'alma'>('nllb');
+
+  return (
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
+      <p className="text-base">
+        Translate text, documents, and audio using advanced local models.
+      </p>
+
+      {/* Quick Pick Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+          <div className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mb-1">⚡ Speed & Coverage</div>
+          <div className="text-primary font-bold text-sm">NLLB-200</div>
+          <div className="text-secondary text-xs">Fast, 200+ languages, auto-detect</div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1">🎯 Professional Quality</div>
+          <div className="text-primary font-bold text-sm">ALMA (13B)</div>
+          <div className="text-secondary text-xs">Best nuance & professional tone</div>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+          <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1">💬 Natural Conversation</div>
+          <div className="text-primary font-bold text-sm">Qwen / Llama</div>
+          <div className="text-secondary text-xs">Context-aware, handles idioms</div>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg">
+          <div className="text-amber-600 dark:text-amber-400 font-medium text-xs mb-1">🎤 Speech Translation</div>
+          <div className="text-primary font-bold text-sm">Seamless M4T</div>
+          <div className="text-secondary text-xs">Audio in/out, dubbing</div>
+        </div>
+      </div>
+
+      {/* When to Use Each Model - Detailed Guide */}
+      <div className="bg-primary/50 p-4 rounded-lg border border-border">
+        <h4 className="text-primary font-bold mb-3 flex items-center gap-2">
+          <Info size={16} className="text-blue-500" />
+          Choosing the Right Model
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <div className="font-bold text-emerald-600 dark:text-emerald-400 mb-1">NLLB-200 High Quality (3.3B)</div>
+            <ul className="list-disc pl-4 space-y-1 text-secondary mb-3">
+              <li>✅ Maximum accuracy & nuance</li>
+              <li>✅ Supports 200+ languages</li>
+              <li>⚠️ ~8GB VRAM Required</li>
+              <li>⚠️ Slower (5-10 seconds)</li>
+            </ul>
+
+            <div className="font-bold text-teal-600 dark:text-teal-400 mb-1">NLLB-200 Fast (Distilled 600M)</div>
+            <ul className="list-disc pl-4 space-y-1 text-secondary">
+              <li>✅ Lightning fast (0.5-2 seconds)</li>
+              <li>✅ Low Memory (~4GB VRAM)</li>
+              <li>✅ Good for quick chats/drafts</li>
+              <li>⚠️ Slightly less precise than 3.3B</li>
+            </ul>
+          </div>
+          <div>
+            <div className="font-bold text-purple-600 dark:text-purple-400 mb-1">LLM Models (ALMA, Qwen, Llama)</div>
+            <ul className="list-disc pl-4 space-y-1 text-secondary">
+              <li>✅ Better preservation of tone & nuance</li>
+              <li>✅ Understands idioms & cultural context</li>
+              <li>✅ More natural-sounding output</li>
+              <li>✅ Ideal for professional/creative content</li>
+              <li>⚠️ Slower (10-30 seconds)</li>
+              <li>⚠️ Requires explicit source language</li>
+              <li>⚠️ Higher memory (8-26GB)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Translation Modes" icon={<Globe size={16} className="text-blue-600 dark:text-blue-400" />}>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Text & Documents</strong>: High-accuracy translation for text input and documents (.pdf, .docx, .txt).</li>
+            <li><strong>Images (OCR)</strong>: Extract text from images and translate it automatically.</li>
+            <li><strong>Audio</strong>: Speech-to-Speech and Speech-to-Text translation (Seamless M4T).</li>
+          </ul>
+        </InfoCard>
+
+        <InfoCard title="Language Support" icon={<Languages size={16} className="text-emerald-600 dark:text-emerald-400" />}>
+          <p>
+            We classify coverage into three tiers:
+          </p>
+          <ul className="list-disc pl-4 space-y-1 mt-1">
+            <li><strong>NLLB-200</strong>: Massive support for 200+ global languages including low-resource ones.</li>
+            <li><strong>Seamless M4T</strong>: 100+ input languages for speech translation, with 35 output languages.</li>
+            <li><strong>Major (LLMs)</strong>: Context-aware translation for ~25 major languages using Qwen / Llama.</li>
+          </ul>
+        </InfoCard>
+      </div>
+
+      <div id="models">
+        <SectionTitle icon={<Cpu size={20} />}>Model Capabilities</SectionTitle>
+        <Table
+          headers={['Model', 'Languages', 'Type', 'Best For']}
+          rows={[
+            [
+              <span className="font-bold text-primary">NLLB-200-3.3B</span>,
+              '200+ (FLORES)', 'Neural Machine', 'Accuracy & Coverage (Default)'
+            ],
+            [
+              <span className="font-bold text-primary">Seamless M4T v2</span>,
+              '100 (In) / 35 (Out)', 'Multimodal', 'Speech Translation & Dubbing'
+            ],
+            [
+              <span className="font-bold text-primary">Qwen / Llama</span>,
+              'Major Languages', 'LLM', 'Context, Nuance & Complex Docs'
+            ],
+            [
+              <span className="font-bold text-primary">ALMA</span>,
+              'Major Languages', 'LLM', 'Professional Translation'
+            ]
+          ]}
+        />
+      </div>
+
+      <div id="languages" className="bg-primary/50 p-4 rounded-lg border border-border mt-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <h4 className="text-primary font-bold flex items-center gap-2">
+            <Globe size={16} className="text-primary-600 dark:text-primary-400" />
+            Supported Languages
+          </h4>
+        </div>
+
+        {/* Tabs - Styled like TranslateView / TransformView */}
+        <div className="flex bg-primary p-1 rounded-lg border border-border mb-4 w-full md:w-[480px]">
+          <button
+            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all flex items-center justify-center gap-2 ${activeTab === 'nllb' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+            onClick={() => setActiveTab('nllb')}
+          >
+            <LayoutList size={14} />
+            NLLB-200
+          </button>
+          <button
+            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all flex items-center justify-center gap-2 ${activeTab === 'seamless' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+            onClick={() => setActiveTab('seamless')}
+          >
+            <Mic size={14} />
+            Seamless M4T
+          </button>
+          <button
+            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all flex items-center justify-center gap-2 ${activeTab === 'alma' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+            onClick={() => setActiveTab('alma')}
+          >
+            <Sparkles size={14} />
+            ALMA
+          </button>
+          <button
+            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all flex items-center justify-center gap-2 ${activeTab === 'llm' ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-lg' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'}`}
+            onClick={() => setActiveTab('llm')}
+          >
+            <MessageSquare size={14} />
+            LLMs (Qwen)
+          </button>
+        </div>
+
+        {activeTab === 'nllb' && (
+          <LanguageTable
+            languages={ALL_LANGUAGES}
+            type="nllb"
+          />
+        )}
+
+        {activeTab === 'seamless' && (
+          <div className="space-y-4">
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300">
+              <strong>Note:</strong> Seamless M4T supports <strong>~100 languages for Audio Input</strong>.
+              For Audio Output (Speech-to-Speech), it supports a subset of 35 languages (marked below).
+            </div>
+            <LanguageTable
+              languages={SEAMLESS_LANGUAGES}
+              type="seamless"
+            />
+          </div>
+        )}
+
+        {activeTab === 'alma' && (
+          <div className="space-y-4">
+            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs text-purple-300">
+              <strong>ALMA (Advanced Language Model-based Translator)</strong> is explicitly optimized for professional-grade translation between these core languages.
+            </div>
+            <LanguageTable
+              languages={ALMA_LANGUAGES}
+              type="alma"
+            />
+          </div>
+        )}
+
+        {activeTab === 'llm' && (
+          <LanguageTable
+            languages={LLM_LANGUAGES}
+            type="llm"
+          />
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 function HelpGeneral({ onNavigate }: HelpSectionProps) {
   const tocItems = [
     { id: 'image', title: 'Image Generation', icon: <Image className="text-emerald-600 dark:text-emerald-400" size={24} />, desc: 'Flux, SDXL, SD 3.5' },
     { id: 'video', title: 'Video Generation', icon: <Film className="text-purple-600 dark:text-purple-400" size={24} />, desc: 'Wan 2.2, LTX, Zeroscope' },
     { id: 'audio', title: 'Audio Generation', icon: <Music className="text-blue-600 dark:text-blue-400" size={24} />, desc: 'MusicGen, Bark, AudioLDM' },
     { id: 'text', title: 'Chat, Articles & Research', icon: <FileText className="text-amber-600 dark:text-amber-400" size={24} />, desc: 'DeepSeek, Llama, Web Search' },
+    { id: 'analysis', title: 'Analysis (Vision & Audio)', icon: <ScanEye className="text-indigo-600 dark:text-indigo-400" size={24} />, desc: 'Image Description, Subtitles, Transcription' },
     { id: 'transform', title: 'Transformations', icon: <Wand2 className="text-pink-600 dark:text-pink-400" size={24} />, desc: 'Edit, BG Removal' },
+    { id: 'multimedia', title: 'Converters', icon: <FileType className="text-slate-600 dark:text-slate-400" size={24} />, desc: 'Format conversion & OCR' },
+    { id: 'translate', title: 'Translation', icon: <Globe className="text-teal-600 dark:text-teal-400" size={24} />, desc: 'NLLB & Seamless models' },
     { id: 'upscale', title: 'Upscaling', icon: <TrendingUp className="text-cyan-600 dark:text-cyan-400" size={24} />, desc: 'AI & Lanczos enlargement' },
   ];
 
@@ -829,37 +1432,58 @@ const SECTIONS = [
   { id: 'image', label: 'Image Generation', icon: <Image size={18} />, component: HelpImage },
   { id: 'video', label: 'Video Generation', icon: <Film size={18} />, component: HelpVideo },
   { id: 'audio', label: 'Audio Generation', icon: <Music size={18} />, component: HelpAudio },
-  { id: 'text', label: 'Chat, Articles & Research', icon: <FileText size={18} />, component: HelpText },
+  { id: 'chat', label: 'Chat Interface', icon: <MessageSquare size={18} />, component: HelpChat },
+  { id: 'article', label: 'Article Generator', icon: <FileText size={18} />, component: HelpArticle },
+  { id: 'code', label: 'Code Generator', icon: <Code size={18} />, component: HelpCode },
+  { id: 'analysis', label: 'Analysis', icon: <ScanEye size={18} />, component: HelpAnalysis },
   { id: 'transform', label: 'Transformations', icon: <Wand2 size={18} />, component: HelpTransform },
-  { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
-  { id: 'description', label: 'Vision / Description', icon: <ScanEye size={18} />, component: HelpDescription },
   { id: 'multimedia', label: 'Converters', icon: <FileType size={18} />, component: HelpMultimedia },
+  { id: 'translate', label: 'Translation', icon: <Globe size={18} />, component: HelpTranslate },
+  { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
 ];
 
 export function HelpModal() {
   const { isHelpOpen, helpSection, toggleHelp } = useAppStore();
   const [activeSection, setActiveSection] = useState(helpSection || 'general');
 
-  // Sync activeSection when store's helpSection changes (e.g., from ModelHelpLink)
+  // Sync activeSection when store's helpSection changes AND handle hash scrolling
   useEffect(() => {
     if (helpSection && isHelpOpen) {
-      setActiveSection(helpSection);
+      const parts = helpSection.split('#');
+      const section = parts[0];
+      const hash = parts[1];
+
+      setActiveSection(section);
+
+      if (hash) {
+        // Wait for render cycle/animation
+        setTimeout(() => {
+          const element = document.getElementById(hash);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Optional: highlight effect
+            element.classList.add('bg-brand-500/10', 'rounded-lg', 'transition-colors', 'duration-1000');
+            setTimeout(() => element.classList.remove('bg-brand-500/10'), 3000);
+          }
+        }, 300);
+      }
     }
   }, [helpSection, isHelpOpen]);
 
   if (!isHelpOpen) return null;
 
-  const activeItem = SECTIONS.find(s => s.id === activeSection) || SECTIONS[2];
+  // Fallback to general if activeSection not found (e.g. invalid URL param)
+  const activeItem = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
   const ActiveComponent = activeItem.component;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={toggleHelp}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={toggleHelp}>
       <div
-        className="bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden"
+        className="bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sidebar / Top Nav */}
-        <div className="w-full md:w-64 bg-primary border-b md:border-b-0 md:border-r border-border flex flex-row md:flex-col shrink-0 overflow-x-auto md:overflow-visible">
+        <div className="w-full md:w-64 bg-primary border-b md:border-b-0 md:border-r border-border flex flex-row md:flex-col shrink-0 overflow-x-auto md:overflow-visible custom-scrollbar">
           <div className="p-4 border-r md:border-r-0 md:border-b border-border flex items-center gap-2 font-semibold text-primary shrink-0 sticky left-0 bg-primary z-10 h-16">
             <Book size={20} className="text-brand-600 dark:text-brand-400" />
             <span className="hidden md:inline">Help Guide</span>
@@ -898,7 +1522,7 @@ export function HelpModal() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth">
             <ActiveComponent onNavigate={setActiveSection} />
           </div>
         </div>

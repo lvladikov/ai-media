@@ -26,6 +26,9 @@ async def generate_article(request: ArticleGenerateRequest):
             "format": request.format,
             "length": request.length,
             "online": request.online,
+            "translate": request.translate,
+            "target_language": request.target_language,
+            "translation_model": request.translation_model,
             "bypass_warning": request.bypass_warning,
         }
     )
@@ -47,6 +50,9 @@ async def generate_article(request: ArticleGenerateRequest):
             request.online,
             request.research_iterations,
             request.max_images,
+            request.translate,
+            request.target_language,
+            request.translation_model,
             True, # Always bypass warning in server mode
         ),
     )

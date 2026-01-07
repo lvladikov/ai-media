@@ -78,10 +78,14 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 
 ### Reasoning-Focused (Chain-of-Thought)
 
-> **What is "distilled"?** DeepSeek R1 is a massive reasoning model trained to show step-by-step thinking (Chain-of-Thought). "Distillation" transfers R1's reasoning capabilities into smaller, faster base models like Qwen or Llama. The result: you get R1's explicit reasoning style on consumer hardware, using the efficient architecture of the base model.
+> **What are "Reasoning" models?** These high-performance models excel at complex logic, math, code generation, and step-by-step analysis.
+> *   **DeepSeek R1**: "Distilled" models that show their internal thinking process (Chain-of-Thought). "Distillation" transfers R1's reasoning capabilities into smaller, faster base models like Qwen or Llama. The result: you get R1's explicit reasoning style on consumer hardware, using the efficient architecture of the base model.
+> *   **Qwen 3**: Latest generation models with native robust reasoning and instruction following capabilities.
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
+| **Qwen 3 8B (Reasoning)** | `qwen3-8b` | ~16GB | ~16GB | **(Default)** Latest Qwen. Strong instruction-following. |
+| **Qwen 3 14B (Reasoning)** | `qwen3-14b` | ~28GB | ~28GB | Qwen 3. Great at detailed formatting. |
 | **DeepSeek R1 Qwen 7B** | `deepseek-r1-qwen-7b` | ~4GB | ~7GB | Lightweight, fast. Good starting point. |
 | **DeepSeek R1 Qwen 14B** | `deepseek-r1-qwen-14b` | ~8GB | ~14GB | Better reasoning quality. |
 | **DeepSeek R1 Qwen 32B** | `deepseek-r1-qwen-32b` | ~18GB | ~24GB | High quality. |
@@ -95,8 +99,6 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Qwen3 8B** | `qwen3-8b` | ~5GB | ~16GB | **(Default)** Latest Qwen. Strong instruction-following. |
-| **Qwen 2.5 14B** | `qwen-2.5-14b` | ~9GB | ~28GB | Larger Qwen. Great at detailed formatting. |
 | **Llama 3.1 8B** | `llama-3.1-8b` | ~5GB | ~16GB | 🔒 **Gated**. Open SOTA 8B. General writing, chat, reasoning. |
 | **Mistral Nemo 12B** | `mistral-nemo-12b` | ~7GB | ~24GB | Powerful 12B. Large context window, strong reasoning. |
 | **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | SOTA Code Gen. ⚠️ 120GB+ RAM on MPS! |

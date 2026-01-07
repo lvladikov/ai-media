@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Wand2,
   RefreshCw,
+  Languages,
   TrendingUp,
   History,
   Settings,
@@ -19,13 +20,14 @@ import {
 const navItems: { id: TabId; label: string; icon: React.ReactNode; section: string }[] = [
   { id: 'image', label: 'Image', icon: <Image size={18} />, section: 'Generate' },
   { id: 'video', label: 'Video', icon: <Film size={18} />, section: 'Generate' },
-  { id: 'vision', label: 'Vision', icon: <Eye size={18} />, section: 'Generate' },
+  { id: 'analysis', label: 'Analysis', icon: <Eye size={18} />, section: 'Generate' },
   { id: 'audio', label: 'Audio', icon: <Music size={18} />, section: 'Generate' },
   { id: 'article', label: 'Article', icon: <FileText size={18} />, section: 'Generate' },
   { id: 'code', label: 'Code', icon: <Code size={18} />, section: 'Generate' },
   { id: 'chat', label: 'Chat', icon: <MessageSquare size={18} />, section: 'Generate' },
   { id: 'transform', label: 'Transform', icon: <Wand2 size={18} />, section: 'Edit' },
   { id: 'convert', label: 'Convert', icon: <RefreshCw size={18} />, section: 'Edit' },
+  { id: 'translate', label: 'Translate', icon: <Languages size={18} />, section: 'Edit' },
   { id: 'upscale', label: 'Upscale', icon: <TrendingUp size={18} />, section: 'Edit' },
   { id: 'jobs', label: 'Jobs', icon: <History size={18} />, section: 'History' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, section: 'System' },
@@ -34,12 +36,34 @@ const navItems: { id: TabId; label: string; icon: React.ReactNode; section: stri
 import packageJson from '../../package.json';
 
 export function Sidebar() {
-  const { activeTab, setActiveTab, isConnected, isHelpOpen, isMobileMenuOpen, setMobileMenuOpen } = useAppStore();
+  const { activeTab, setActiveTab, isConnected, isHelpOpen, toggleHelp, openHelpSection, isMobileMenuOpen, setMobileMenuOpen } = useAppStore();
 
   // Close menu on navigation on mobile
   const handleNavClick = (id: TabId | 'help') => {
-    if (id === 'help') useAppStore.getState().toggleHelp();
-    else setActiveTab(id as TabId);
+    if (id === 'help') {
+      if (isHelpOpen) {
+        toggleHelp();
+      } else {
+        // Context-aware help opening
+        const helpMap: Record<string, string> = {
+          image: 'image',
+          video: 'video',
+          audio: 'audio',
+          analysis: 'analysis',
+          chat: 'chat',
+          article: 'article',
+          code: 'code',
+          transform: 'transform',
+          convert: 'multimedia',
+          translate: 'translate',
+          upscale: 'upscale',
+        };
+        const section = helpMap[activeTab] || 'general';
+        openHelpSection(section);
+      }
+    } else {
+      setActiveTab(id as TabId);
+    }
 
     if (window.innerWidth < 768) {
       setMobileMenuOpen(false);

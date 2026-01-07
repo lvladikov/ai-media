@@ -18,7 +18,8 @@ import './index.css';
 import { TransformView } from './components/TransformView';
 import { ConvertView } from './components/ConvertView';
 import { UpscaleView } from './components/UpscaleView';
-import { VisionView } from './components/VisionView';
+import { AnalysisView } from './components/AnalysisView';
+import { TranslateView } from './components/TranslateView';
 
 function MainContent() {
   const { activeTab } = useAppStore();
@@ -43,8 +44,10 @@ function MainContent() {
         return <ConvertView />;
       case 'upscale':
         return <UpscaleView />;
-      case 'vision':
-        return <VisionView />;
+      case 'translate':
+        return <TranslateView />;
+      case 'analysis':
+        return <AnalysisView />;
       case 'jobs':
         return <JobsView />;
       case 'settings':

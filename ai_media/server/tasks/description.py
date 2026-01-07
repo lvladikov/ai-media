@@ -7,7 +7,7 @@ from ...utils.system import clear_gpu_memory
 
 def run_description(job_id, input_path, model_name, output_path=None, force=False, bypass_warning=False, progress_queue=None):
     """
-    Run vision (description generation) in a separate process.
+    Run analysis (description generation) in a separate process.
     
     Args:
         job_id: Unique job ID
@@ -30,7 +30,7 @@ def run_description(job_id, input_path, model_name, output_path=None, force=Fals
             status="loading",
             progress=10,
             phase="Initializing",
-            message=f"Loading vision model: {model_name}..."
+            message=f"Loading analysis model: {model_name}..."
         )
         
         # Determine device
@@ -40,11 +40,44 @@ def run_description(job_id, input_path, model_name, output_path=None, force=Fals
             status="generating",
             progress=30,
             phase="Processing",
-            message="Generating description..."
+            message=f"Running {model_name}..."
         )
         
-        # Generate caption
-        caption = generate_caption(input_path, device, quiet=False, model_type=model_name)
+        caption = ""
+        output_file = output_path
+        
+        if model_name == "auto-subtitles":
+            from ...generators.subtitles import SubtitlesGenerator
+            gen = SubtitlesGenerator(device=str(device))
+            
+            # Run generator (creates files side-by-side with input by default)
+            # We want to capture the SRT content to show in UI
+            gen.run(input_path, model_size="medium")
+            
+            # Predict output path to read it back
+            # SubtitlesGenerator behavior: input.srt (if no lang specific)
+            # Actually run() generates .srt for detected/source lang.
+            # Let's try to find the generated .srt file
+            possible_srt = Path(input_path).with_suffix(".srt")
+            if possible_srt.exists():
+                with open(possible_srt, "r", encoding="utf-8") as f:
+                    caption = f.read()
+                output_file = str(possible_srt)
+            else:
+                caption = "Subtitles generated but file path could not be resolved for preview."
+                
+        elif model_name == "transcription":
+            from ...generators.transcription import TranscriptionGenerator
+            gen = TranscriptionGenerator(device=str(device))
+            caption = gen.run(input_path, output_format="markdown")
+            
+            # For transcription, we might want to save a .md file
+            if not output_file:
+                output_file = str(Path(input_path).with_suffix(".md"))
+                
+        else:
+            # Standard Analysis Models (Description)
+            caption = generate_caption(input_path, device, quiet=False, model_type=model_name)
         
         if caption:
             # Save to file if output_path provided
@@ -54,7 +87,7 @@ def run_description(job_id, input_path, model_name, output_path=None, force=Fals
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(caption)
                 except Exception as e:
-                    print(f"Error saving vision result to {output_path}: {e}")
+                    print(f"Error saving analysis result to {output_path}: {e}")
 
             send_update(
                 status="complete",

@@ -18,11 +18,12 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 🎨 **Image Generation** - **Text-to-Image** using models like Flux/SDXL (via `diffusers`). See [Image Options](docs/image-generation.md#options), [Examples](docs/image-generation.md#examples) and [Models](docs/image-generation.md#models).
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Text/Image + Audio (prompt) to Video**. See [Video Options](docs/video-generation.md#options), [Examples](docs/video-generation.md#examples) and [Models](docs/video-generation.md#models).
 - 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning + Audio Generation). Models: MusicGen, AudioLDM 2. See [Audio Options](docs/audio-generation.md#options), [Examples](docs/audio-generation.md#examples) and [Models](docs/audio-generation.md#models).
-- 📝 **Vision** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Description Options](docs/vision.md#options), [Examples](docs/vision.md#examples) and [Models](docs/vision.md#models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
+- 📝 **Analysis** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Analysis Options](docs/analysis.md#options), [Examples](docs/analysis.md#examples) and [Models](docs/analysis.md#models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
 - ✍️ **Article/Research/Code Generation** - Generate comprehensive **Articles** (offline), perform **Deep Research** (online search + summary), and generate **Code** for scripts, including multi file and folder projects (offline). Includes an interactive **Chat** session that runs on **fully offline models** but can dynamically pull live web content via the `/search` command. Chat can **read, discuss, generate, and save content (code or otherwise)**. See [Article Options](docs/article-generation.md#article--text-options), [Code Options](docs/article-generation.md#code-options), [Examples](docs/article-generation.md#examples) and [Models](docs/article-generation.md#text-models).
 - 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Transform Options](docs/creative-transformations.md#options), [Examples](docs/creative-transformations.md#examples) and [Models](docs/creative-transformations.md#models).
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](docs/media-conversion.md#media-conversion-options) and [Examples](docs/media-conversion.md#examples).
 - 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](docs/media-conversion.md#document-conversion-options).
+- 🌐 **Translate** - **Translate text and media** using NLLB, ALMA, or Seamless M4T models. Supports Speech-to-Speech and Text-to-Text. See [Translate Options](docs/translate.md).
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](docs/upscaling.md#options), [Examples](docs/upscaling.md#examples) and [Models](docs/upscaling.md#models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - 🌐 **Web Client & Desktop App** - Browser-based interface and Electron desktop app for all features with real-time resource monitoring. Launch with `python ai-media.py --serve` (both clients), or `--serve-web-only-client` (only Web Client). See [Web Client](docs/web-client.md).
@@ -63,6 +64,9 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **scipy**: Audio signal processing & file handling
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
     - **imageio-ffmpeg**: FFmpeg bindings for video export (used by diffusers)
+    - **faster-whisper**: High-performance speech recognition for subtitles & transcription
+    - **langdetect**: Automatic language detection for translation
+    - **pycountry**: ISO language code conversion for LLM translation
     - **ddgs**: Deep research (free web search)
     - **markdown**, **python-docx**, **xhtml2pdf**, **pypdf**, **striprtf**: Document format conversion
     - **rich**: Beautiful terminal formatting, syntax highlighting, and progress spinners
@@ -285,9 +289,10 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 🎬 **Video Generation** | [docs/video-generation.md](docs/video-generation.md) |
 | 🎵 **Audio Generation** | [docs/audio-generation.md](docs/audio-generation.md) |
 | ✍️ **Article, Chat & Code** | [docs/article-generation.md](docs/article-generation.md) |
-| 📝 **Vision** | [docs/vision.md](docs/vision.md) |
+| 📝 **Analysis (Vision and Sound)** | [docs/analysis.md](docs/analysis.md) |
 | 🪄 **Creative Transformations** | [docs/creative-transformations.md](docs/creative-transformations.md) |
 | 🔄 **Media & Document Conversion** | [docs/media-conversion.md](docs/media-conversion.md) |
+| 🌐 **Translate** | [docs/translate.md](docs/translate.md) |
 | 📈 **Upscaling** | [docs/upscaling.md](docs/upscaling.md) |
 | 🖥️ **Interactive Menu** | [docs/interactive-menu.md](docs/interactive-menu.md) |
 | 🌐 **Web Client & Electron** | [docs/web-client.md](docs/web-client.md) |
@@ -317,6 +322,9 @@ This project uses the following open-source libraries:
 | [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Real-ESRGAN upscaling | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
 | [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | FFmpeg bindings for video export | [imageio/imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | High-performance speech recognition | [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) |
+| [langdetect](https://github.com/Mimino666/langdetect) | Automatic language detection | [Mimino666/langdetect](https://github.com/Mimino666/langdetect) |
+| [pycountry](https://github.com/flyerhzm/pycountry) | ISO language standard library | [flyerhzm/pycountry](https://github.com/flyerhzm/pycountry) |
 | [rich](https://github.com/Textualize/rich) | Beautiful terminal formatting & syntax highlighting | [Textualize/rich](https://github.com/Textualize/rich) |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) | Interactive CLI history and navigation | [prompt-toolkit/python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) |
 | [ddgs](https://github.com/deedy5/duckduckgo_search) | Internet search for Deep Research | [deedy5/duckduckgo_search](https://github.com/deedy5/duckduckgo_search) |
@@ -327,7 +335,6 @@ This project uses the following open-source libraries:
 | [pypdf](https://github.com/py-pdf/pypdf) | PDF document reading & processing | [py-pdf/pypdf](https://github.com/py-pdf/pypdf) |
 | [striprtf](https://github.com/joshy/striprtf) | RTF document text extraction | [joshy/striprtf](https://github.com/joshy/striprtf) |
 | [psutil](https://github.com/giampaolo/psutil) | System resource monitoring | [giampaolo/psutil](https://github.com/giampaolo/psutil) |
-| [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | HF Model downloading & authentication | [huggingface/huggingface_hub](https://github.com/huggingface/huggingface_hub) |
 | [ftfy](https://github.com/rspeer/python-ftfy) | Text encoding fixes | [rspeer/python-ftfy](https://github.com/rspeer/python-ftfy) |
 | [fastapi](https://github.com/tiangolo/fastapi) | High-performance web framework for API | [tiangolo/fastapi](https://github.com/tiangolo/fastapi) |
@@ -371,6 +378,11 @@ This project uses the following open-source libraries:
 - **BLIP** by Salesforce - [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large)
 - **InstructPix2Pix** by Tim Brooks et al. - [timbrooks/instruct-pix2pix](https://github.com/timathy/instruct-pix2pix)
 - **RMBG-1.4** by BRIA AI - [briaai/RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4)
+- **Whisper** by OpenAI (via faster-whisper) - [openai/whisper](https://github.com/openai/whisper)
+- **NLLB-200** by Meta AI (Text Translation) - [facebook/nllb-200-3.3B](https://huggingface.co/facebook/nllb-200-3.3B)
+- **SeamlessM4T** by Meta AI (Speech/Text Translation) - [facebook/seamless-m4t-v2-large](https://huggingface.co/facebook/seamless-m4t-v2-large)
+- **ALMA** by Haoran Xu (High-Quality Translation) - [haoranxu/ALMA-13B-R](https://huggingface.co/haoranxu/ALMA-13B-R)
+- **Qwen 3** (Text, Reasoning & Translation) - [Qwen/Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) / [14B](https://huggingface.co/Qwen/Qwen3-14B)
 
 ## Disclaimer
 

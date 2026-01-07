@@ -2,7 +2,7 @@ import { HelpCircle } from 'lucide-react';
 import { useAppStore } from '../../store';
 
 interface ModelHelpLinkProps {
-  section: 'image' | 'video' | 'audio' | 'text' | 'transform' | 'upscale' | 'multimedia' | 'vision';
+  section: string;
 }
 
 export function ModelHelpLink({ section }: ModelHelpLinkProps) {

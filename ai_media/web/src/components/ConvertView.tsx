@@ -9,6 +9,7 @@ import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { formatDuration } from '../utils/formatTime';
 import { ModelHelpLink } from './common/ModelHelpLink';
+import { TranslateOptions } from './common/TranslateOptions';
 
 // Check if a file extension can't be previewed in browsers
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -30,6 +31,9 @@ export function ConvertView() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
   const [ocrModel, setOcrModel] = useState('qwen-vl');
+  const [translateEnabled, setTranslateEnabled] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('spa_Latn');
+  const [translateModel, setTranslateModel] = useState('nllb-200-3.3b');
 
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -58,59 +62,59 @@ export function ConvertView() {
       return ['md', 'html', 'xhtml', 'pdf', 'txt'];
     }
     if (ext === 'pdf') {
-       return ['md', 'txt', 'docx', 'html', 'xhtml', 'rtf', 'json'];
+      return ['md', 'txt', 'docx', 'html', 'xhtml', 'rtf', 'json'];
     }
     if (ext === 'txt') {
-       return ['pdf', 'md', 'docx', 'html', 'xhtml', 'rtf', 'json'];
+      return ['pdf', 'md', 'docx', 'html', 'xhtml', 'rtf', 'json'];
     }
     if (ext === 'json') {
-       return ['pdf', 'md', 'docx', 'html', 'xhtml', 'rtf', 'txt'];
+      return ['pdf', 'md', 'docx', 'html', 'xhtml', 'rtf', 'txt'];
     }
     if (ext === 'rtf') {
-       return ['pdf', 'md', 'docx', 'html', 'xhtml', 'txt', 'json'];
+      return ['pdf', 'md', 'docx', 'html', 'xhtml', 'txt', 'json'];
     }
     if (ext === 'xhtml') {
-       return ['pdf', 'md', 'docx', 'html', 'txt', 'rtf', 'json'];
+      return ['pdf', 'md', 'docx', 'html', 'txt', 'rtf', 'json'];
     }
 
     return [];
   }, [file]);
-  
+
   const processFile = async (selectedFile: File) => {
-      setFile(selectedFile);
-      setTargetFormat(''); // Reset format selection
-      setResult(null); // Reset previous result
+    setFile(selectedFile);
+    setTargetFormat(''); // Reset format selection
+    setResult(null); // Reset previous result
 
-      // Create local preview if it's an image and not a non-previewable format
-      if (selectedFile.type.startsWith('image/') && !isNonPreviewableFormat(selectedFile.name)) {
-        if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
-        setInputPreviewUrl(URL.createObjectURL(selectedFile));
-      } else {
-        if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
-        setInputPreviewUrl(null);
-      }
+    // Create local preview if it's an image and not a non-previewable format
+    if (selectedFile.type.startsWith('image/') && !isNonPreviewableFormat(selectedFile.name)) {
+      if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+      setInputPreviewUrl(URL.createObjectURL(selectedFile));
+    } else {
+      if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+      setInputPreviewUrl(null);
+    }
 
-      // Upload immediately
-      setIsUploading(true);
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+    // Upload immediately
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', selectedFile);
 
-      try {
-        const response = await fetch(`${API_BASE_URL()}/api/upload`, {
-          method: 'POST',
-          body: formData,
-        });
+    try {
+      const response = await fetch(`${API_BASE_URL()}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-        if (!response.ok) throw new Error('Upload failed');
+      if (!response.ok) throw new Error('Upload failed');
 
-        const data = await response.json();
-        setServerFilePath(data.path);
-      } catch (error) {
-        console.error("Upload error:", error);
-        alert("Failed to upload file");
-      } finally {
-        setIsUploading(false);
-      }
+      const data = await response.json();
+      setServerFilePath(data.path);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload file");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleConvert = async () => {
@@ -130,6 +134,8 @@ export function ConvertView() {
           target_format: targetFormat.includes('(OCR)') ? targetFormat.split(' ')[0] : targetFormat,
           ocr_enabled: targetFormat.includes('(OCR)'),
           ocr_model: ocrModel,
+          translate: translateEnabled,
+          target_language: targetLanguage,
         }),
       });
 
@@ -208,10 +214,10 @@ export function ConvertView() {
     setCurrentJobId(null);
     if (result) setIsPreviewOpen(true);
   };
-  
+
   const handleViewResult = () => {
     setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
 
@@ -232,7 +238,8 @@ export function ConvertView() {
             <span className="font-bold flex items-center gap-1 mb-1">
               <Lightbulb size={12} className="text-amber-600 dark:text-amber-400 fill-amber-600/20 dark:fill-amber-400/20" /> Pro Tip:
             </span>
-            You can also upload <span className="text-secondary font-medium">Images</span> or <span className="text-secondary font-medium">Scanned PDFs</span> to extract text using <span className="text-green-700 dark:text-green-400 font-bold">High-Precision OCR</span>.
+            You can upload <span className="text-secondary font-medium">Images</span> or <span className="text-secondary font-medium">Scanned PDFs</span> to extract text using <span className="text-green-700 dark:text-green-400 font-bold">High-Precision OCR</span>.
+            Check <strong>Translate</strong> to convert the result to another language!
           </p>
         </div>
 
@@ -248,50 +255,50 @@ export function ConvertView() {
             accept="image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,.pdf,.docx,.txt,.md"
           >
             {({ isDragging, isDragReject }) => (
-               // Wrapper renders children, state is passed
-               <>
-                 {file ? (
-                   <div className={`flex flex-col items-center justify-center gap-2 ${isDragging ? 'opacity-50' : ''}`}>
-                       {inputPreviewUrl ? (
-                        <div className="relative h-20 w-auto min-w-[5rem] mb-1 rounded overflow-hidden border border-border bg-primary shadow-sm group-hover:border-slate-500 transition-colors">
-                           <img src={inputPreviewUrl} alt="Preview" className="h-full w-full object-contain" />
+              // Wrapper renders children, state is passed
+              <>
+                {file ? (
+                  <div className={`flex flex-col items-center justify-center gap-2 ${isDragging ? 'opacity-50' : ''}`}>
+                    {inputPreviewUrl ? (
+                      <div className="relative h-20 w-auto min-w-[5rem] mb-1 rounded overflow-hidden border border-border bg-primary shadow-sm group-hover:border-slate-500 transition-colors">
+                        <img src={inputPreviewUrl} alt="Preview" className="h-full w-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 bg-secondary rounded flex items-center justify-center text-primary-400 mb-1">
+                          <FileType size={20} />
                         </div>
-                      ) : (
-                         <div className="flex flex-col items-center gap-1">
-                            <div className="w-10 h-10 bg-secondary rounded flex items-center justify-center text-primary-400 mb-1">
-                              <FileType size={20} />
-                            </div>
-                            {file && isNonPreviewableFormat(file.name) && (
-                              <span className="text-[9px] text-tertiary font-mono uppercase bg-primary px-1 py-0.5 rounded border border-border mt.05">No Preview</span>
-                            )}
-                         </div>
-                      )}
-                     <div className="text-center w-full">
-                       <p className="font-medium text-primary text-xs truncate max-w-[200px] mx-auto" title={file.name}>{file.name}</p>
-                       <p className="text-xs text-secondary">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                     </div>
-                     <div className="text-xs text-primary-400 font-medium">
-                        {isDragReject ? 'Format Not Supported' : (isDragging ? 'Drop to replace' : 'Click to change')}
-                     </div>
-                     {isUploading && <div className="absolute top-2 right-2"><Loader2 className="animate-spin text-tertiary" size={16} /></div>}
-                   </div>
-                 ) : (
-                   <>
-                     {isDragReject ? (
-                        <>
-                            <Upload size={24} className="mx-auto mb-2 text-red-400 transition-colors" />
-                            <p className="font-medium text-sm text-red-200 transition-colors">Format Not Supported</p>
-                        </>
-                     ) : (
-                        <>
-                            <Upload size={24} className={`mx-auto mb-2 transition-colors ${isDragging ? 'text-blue-400' : 'text-tertiary'}`} />
-                            <p className={`font-medium text-sm transition-colors ${isDragging ? 'text-blue-200' : ''}`}>Click or Drag & Drop</p>
-                        </>
-                     )}
-                     <p className="text-[10px] text-tertiary mt-1">Supports img, vid, audio, docs</p>
-                   </>
-                 )}
-               </>
+                        {file && isNonPreviewableFormat(file.name) && (
+                          <span className="text-[9px] text-tertiary font-mono uppercase bg-primary px-1 py-0.5 rounded border border-border mt.05">No Preview</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="text-center w-full">
+                      <p className="font-medium text-primary text-xs truncate max-w-[200px] mx-auto" title={file.name}>{file.name}</p>
+                      <p className="text-xs text-secondary">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <div className="text-xs text-primary-400 font-medium">
+                      {isDragReject ? 'Format Not Supported' : (isDragging ? 'Drop to replace' : 'Click to change')}
+                    </div>
+                    {isUploading && <div className="absolute top-2 right-2"><Loader2 className="animate-spin text-tertiary" size={16} /></div>}
+                  </div>
+                ) : (
+                  <>
+                    {isDragReject ? (
+                      <>
+                        <Upload size={24} className="mx-auto mb-2 text-red-400 transition-colors" />
+                        <p className="font-medium text-sm text-red-200 transition-colors">Format Not Supported</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={24} className={`mx-auto mb-2 transition-colors ${isDragging ? 'text-blue-400' : 'text-tertiary'}`} />
+                        <p className={`font-medium text-sm transition-colors ${isDragging ? 'text-blue-200' : ''}`}>Click or Drag & Drop</p>
+                      </>
+                    )}
+                    <p className="text-[10px] text-tertiary mt-1">Supports img, vid, audio, docs</p>
+                  </>
+                )}
+              </>
             )}
           </DragDropZone>
         </div>
@@ -316,11 +323,11 @@ export function ConvertView() {
             </div>
           ) : (
             <div className="p-4 bg-primary border border-border rounded-lg text-center text-tertiary text-xs italic">
-                {file ? "No compatible formats found." : "Upload a file to see options."}
+              {file ? "No compatible formats found." : "Upload a file to see options."}
             </div>
           )}
         </div>
-        
+
         {/* OCR Model Selection */}
         {targetFormat.includes('(OCR)') && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -336,21 +343,19 @@ export function ConvertView() {
             <div className="flex gap-2 p-1 bg-primary rounded-lg border border-border">
               <button
                 onClick={() => setOcrModel('qwen-vl')}
-                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${
-                  ocrModel === 'qwen-vl'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-tertiary hover:text-secondary'
-                }`}
+                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${ocrModel === 'qwen-vl'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-tertiary hover:text-secondary'
+                  }`}
               >
                 Qwen-VL
               </button>
               <button
                 onClick={() => setOcrModel('florence')}
-                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${
-                  ocrModel === 'florence'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-tertiary hover:text-secondary'
-                }`}
+                className={`flex-1 py-1.5 px-2 rounded-md text-[10px] font-bold uppercase transition-all ${ocrModel === 'florence'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-tertiary hover:text-secondary'
+                  }`}
               >
                 Florence-2
               </button>
@@ -363,21 +368,37 @@ export function ConvertView() {
           </div>
         )}
 
+        {/* Translation Options - SHOW ONLY FOR TEXT/DOC FORMATS */}
+        {targetFormat && (['txt', 'md', 'html', 'json', 'pdf (OCR)', 'txt (OCR)', 'md (OCR)', 'docx (OCR)'].some(f => targetFormat.includes(f))) && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-200 border-t border-border pt-3">
+            <TranslateOptions
+              enabled={translateEnabled}
+              onEnabledChange={setTranslateEnabled}
+              selectedModel={translateModel}
+              onModelChange={setTranslateModel}
+              targetLanguage={targetLanguage}
+              onLanguageChange={setTargetLanguage}
+              showToggle={true}
+              title="Translate Output"
+            />
+          </div>
+        )}
+
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 
         {/* Action Button */}
         <div className="mt-auto pt-4">
-            <button
+          <button
             onClick={handleConvert}
             disabled={!targetFormat || isUploading || isSubmitting}
             className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 bg-[length:200%_100%] animate-gradient-x hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none flex items-center justify-center gap-2 transition-all"
-            >
+          >
             {isSubmitting ? (
-                <><Loader2 className="animate-spin" size={18} /> Converting...</>
+              <><Loader2 className="animate-spin" size={18} /> Converting...</>
             ) : (
-                <><RefreshCw size={18} /> Convert Now</>
+              <><RefreshCw size={18} /> Convert Now</>
             )}
-            </button>
+          </button>
         </div>
       </div>
 
@@ -404,7 +425,7 @@ export function ConvertView() {
             <p className="text-sm text-secondary">Select a format and click convert to process this file.</p>
           </div>
         )}
-        
+
         {!result && file && !inputPreviewUrl && (
           <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center p-8 bg-primary/50 min-w-[280px] min-h-[320px]">
             <FileType size={64} className="text-tertiary mb-4" />
@@ -419,38 +440,38 @@ export function ConvertView() {
         )}
 
         {result && (
-           <div className="flex flex-col items-center justify-center max-w-full h-full gap-6 animate-in fade-in zoom-in duration-300">
-              <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-primary/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
-                {/* Result Preview Logic */}
-                {['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
-                  <img src={`${API_BASE_URL()}/api/files/${result}`} alt="Converted Result" className="max-h-[70vh] object-contain" />
-                ) : ['mp4', 'webm', 'mov', 'mkv'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
-                  <video src={`${API_BASE_URL()}/api/files/${result}`} controls className="max-h-[70vh]" />
-                ) : (
-                  <>
-                    <FileType size={64} className="text-tertiary mb-4" />
-                    <div className="flex flex-col items-center text-center">
-                      <span className="text-lg font-bold text-secondary">{result.split('.').pop()?.toUpperCase()} File</span>
-                      <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
-                    </div>
-                  </>
-                )}
+          <div className="flex flex-col items-center justify-center max-w-full h-full gap-6 animate-in fade-in zoom-in duration-300">
+            <div className="relative border-4 border-brand-500/30 rounded-xl overflow-hidden shadow-2xl flex flex-col items-center justify-center bg-primary/50 min-w-[280px] min-h-[320px] cursor-pointer group" onClick={() => setIsPreviewOpen(true)}>
+              {/* Result Preview Logic */}
+              {['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                <img src={`${API_BASE_URL()}/api/files/${result}`} alt="Converted Result" className="max-h-[70vh] object-contain" />
+              ) : ['mp4', 'webm', 'mov', 'mkv'].includes(result.split('.').pop()?.toLowerCase() || '') ? (
+                <video src={`${API_BASE_URL()}/api/files/${result}`} controls className="max-h-[70vh]" />
+              ) : (
+                <>
+                  <FileType size={64} className="text-tertiary mb-4" />
+                  <div className="flex flex-col items-center text-center">
+                    <span className="text-lg font-bold text-secondary">{result.split('.').pop()?.toUpperCase()} File</span>
+                    <span className="text-xs text-tertiary mt-1 uppercase tracking-widest font-mono">No Browser Preview</span>
+                  </div>
+                </>
+              )}
 
-               <div className="absolute top-2 left-2 bg-blue-600 px-2 py-1 rounded text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
-                   <span className="font-bold uppercase tracking-wider">Converted</span>
-                   {genDuration && <span className="opacity-80 font-medium">in {formatDuration(genDuration * 1000)}</span>}
-               </div>
+              <div className="absolute top-2 left-2 bg-blue-600 px-2 py-1 rounded text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
+                <span className="font-bold uppercase tracking-wider">Converted</span>
+                {genDuration && <span className="opacity-80 font-medium">in {formatDuration(genDuration * 1000)}</span>}
+              </div>
 
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
-                </div>
-             </div>
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <span className="bg-white/90 text-black px-4 py-2 rounded-lg font-bold text-sm">Open Full Preview</span>
+              </div>
+            </div>
 
-             <div className="flex gap-3">
-               <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Preview</button>
-               <a href={`${API_BASE_URL()}/api/files/${result}?download=true`} className="btn-secondary text-sm">Download File</a>
-             </div>
-           </div>
+            <div className="flex gap-3">
+              <button className="btn-secondary text-sm" onClick={() => setIsPreviewOpen(true)}>Full Preview</button>
+              <a href={`${API_BASE_URL()}/api/files/${result}?download=true`} className="btn-secondary text-sm">Download File</a>
+            </div>
+          </div>
         )}
       </div>
 

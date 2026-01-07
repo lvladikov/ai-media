@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
-import { generateCode, fetchModels } from '../hooks/useApi';
+import { generateCode, useModels } from '../hooks/useApi';
 import { Code, Loader2, Download, FolderArchive, AlertTriangle } from 'lucide-react';
 import { RandomPrompt } from './common/RandomPrompt';
 
@@ -13,10 +13,7 @@ import { formatDuration } from '../utils/formatTime';
 import { ModelHelpLink } from './common/ModelHelpLink';
 import { API_BASE_URL } from '../config';
 
-interface ModelInfo {
-  name: string;
-  is_default?: boolean;
-}
+
 
 // Display names matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
@@ -27,7 +24,8 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
-  'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
+  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning - 16GB VRAM)', vram: '~16GB' },
+  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning - 28GB VRAM)', vram: '~28GB' },
   'qwen3-coder-30b': { label: 'Qwen3 Coder 30B MoE (⚠️ 64GB RAM)', vram: '~10GB' },
   'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
   'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B', vram: '~12GB' },
@@ -37,7 +35,7 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
-  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b',
+  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b',
   'qwen3-coder-30b', 'qwen-coder-32b', 'qwen-coder-14b', 'qwen-coder-7b'
 ];
 
@@ -53,44 +51,63 @@ export function CodeGenerator() {
   const [generatedFiles, setGeneratedFiles] = useState<string[]>([]);
   const [reasoning, setReasoning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showProjectPreview, setShowProjectPreview] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(256);
 
   // Fetch models on mount, use WebSocket for cleanup (same as Chat)
+  // Use global models cache
+  const { models } = useModels();
+  const availableModels = models?.text || [];
+
+  // Set default model when available
   useEffect(() => {
-    fetchModels()
-      .then((data) => {
-        if (data.text) {
-          setAvailableModels(data.text);
+    if (availableModels.length > 0 && !model) {
+      // Find default model based on backend flag
+      const defaultModel = availableModels.find((m: any) => m.is_default);
+      let initialModel = '';
 
-          // Find default model based on backend flag
-          let initialModel = '';
-          const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
+      if (defaultModel) {
+        initialModel = defaultModel.name;
+      } else if (availableModels.length > 0) {
+        initialModel = availableModels[0].name;
+      }
 
-          if (defaultModel) {
-            initialModel = defaultModel.name;
-          } else if (data.text.length > 0) {
-            initialModel = data.text[0].name;
-          }
+      if (initialModel) {
+        setModel(initialModel);
+      }
+    }
+  }, [availableModels, model]);
 
-          setModel(initialModel);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch models:', err));
+  const socketRef = useRef<WebSocket | null>(null);
 
+  useEffect(() => {
     // Connect to a lightweight endpoint for cleanup on disconnect (like Chat)
     const wsBaseUrl = API_BASE_URL();
     const wsUrl = wsBaseUrl.replace(/^http/, 'ws');
-    const ws = new WebSocket(`${wsUrl}/ws/code`);
+
+    // Delay connection slightly to prevent race conditions (warnings) during quick tab switches or Strict Mode
+    // If the component unmounts before this fires (e.g. quick tab switch), the socket is never created.
+    const connectTimeout = setTimeout(() => {
+      const ws = new WebSocket(`${wsUrl}/ws/code`);
+      socketRef.current = ws;
+
+      // Add error handler to prevent uncaught exceptions in console
+      ws.onerror = () => {
+        // Silently ignore connection errors
+      };
+    }, 500);
 
     // Cleanup: Close socket when navigating away - server unloads model on disconnect
     return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      clearTimeout(connectTimeout);
+
+      const ws = socketRef.current;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         ws.close();
       }
+      socketRef.current = null;
     };
   }, []);
 

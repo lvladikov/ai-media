@@ -18,6 +18,9 @@ def run_article_generation(
     online: bool,
     research_iterations: int,
     max_images: int = 0,
+    translate: bool = False,
+    target_language: str = None,
+    translation_model: str = "nllb-200-3.3b",
     force: bool = False,
     bypass_warning: bool = False,
     progress_queue: Queue = None,
@@ -57,7 +60,7 @@ def run_article_generation(
             generation_started_at=datetime.datetime.utcnow().isoformat()
         )
         
-        success = generator.generate_article(
+        result_path = generator.generate_article(
             topic=topic,
             output_file=output_path,
             format=fmt,
@@ -65,11 +68,16 @@ def run_article_generation(
             research_iter=research_iterations if online else 0,
             length=length,
             max_images=max_images,
+            translate=translate,
+            target_language=target_language,
+            translation_model=translation_model,
         )
         
-        if success:
+        if result_path:
+            # Normalize path to fix mixed slashes
+            final_path = os.path.normpath(result_path)
             send_update(status="complete", phase="complete", progress=100,
-                       message="Article generated successfully", result_path=output_path,
+                       message="Article generated successfully", result_path=final_path,
                        reasoning=generator.last_reasoning)
         else:
             error_msg = getattr(generator, 'last_error', None) or "Article generation returned False"

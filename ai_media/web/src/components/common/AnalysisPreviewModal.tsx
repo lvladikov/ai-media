@@ -3,7 +3,7 @@ import { X, Download, Columns, FileText, Image, WrapText, Copy, Check, Eye } fro
 import { API_BASE_URL } from '../../config';
 import { MarkdownWithAnsi } from './AnsiRenderer';
 
-interface VisionPreviewModalProps {
+interface AnalysisPreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     originalPath: string;  // Path to the original image/video
@@ -15,7 +15,7 @@ interface VisionPreviewModalProps {
 
 type ViewTab = 'description' | 'original' | 'sideBySide';
 
-export function VisionPreviewModal({
+export function AnalysisPreviewModal({
     isOpen,
     onClose,
     originalPath,
@@ -23,7 +23,7 @@ export function VisionPreviewModal({
     resultText,
     fileName,
     originalIsVideo = false
-}: VisionPreviewModalProps) {
+}: AnalysisPreviewModalProps) {
     const [activeTab, setActiveTab] = useState<ViewTab>('description');
     const [content, setContent] = useState<string | null>(resultText || null);
     const [wordWrap, setWordWrap] = useState(true);

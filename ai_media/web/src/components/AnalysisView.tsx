@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store';
 import {
     Upload, FileText, Copy, Check, Loader2,
-    Eye, Download, Search
+    Eye, Download, Search, Captions, Mic
 } from 'lucide-react';
 import { ErrorAlert } from './common/ErrorAlert';
 import { ModelHelpLink } from './common/ModelHelpLink';
 import { DragDropZone } from './common/DragDropZone';
 import { JobProgressModal } from './common/JobProgressModal';
-import { VisionPreviewModal } from './common/VisionPreviewModal';
+import { AnalysisPreviewModal } from './common/AnalysisPreviewModal';
+import { TranslateOptions } from './common/TranslateOptions';
 import { API_BASE_URL } from '../config';
 
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -16,7 +17,7 @@ const isNonPreviewableFormat = (filename: string): boolean => {
     return ['tiff', 'tif', 'psd', 'raw'].includes(ext || '');
 };
 
-export function VisionView() {
+export function AnalysisView() {
     const [file, setFile] = useState<File | null>(null);
     const [inputPreview, setInputPreview] = useState<string | null>(null);
     const [serverFilePath, setServerFilePath] = useState<string | null>(null);
@@ -29,6 +30,9 @@ export function VisionView() {
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+    const [translateOutput, setTranslateOutput] = useState(false);
+    const [targetLanguage, setTargetLanguage] = useState('spa_Latn');
+    const [translateModel, setTranslateModel] = useState('nllb-200-3.3b');
 
     const { addJob, isConnected } = useAppStore();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +85,7 @@ export function VisionView() {
 
         addJob({
             job_id: optimisticJobId,
-            type: 'vision',
+            type: 'analysis',
             status: 'pending',
             progress: 0,
             phase: 'Queued',
@@ -94,13 +98,16 @@ export function VisionView() {
         });
 
         try {
-            const response = await fetch(`${API_BASE_URL()}/api/vision/describe`, {
+            const response = await fetch(`${API_BASE_URL()}/api/analysis/describe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     input_path: serverFilePath,
                     model: selectedModel,
-                    job_id: optimisticJobId
+                    job_id: optimisticJobId,
+                    translate_output: translateOutput,
+                    target_language: targetLanguage,
+                    translation_model: translateModel
                 }),
             });
 
@@ -167,20 +174,20 @@ export function VisionView() {
             <div className="w-full lg:w-[500px] border-b lg:border-b-0 lg:border-r border-border p-4 lg:py-6 lg:pr-[27px] lg:pl-1 flex flex-col gap-6 overflow-y-auto shrink-0 h-auto lg:h-full">
                 <div>
                     <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
-                        <Search className="text-brand-400" size={20} /> Vision
+                        <Search className="text-brand-400" size={20} /> Analysis
                     </h2>
-                    <p className="text-xs text-tertiary">Generate detailed text descriptions from images and videos</p>
+                    <p className="text-xs text-tertiary">Analyze images, videos, and audio with multimodal AI</p>
                 </div>
 
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-secondary">Input File</label>
                     <DragDropZone
                         onFileDrop={handleFileDrop}
-                        accept="image/*,video/*,.gif,.tiff,.tif"
+                        accept="image/*,video/*,audio/*,.gif,.tiff,.tif"
                         className={`border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:border-brand-500/50 hover:bg-secondary/50 transition-colors cursor-pointer relative ${file ? 'bg-brand-500/5' : ''}`}
                         draggingClassName="border-brand-500 bg-brand-500/10"
                     >
-                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.gif,.tiff,.tif" onChange={(e) => e.target.files?.[0] && handleFileDrop(e.target.files[0])} />
+                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.gif,.tiff,.tif" onChange={(e) => e.target.files?.[0] && handleFileDrop(e.target.files[0])} />
 
                         {file && isNonPreviewableFormat(file.name) ? (
                             <div className="flex flex-col items-center gap-2 py-2">
@@ -205,7 +212,7 @@ export function VisionView() {
                                 {file ? file.name : "Upload Media"}
                             </p>
                             <p className="text-xs text-secondary mt-0.5">
-                                {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Image or Video"}
+                                {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Image, Video or Audio"}
                             </p>
                         </div>
 
@@ -217,87 +224,112 @@ export function VisionView() {
                     </DragDropZone>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-4">
                     <label className="text-sm font-medium text-secondary flex items-center">
-                        Vision Model
-                        <ModelHelpLink section="vision" />
+                        Analysis Model
+                        <ModelHelpLink section="analysis" />
                     </label>
-                    <div className="grid grid-cols-1 gap-2">
-                        {/* Florence - Green */}
-                        <button
-                            onClick={() => setSelectedModel('florence')}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'florence'
-                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
-                                : 'bg-primary border-border text-secondary hover:bg-secondary/50'
-                                }`}
-                        >
-                            <FileText size={18} />
-                            <div className="flex-1">
-                                <div className="font-medium text-sm">Florence-2 (Default, SOTA)</div>
-                                <div className="text-[10px] opacity-70">Large model, spatial awareness, rich detail.</div>
-                            </div>
-                        </button>
 
-                        {/* Qwen3-VL 8B - Purple */}
-                        <button
-                            onClick={() => setSelectedModel('qwen3-vl-8b')}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'qwen3-vl-8b'
-                                ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-400'
-                                : 'bg-primary border-border text-secondary hover:bg-secondary/50'
-                                }`}
-                        >
-                            <Eye size={18} />
-                            <div className="flex-1">
-                                <div className="font-medium text-sm">Qwen3-VL 8B (Vision-Language)</div>
-                                <div className="text-[10px] opacity-70">Best for complex scene understanding.</div>
-                            </div>
-                        </button>
+                    {/* Analysis Section */}
+                    <div>
+                        <h3 className="text-xs font-bold text-tertiary uppercase tracking-wider mb-1 ml-1">Vision (Image/Video)</h3>
+                        <p className="text-[10px] text-tertiary mb-2 ml-1">Generate detailed captions and descriptions from images or video frames.</p>
+                        <div className="grid grid-cols-1 gap-2">
+                            {/* Florence - Green */}
+                            <button
+                                onClick={() => setSelectedModel('florence')}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'florence'
+                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
+                                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
+                                    }`}
+                            >
+                                <FileText size={18} />
+                                <div className="flex-1">
+                                    <div className="font-medium text-sm">Florence-2 (Default)</div>
+                                    <div className="text-[10px] opacity-70">SOTA. Detailed descriptions & spatial awareness.</div>
+                                </div>
+                            </button>
 
-                        {/* Qwen3-VL 4B - Purple */}
-                        <button
-                            onClick={() => setSelectedModel('qwen3-vl-4b')}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'qwen3-vl-4b'
-                                ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-400'
-                                : 'bg-primary border-border text-secondary hover:bg-secondary/50'
-                                }`}
-                        >
-                            <Eye size={18} />
-                            <div className="flex-1">
-                                <div className="font-medium text-sm">Qwen3-VL 4B (Balanced)</div>
-                                <div className="text-[10px] opacity-70">Good balance of quality and speed.</div>
-                            </div>
-                        </button>
-
-                        {/* Qwen3-VL 2B - Purple */}
-                        <button
-                            onClick={() => setSelectedModel('qwen3-vl-2b')}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'qwen3-vl-2b'
-                                ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-400'
-                                : 'bg-primary border-border text-secondary hover:bg-secondary/50'
-                                }`}
-                        >
-                            <Eye size={18} />
-                            <div className="flex-1">
-                                <div className="font-medium text-sm">Qwen3-VL 2B (Lightweight)</div>
-                                <div className="text-[10px] opacity-70">Fast, lower memory requirements.</div>
-                            </div>
-                        </button>
-
-                        {/* BLIP - Blue */}
-                        <button
-                            onClick={() => setSelectedModel('blip')}
-                            className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'blip'
-                                ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-400'
-                                : 'bg-primary border-border text-secondary hover:bg-secondary/50'
-                                }`}
-                        >
-                            <Search size={18} />
-                            <div className="flex-1">
-                                <div className="font-medium text-sm">BLIP (Classic)</div>
-                                <div className="text-[10px] opacity-70">Lightweight, fast, standard captions.</div>
-                            </div>
-                        </button>
+                            {/* Qwen3-VL 8B - Purple */}
+                            <button
+                                onClick={() => setSelectedModel('qwen3-vl-8b')}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'qwen3-vl-8b'
+                                    ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-400'
+                                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
+                                    }`}
+                            >
+                                <Eye size={18} />
+                                <div className="flex-1">
+                                    <div className="font-medium text-sm">Qwen3-VL 8B</div>
+                                    <div className="text-[10px] opacity-70">Best for complex scenes & OCR.</div>
+                                </div>
+                            </button>
+                            {/* Simplified - omitting the other Qwen sizes to save space/reduce clutter if desired, or keep them */}
+                            <button
+                                onClick={() => setSelectedModel('blip')}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'blip'
+                                    ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-400'
+                                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
+                                    }`}
+                            >
+                                <Search size={18} />
+                                <div className="flex-1">
+                                    <div className="font-medium text-sm">BLIP</div>
+                                    <div className="text-[10px] opacity-70">Fast, simple captions.</div>
+                                </div>
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Audio/Speech Section */}
+                    <div>
+                        <h3 className="text-xs font-bold text-tertiary uppercase tracking-wider mb-1 ml-1">Audio & Speech</h3>
+                        <p className="text-[10px] text-tertiary mb-2 ml-1">Extract text from audio/video using Whisper for subtitles or transcripts.</p>
+                        <div className="grid grid-cols-1 gap-2">
+                            {/* Auto Subtitles - Orange */}
+                            <button
+                                onClick={() => setSelectedModel('auto-subtitles')}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'auto-subtitles'
+                                    ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/50 text-orange-700 dark:text-orange-400'
+                                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
+                                    }`}
+                            >
+                                <Captions size={18} />
+                                <div className="flex-1">
+                                    <div className="font-medium text-sm">Auto Subtitles</div>
+                                    <div className="text-[10px] opacity-70">Generate SRT subtitles for videos/audio.</div>
+                                </div>
+                            </button>
+
+                            {/* Transcription - Indigo */}
+                            <button
+                                onClick={() => setSelectedModel('transcription')}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${selectedModel === 'transcription'
+                                    ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/50 text-indigo-700 dark:text-indigo-400'
+                                    : 'bg-primary border-border text-secondary hover:bg-secondary/50'
+                                    }`}
+                            >
+                                <Mic size={18} />
+                                <div className="flex-1">
+                                    <div className="font-medium text-sm">Transcription</div>
+                                    <div className="text-[10px] opacity-70">Speech-to-Text with timestamps (JSON/Markdown).</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-4">
+                    <TranslateOptions
+                        title="Translate Result"
+                        enabled={translateOutput}
+                        onEnabledChange={setTranslateOutput}
+                        selectedModel={translateModel}
+                        onModelChange={setTranslateModel}
+                        targetLanguage={targetLanguage}
+                        onLanguageChange={setTargetLanguage}
+                        showToggle={true}
+                    />
                 </div>
 
                 <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -384,6 +416,16 @@ export function VisionView() {
                                         Original
                                     </div>
                                 </div>
+                            ) : file.type.startsWith('audio/') && serverFilePath ? (
+                                <div className="relative border-4 border-border rounded-xl overflow-hidden shadow-2xl min-w-[320px] p-6 flex flex-col items-center gap-4 bg-primary/50">
+                                    <div className="w-24 h-24 rounded-full bg-brand-500/10 flex items-center justify-center">
+                                        <Mic size={40} className="text-brand-400" />
+                                    </div>
+                                    <audio src={`${API_BASE_URL()}/api/files/${serverFilePath}`} controls className="w-full" />
+                                    <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-mono text-white border border-white/10 uppercase tracking-tighter">
+                                        Original Audio
+                                    </div>
+                                </div>
                             ) : (
                                 <div className="text-center text-tertiary animate-pulse">
                                     <Loader2 className="animate-spin inline-block mb-3" size={32} />
@@ -403,7 +445,7 @@ export function VisionView() {
                             </div>
                             <h3 className="text-2xl font-bold mb-3 text-primary">Ready to Analyze</h3>
                             <p className="text-secondary max-w-sm mx-auto leading-relaxed">
-                                Drag and drop media files or use the sidebar to start uncovering details with AI Vision.
+                                Drag and drop media files or use the sidebar to start uncovering details with AI Analysis.
                             </p>
                         </div>
                     )}
@@ -415,7 +457,7 @@ export function VisionView() {
             )}
 
             {result && serverFilePath && (
-                <VisionPreviewModal
+                <AnalysisPreviewModal
                     isOpen={isPreviewOpen}
                     onClose={() => setIsPreviewOpen(false)}
                     originalPath={serverFilePath}

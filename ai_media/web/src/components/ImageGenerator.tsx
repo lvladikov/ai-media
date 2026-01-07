@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { generateImage, fetchModels } from '../hooks/useApi';
+import { generateImage, useModels } from '../hooks/useApi';
 import { API_BASE_URL } from '../config';
 import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { Tooltip } from './common/Tooltip';
@@ -13,14 +13,6 @@ import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
-
-interface ModelInfo {
-  name: string;
-  model_id: string;
-  vram_required: number | null;
-  ram_required: number | null;
-  max_resolution: [number, number] | null;
-}
 
 // Display names and info matching CLI exactly
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: string }> = {
@@ -59,10 +51,13 @@ export function ImageGenerator() {
 
   const [duration, setDuration] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [pendingGeneration, setPendingGeneration] = useState<boolean>(false);
+
+  // Use global models cache
+  const { models } = useModels();
+  const availableModels = models?.image || [];
 
   // High resource text for the model that triggered the warning
   const [warningDetails, setWarningDetails] = useState<{
@@ -70,17 +65,6 @@ export function ImageGenerator() {
     details?: any;
     critical?: boolean;
   } | null>(null);
-
-  // Fetch models on mount
-  useEffect(() => {
-    fetchModels()
-      .then((data) => {
-        if (data.image) {
-          setAvailableModels(data.image);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch models:', err));
-  }, []);
 
   // Update defaults when model changes
   useEffect(() => {
@@ -244,7 +228,7 @@ export function ImageGenerator() {
       const updatedJob = state.jobs.find(j => j.job_id === currentJobId);
       if (updatedJob) {
         hasSeenJob = true; // Mark that we've seen the job
-        
+
         if (updatedJob.status === 'complete') {
           setResult(updatedJob.result_path);
 

@@ -7,6 +7,6 @@ from . import text
 from . import transform
 from . import convert
 from . import upscale
-from . import vision
+from . import analysis
 
-__all__ = ["system", "files", "generate", "text", "transform", "convert", "upscale", "vision"]
+__all__ = ["system", "files", "generate", "text", "transform", "convert", "upscale", "analysis"]

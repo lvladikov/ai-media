@@ -131,8 +131,8 @@ _ORIGINAL_CHECK_WARN = system.check_resources_and_warn
 # This must happen before generators are imported to affect their local references
 system.check_resources_and_warn = MagicMock(return_value=True)
 
-from ai_media.generators import text, image, video, audio, transform, description
-from ai_media import upscaling, interactive, models
+from ai_media.generators import text, image, video, audio, transform, description, subtitles, transcription
+from ai_media import upscaling, interactive, models, constants
 _ORIGINAL_CHECK_CONFIRM = upscaling.check_resources_and_confirm
 upscaling.check_resources_and_confirm = MagicMock(return_value=True)
 
@@ -190,6 +190,11 @@ ai_media._interrupted = system._interrupted # This won't work as it's a bool, so
 # Model Patching
 ai_media.EDIT_MODELS = models.EDIT_MODELS
 ai_media.CAPTION_MODELS = models.CAPTION_MODELS
+ai_media.IMAGE_MODELS = models.IMAGE_MODELS
+ai_media.VIDEO_MODELS = models.VIDEO_MODELS
+ai_media.AUDIO_MODELS = models.AUDIO_MODELS
+ai_media.RESOLUTIONS = constants.RESOLUTIONS
+ai_media.MODEL_REQUIREMENTS = models.MODEL_REQUIREMENTS
 
 # Generator Patching
 ai_media.ArticleGenerator = text.ArticleGenerator
@@ -2140,7 +2145,7 @@ class TestTextModels(unittest.TestCase):
         self.assertTrue(hasattr(ai_media, 'TEXT_MODELS'))
         self.assertIn("default", ai_media.TEXT_MODELS)
         # Check some known models
-        expected_models = ["llama-3.1-8b", "mistral-nemo-12b", "qwen-2.5-14b"]
+        expected_models = ["llama-3.1-8b", "mistral-nemo-12b", "qwen3-14b"]
         for model in expected_models:
             self.assertIn(model, ai_media.TEXT_MODELS, f"Missing text model: {model}")
     
@@ -2822,5 +2827,347 @@ class TestOCR(unittest.TestCase):
         ocr.load_ocr_model(model_type="florence")
         self.assertEqual(mock_model_cls.from_pretrained.call_count, 1) # Should not increase
 
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
+
+# =============================================================================
+# Subtitles Generator Tests
+# =============================================================================
+
+from collections import namedtuple
+
+class TestSubtitles(unittest.TestCase):
+    """Test SubtitlesGenerator logic (mocked)."""
+
+    @patch("ai_media.generators.subtitles.subprocess.run")
+    def test_extract_audio(self, mock_run):
+        """Test audio extraction via ffmpeg."""
+        # Mock modules before import
+        with patch.dict(sys.modules, {'faster_whisper': MagicMock()}):
+            from ai_media.generators.subtitles import SubtitlesGenerator
+        
+        # Mock successful run
+        mock_run.return_value.returncode = 0
+        
+        gen = SubtitlesGenerator(device="cpu")
+        # We need to ensure output path logic works even if we mock subprocess
+        # extract_audio returns str(audio_path)
+        
+        output = gen.extract_audio("input.mp4")
+        
+        # Check command
+        mock_run.assert_called_once()
+        # On windows path separators might differ
+        # args[2] is input path
+        # Check args are passed correctly
+        self.assertTrue(any("input.mp4" in str(arg) for arg in mock_run.call_args[0][0]))
+        self.assertTrue(output.endswith(".tmp.wav"))
+
+    def test_transcribe(self):
+        """Test transcription logic."""
+        mock_fw = MagicMock()
+        mock_whisper_cls = MagicMock()
+        mock_fw.WhisperModel = mock_whisper_cls
+        
+        with patch.dict(sys.modules, {'faster_whisper': mock_fw}):
+             from ai_media.generators.subtitles import SubtitlesGenerator
+        
+             # Setup mock model instance
+             mock_model_instance = mock_whisper_cls.return_value
+             
+             # Mock segments generator
+             Segment = namedtuple('Segment', ['start', 'end', 'text'])
+             Info = namedtuple('Info', ['duration'])
+             
+             mock_model_instance.transcribe.return_value = (
+                 [Segment(0.0, 1.0, "Hello"), Segment(1.0, 2.0, "World")],
+                 Info(2.0)
+             )
+             
+             gen = SubtitlesGenerator(device="cpu")
+             
+             # Mock console print but allow side_effects to see errors
+             with patch("ai_media.generators.subtitles.console.print", side_effect=print):
+                segments, dur, time_taken = gen.transcribe_audio("audio.wav")
+            
+             self.assertEqual(len(segments), 2)
+             self.assertEqual(segments[0]['text'], "Hello")
+             self.assertEqual(dur, 2.0)
+
+    def test_translate(self):
+        """Test translation logic."""
+        mock_transformers = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_tokenizer = MagicMock()
+        mock_model_cls = MagicMock()
+        
+        mock_transformers.pipeline = mock_pipeline
+        mock_transformers.AutoTokenizer = mock_tokenizer
+        mock_transformers.AutoModelForSeq2SeqLM = mock_model_cls
+        
+        with patch.dict(sys.modules, {'faster_whisper': MagicMock(), 'transformers': mock_transformers}):
+             from ai_media.generators.subtitles import SubtitlesGenerator
+        
+             # Setup pipeline mock
+             mock_translator = mock_pipeline.return_value
+             mock_translator.side_effect = lambda x: [{"translation_text": f"Translated {x}"}]
+             
+             gen = SubtitlesGenerator(device="cpu")
+        
+             segments = [{"start": 0, "end": 1, "text": "Hello"}]
+             # Mock console print and progress track
+             with patch("ai_media.generators.subtitles.console.print"):
+                  with patch("rich.progress.track", side_effect=lambda x, **kwargs: x):
+                     translated = gen.translate_segments(segments, "en", "es")
+             
+             self.assertEqual(len(translated), 1)
+             self.assertEqual(translated[0]['text'], "Translated Hello")
+
+# =============================================================================
+# Audio Tools Tests (Subtitles & Transcription)
+# =============================================================================
+
+class TestSubtitlesGenerator(unittest.TestCase):
+    def setUp(self):
+        self.generator = subtitles.SubtitlesGenerator(device="cpu")
+
+    def test_init(self):
+        self.assertEqual(self.generator.device, "cpu")
+
+    @patch('ai_media.generators.subtitles.SubtitlesGenerator.transcribe_audio')
+    @patch('ai_media.generators.subtitles.SubtitlesGenerator.extract_audio')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('os.remove')
+    @patch('pathlib.Path.exists')
+    def test_run_call(self, mock_exists, mock_remove, mock_open, mock_extract, mock_transcribe):
+        mock_extract.return_value = "temp.wav"
+        # segments, duration, transcription_time
+        mock_transcribe.return_value = ([{'start':0, 'end':1, 'text':'test'}], 1.0, 0.1)
+        mock_exists.return_value = True # ensure cleanup tries to remove
+        
+        # Run
+        self.generator.run("test_video.mp4")
+        
+        mock_extract.assert_called_with("test_video.mp4")
+        mock_transcribe.assert_called()
+        # Should initiate open for SRT writing
+        mock_open.assert_called()
+
+class TestTranscriptionGenerator(unittest.TestCase):
+    def setUp(self):
+        self.generator = transcription.TranscriptionGenerator(device="cpu")
+
+    def test_init(self):
+        self.assertEqual(self.generator.subtitles_gen.device, "cpu")
+
+    @patch('ai_media.generators.subtitles.SubtitlesGenerator.transcribe_audio')
+    @patch('ai_media.generators.subtitles.SubtitlesGenerator.extract_audio')
+    @patch('os.remove')
+    @patch('pathlib.Path.exists')
+    def test_run_call(self, mock_exists, mock_remove, mock_extract, mock_transcribe):
+        mock_extract.return_value = "temp.wav"
+        mock_transcribe.return_value = ([{'start':0, 'end':1, 'text':'test transcript'}], 1.0, 0.1)
+        mock_exists.return_value = True
+
+        result = self.generator.run("test.mp4")
+        
+        self.assertIn("test transcript", result)
+        self.assertIn("[00:00]", result)
+        mock_extract.assert_called()
+
+class TestConvertDocumentTranslation(unittest.TestCase):
+    def setUp(self):
+        # We don't need real file system
+        pass
+
+    @patch('ai_media.conversion.document._read_to_markdown')
+    @patch('ai_media.conversion.document._write_from_markdown')
+    @patch('ai_media.conversion.document.Path')
+    @patch('ai_media.conversion.document.check_overwrite')
+    @patch('ai_media.generators.text.ArticleGenerator') 
+    def test_convert_with_translation(self, MockArticleGenerator, mock_check, mock_path, mock_write, mock_read):
+        from ai_media.conversion.document import convert_document
+        
+        # Setup mocks
+        mock_check.return_value = (True, "output.es.md", None, None)
+        mock_path.return_value.suffix = ".txt"
+        mock_read.return_value = "Hello World"
+        
+        # Mock generator instance
+        mock_gen_instance = MockArticleGenerator.return_value
+        mock_gen_instance.translate_text.return_value = "Hola Mundo"
+        
+        # Run conversion with translate=True
+        success = convert_document(
+            "input.txt", 
+            "output.es.md", 
+            target_format="md",
+            translate=True, 
+            target_language="es"
+        )
+        
+        self.assertTrue(success)
+        
+        # Verify translation was called
+        MockArticleGenerator.assert_called()
+        mock_gen_instance.translate_text.assert_called_with(
+            "Hello World",
+            target_lang="es",
+            source_lang="auto"
+        )
+        
+        # Verify write used translated content
+        mock_write.assert_called_with("Hola Mundo", "output.es.md", "md")
+
+# =============================================================================
+# bfloat16 Translation Support Tests
+# =============================================================================
+
+class TestTranslationBFloat16(unittest.TestCase):
+    """Test bfloat16 support in translation models (NLLB and LLM)."""
+    
+    def setUp(self):
+        self.mock_torch = MagicMock()
+        self.mock_torch.cuda.is_available.return_value = True
+        self.mock_torch.float32 = "float32"
+        self.mock_torch.float16 = "float16"
+        self.mock_torch.bfloat16 = "bfloat16"
+        self.mock_torch.device.return_value = MagicMock(type="cuda")
+        
+        # Patch modules
+        self.patchers = []
+        
+        # Patch text generator 
+        self.text_module_patch = patch('ai_media.generators.text.torch', self.mock_torch)
+        self.patchers.append(self.text_module_patch)
+        self.text_module_patch.start()
+        
+        # Patch load_model dependencies
+        self.AutoTokenizer = MagicMock()
+        self.AutoModelForSeq2SeqLM = MagicMock()
+        self.AutoModelForCausalLM = MagicMock()
+        self.pipeline = MagicMock()
+        
+        self.transformers_patch = patch('transformers.AutoTokenizer', self.AutoTokenizer)
+        self.transformers_patch.start()
+        self.patchers.append(self.transformers_patch)
+        
+        self.seq2seq_patch = patch('transformers.AutoModelForSeq2SeqLM', self.AutoModelForSeq2SeqLM)
+        self.seq2seq_patch.start()
+        self.patchers.append(self.seq2seq_patch)
+
+        self.causal_patch = patch('transformers.AutoModelForCausalLM', self.AutoModelForCausalLM)
+        self.causal_patch.start()
+        self.patchers.append(self.causal_patch)
+        
+        self.pipeline_patch = patch('transformers.pipeline', self.pipeline)
+        self.pipeline_patch.start()
+        self.patchers.append(self.pipeline_patch)
+
+        # Patch system utilities
+        self.is_bf16_patch = patch('ai_media.utils.system.is_bfloat16_supported')
+        self.mock_is_bf16 = self.is_bf16_patch.start()
+        self.patchers.append(self.is_bf16_patch)
+        
+        self.get_device_patch = patch('ai_media.generators.text.get_optimal_device_and_dtype')
+        self.mock_get_device = self.get_device_patch.start()
+        self.mock_get_device.return_value = (MagicMock(type="cuda"), self.mock_torch.bfloat16)
+        self.patchers.append(self.get_device_patch)
+
+        # Configure pipeline mock to return a valid structure for translation
+        # translator(text, ...) -> [{'translation_text': 'Translated Text'}]
+        # LLM pipeline(...) -> [{'generated_text': 'Translated Text'}]
+        mm_pipeline_instance = MagicMock()
+        # Mocking for both NLLB (returns dict with translation_text) and LLM (returns dict with generated_text)
+        mm_pipeline_instance.return_value = [{'translation_text': 'Hola', 'generated_text': 'Hola'}]
+        self.pipeline.return_value = mm_pipeline_instance
+
+    def tearDown(self):
+        for p in self.patchers:
+            p.stop()
+            
+    def test_nllb_cuda_bfloat16(self):
+        """Test NLLB uses bfloat16 on CUDA when supported."""
+        self.mock_is_bf16.return_value = True
+        
+        gen = ai_media.ArticleGenerator(model_name="default", device=MagicMock(type="cuda"))
+        gen.device = MagicMock(type="cuda")
+        gen.torch = self.mock_torch
+        
+        # Run NLLB translation
+        gen.translate_text("Hello", "es", model_id="nllb-200-3.3b")
+        
+        # Verify bfloat16 was used
+        # We need to find the call. Since we mocked the class method, we check the mock.
+        # However, AutoModelForSeq2SeqLM is mocked in the module space.
+        call_kwargs = self.AutoModelForSeq2SeqLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['torch_dtype'], "bfloat16")
+        
+    def test_nllb_cuda_float16_fallback(self):
+        """Test NLLB falls back to float16 on CUDA when bfloat16 NOT supported."""
+        self.mock_is_bf16.return_value = False
+        
+        gen = ai_media.ArticleGenerator(model_name="default", device=MagicMock(type="cuda"))
+        gen.device = MagicMock(type="cuda")
+        gen.torch = self.mock_torch
+        
+        # Run NLLB translation
+        gen.translate_text("Hello", "es", model_id="nllb-200-3.3b")
+        
+        # Verify float16 was used
+        call_kwargs = self.AutoModelForSeq2SeqLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['torch_dtype'], "float16")
+
+    def test_llm_cuda_bfloat16(self):
+        """Test LLM uses bfloat16 on CUDA when supported."""
+        self.mock_is_bf16.return_value = True
+        
+        # Setup generator configured for LLM
+        gen = ai_media.ArticleGenerator(model_name="alma-13b", device=MagicMock(type="cuda"))
+        # Mock device to be CUDA
+        gen.device = MagicMock(type="cuda")
+        gen.torch = self.mock_torch
+        
+        # Manually trigger load_model (which handles LLM loading)
+        gen._load_model()
+        
+        # Verify bfloat16 was passed to AutoModelForCausalLM
+        call_kwargs = self.AutoModelForCausalLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['dtype'], "bfloat16")
+
+    def test_llm_cuda_float16_fallback(self):
+        """Test LLM falls back to float16 on CUDA when bfloat16 NOT supported."""
+        self.mock_is_bf16.return_value = False
+        
+        gen = ai_media.ArticleGenerator(model_name="alma-13b", device=MagicMock(type="cuda"))
+        gen.device = MagicMock(type="cuda")
+        gen.torch = self.mock_torch
+        
+        gen._load_model()
+        
+        # Verify float16 was used
+        call_kwargs = self.AutoModelForCausalLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['dtype'], "float16")
+
+    def test_nllb_mps_defaults_float32(self):
+        """Test NLLB defaults to float32 on MPS."""
+        gen = ai_media.ArticleGenerator(model_name="default", device=MagicMock(type="mps"))
+        gen.device = MagicMock(type="mps")
+        gen.torch = self.mock_torch
+        
+        # Run NLLB translation
+        gen.translate_text("Hello", "es", model_id="nllb-200-3.3b")
+        
+        # Verify float32 was used
+        call_kwargs = self.AutoModelForSeq2SeqLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['torch_dtype'], "float32")
+
+    def test_llm_mps_defaults_float32(self):
+        """Test LLM defaults to float32 on MPS (for stability)."""
+        gen = ai_media.ArticleGenerator(model_name="alma-13b", device=MagicMock(type="mps"))
+        gen.device = MagicMock(type="mps")
+        gen.torch = self.mock_torch
+        
+        gen._load_model()
+        
+        # Verify float32 was used
+        call_kwargs = self.AutoModelForCausalLM.from_pretrained.call_args[1]
+        self.assertEqual(call_kwargs['dtype'], "float32")

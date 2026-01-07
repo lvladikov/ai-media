@@ -5,7 +5,134 @@ Short codes are mapped to Hugging Face Hub IDs.
 These are lightweight dictionaries that can be imported without loading heavy ML libraries.
 """
 
+# Complete NLLB/FLORES-200 language codes (200+ languages)
+# Source: https://github.com/facebookresearch/flores/blob/main/flores200/README.md
+ALL_NLLB_CODES = [
+    "ace_Arab", "ace_Latn", "acm_Arab", "acq_Arab", "aeb_Arab", "afr_Latn", "ajp_Arab",
+    "aka_Latn", "amh_Ethi", "apc_Arab", "arb_Arab", "arb_Latn", "ars_Arab", "ary_Arab",
+    "arz_Arab", "asm_Beng", "ast_Latn", "awa_Deva", "ayr_Latn", "azb_Arab", "azj_Latn",
+    "bak_Cyrl", "bam_Latn", "ban_Latn", "bel_Cyrl", "bem_Latn", "ben_Beng", "bho_Deva",
+    "bjn_Arab", "bjn_Latn", "bod_Tibt", "bos_Latn", "bug_Latn", "bul_Cyrl", "cat_Latn",
+    "ceb_Latn", "ces_Latn", "cjk_Latn", "ckb_Arab", "crh_Latn", "cym_Latn", "dan_Latn",
+    "deu_Latn", "dik_Latn", "dyu_Latn", "dzo_Tibt", "ell_Grek", "eng_Latn", "epo_Latn",
+    "est_Latn", "eus_Latn", "ewe_Latn", "fao_Latn", "fij_Latn", "fin_Latn", "fon_Latn",
+    "fra_Latn", "fur_Latn", "fuv_Latn", "gaz_Latn", "gla_Latn", "gle_Latn", "glg_Latn",
+    "grn_Latn", "guj_Gujr", "hat_Latn", "hau_Latn", "heb_Hebr", "hin_Deva", "hne_Deva",
+    "hrv_Latn", "hun_Latn", "hye_Armn", "ibo_Latn", "ilo_Latn", "ind_Latn", "isl_Latn",
+    "ita_Latn", "jav_Latn", "jpn_Jpan", "kab_Latn", "kac_Latn", "kam_Latn", "kan_Knda",
+    "kas_Arab", "kas_Deva", "kat_Geor", "kaz_Cyrl", "kbp_Latn", "kea_Latn", "khk_Cyrl",
+    "khm_Khmr", "kik_Latn", "kin_Latn", "kir_Cyrl", "kmb_Latn", "kmr_Latn", "knc_Arab",
+    "knc_Latn", "kon_Latn", "kor_Hang", "lao_Laoo", "lij_Latn", "lim_Latn", "lin_Latn",
+    "lit_Latn", "lmo_Latn", "ltg_Latn", "ltz_Latn", "lua_Latn", "lug_Latn", "luo_Latn",
+    "lus_Latn", "lvs_Latn", "mag_Deva", "mai_Deva", "mal_Mlym", "mar_Deva", "min_Arab",
+    "min_Latn", "mkd_Cyrl", "plt_Latn", "mlt_Latn", "mni_Beng", "mos_Latn", "mri_Latn",
+    "mya_Mymr", "nld_Latn", "nno_Latn", "nob_Latn", "npi_Deva", "nso_Latn", "nus_Latn",
+    "nya_Latn", "oci_Latn", "ory_Orya", "pag_Latn", "pan_Guru", "pap_Latn", "pbt_Arab",
+    "pes_Arab", "pol_Latn", "por_Latn", "prs_Arab", "quy_Latn", "ron_Latn", "run_Latn",
+    "rus_Cyrl", "sag_Latn", "san_Deva", "sat_Olck", "scn_Latn", "shn_Mymr", "sin_Sinh",
+    "slk_Latn", "slv_Latn", "smo_Latn", "sna_Latn", "snd_Arab", "som_Latn", "sot_Latn",
+    "spa_Latn", "als_Latn", "srd_Latn", "srp_Cyrl", "ssw_Latn", "sun_Latn", "swe_Latn",
+    "swh_Latn", "szl_Latn", "tam_Taml", "taq_Latn", "taq_Tfng", "tat_Cyrl", "tel_Telu",
+    "tgk_Cyrl", "tgl_Latn", "tha_Thai", "tir_Ethi", "tpi_Latn", "tsn_Latn", "tso_Latn",
+    "tuk_Latn", "tum_Latn", "tur_Latn", "twi_Latn", "tzm_Tfng", "uig_Arab", "ukr_Cyrl",
+    "umb_Latn", "urd_Arab", "uzn_Latn", "vec_Latn", "vie_Latn", "war_Latn", "wol_Latn",
+    "xho_Latn", "ydd_Hebr", "yor_Latn", "yue_Hant", "zho_Hans", "zho_Hant", "zsm_Latn",
+    "zul_Latn",
+]
+
+def get_nllb_language_name(nllb_code: str) -> str:
+    """
+    Get human-readable language name from NLLB code using pycountry.
+    
+    NLLB codes follow format: {iso639_3}_{script} (e.g., 'eng_Latn', 'fra_Latn')
+    Falls back to code itself if language not found.
+    Uses caching for fast repeated lookups.
+    """
+    # Check cache first
+    if nllb_code in _language_name_cache:
+        return _language_name_cache[nllb_code]
+    
+    try:
+        import pycountry
+        # Extract the ISO 639-3 code (first 3 chars)
+        iso_code = nllb_code.split("_")[0]
+        
+        # Try ISO 639-3 first
+        lang = pycountry.languages.get(alpha_3=iso_code)
+        if lang:
+            name = lang.name
+        else:
+            # Fallback: try ISO 639-2 bibliographic code
+            lang = pycountry.languages.get(bibliographic=iso_code)
+            if lang:
+                name = lang.name
+            else:
+                # Fallback: return the code capitalized
+                name = iso_code.capitalize()
+    except ImportError:
+        # pycountry not installed, return code
+        name = nllb_code.split("_")[0].upper()
+    except Exception:
+        name = nllb_code.split("_")[0].upper()
+    
+    # Cache and return
+    _language_name_cache[nllb_code] = name
+    return name
+
+# Cache for language names
+_language_name_cache = {}
+_cached_languages_with_names = None
+
+
+def get_nllb_languages_with_names():
+    """
+    Get list of all NLLB languages with human-readable names.
+    Returns: List of (display_name, nllb_code) tuples, sorted alphabetically.
+    Uses caching for fast repeated calls.
+    """
+    global _cached_languages_with_names
+    
+    if _cached_languages_with_names is not None:
+        return _cached_languages_with_names
+    
+    languages = []
+    for code in ALL_NLLB_CODES:
+        name = get_nllb_language_name(code)
+        # Add script info for codes with same language but different scripts
+        script = code.split("_")[1] if "_" in code else ""
+        if script and script not in ["Latn", "Arab", "Cyrl"]:
+            # Add script for non-Latin/Arabic/Cyrillic scripts
+            name = f"{name} ({script})"
+        languages.append((name, code))
+    
+    # Sort by name and cache
+    _cached_languages_with_names = sorted(languages, key=lambda x: x[0])
+    return _cached_languages_with_names
+
+
+# Short code mapping (for backward compatibility with existing code)
+NLLB_LANGUAGE_CODES = {
+    "en": "eng_Latn", "es": "spa_Latn", "fr": "fra_Latn", "de": "deu_Latn",
+    "it": "ita_Latn", "pt": "por_Latn", "ru": "rus_Cyrl", "zh": "zho_Hans",
+    "ja": "jpn_Jpan", "ko": "kor_Hang", "ar": "arb_Arab", "hi": "hin_Deva",
+    "nl": "nld_Latn", "pl": "pol_Latn", "tr": "tur_Latn", "sv": "swe_Latn",
+    "no": "nob_Latn", "da": "dan_Latn", "fi": "fin_Latn", "el": "ell_Grek",
+    "he": "heb_Hebr", "th": "tha_Thai", "vi": "vie_Latn", "id": "ind_Latn",
+    "bg": "bul_Cyrl", "uk": "ukr_Cyrl", "cs": "ces_Latn", "ro": "ron_Latn",
+    "hu": "hun_Latn", "sk": "slk_Latn", "hr": "hrv_Latn", "sr": "srp_Cyrl",
+    "sl": "slv_Latn", "et": "est_Latn", "lv": "lvs_Latn", "lt": "lit_Latn",
+    "mk": "mkd_Cyrl", "sq": "als_Latn", "bs": "bos_Latn", "mt": "mlt_Latn",
+    "is": "isl_Latn", "ga": "gle_Latn", "cy": "cym_Latn", "af": "afr_Latn",
+    "sw": "swh_Latn", "bn": "ben_Beng", "ta": "tam_Taml", "te": "tel_Telu",
+    "ml": "mal_Mlym", "kn": "kan_Knda", "mr": "mar_Deva", "gu": "guj_Gujr",
+    "pa": "pan_Guru", "ur": "urd_Arab", "fa": "pes_Arab", "ms": "zsm_Latn",
+    "tl": "tgl_Latn", "my": "mya_Mymr", "km": "khm_Khmr", "lo": "lao_Laoo",
+    "ne": "npi_Deva", "si": "sin_Sinh", "ka": "kat_Geor", "hy": "hye_Armn",
+    "az": "azj_Latn", "kk": "kaz_Cyrl", "uz": "uzn_Latn", "mn": "khk_Cyrl",
+}
+
 # --- Image Models ---
+
 IMAGE_MODELS = {
     "flux": "black-forest-labs/FLUX.1-schnell",        # State of the art, fast
     "flux-dev": "black-forest-labs/FLUX.1-dev",        # Higher quality, slower
@@ -74,13 +201,13 @@ TEXT_MODELS = {
     "deepseek-r1-llama-8b": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",    # ~8GB VRAM
     "deepseek-r1-llama-70b": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",  # ~40GB VRAM (requires high-end GPU)
     # General-purpose (Newer knowledge cutoffs)
-    "qwen3-8b": "Qwen/Qwen3-8B",  # Note: May have MPS issues on Apple Silicon
-    "qwen-2.5-14b": "Qwen/Qwen2.5-14B-Instruct",
+    "qwen3-8b": "Qwen/Qwen3-8B",  # Qwen 3 (Base/Instruct hybrid)
+    "qwen3-14b": "Qwen/Qwen3-14B", # Qwen 3 (14B)
     # Coding-specific models
     "qwen-coder-32b": "Qwen/Qwen2.5-Coder-32B-Instruct",    # Qwen 2.5 SOTA Code Gen (~24GB VRAM, 120GB RAM)
     "qwen-coder-14b": "Qwen/Qwen2.5-Coder-14B-Instruct",    # Qwen 2.5 Fast & Capable (~12GB VRAM)
     "qwen-coder-7b": "Qwen/Qwen2.5-Coder-7B-Instruct",      # Qwen 2.5 Lightweight (~6GB VRAM)
-    "qwen3-coder-30b": "Qwen/Qwen3-Coder-30B-A3B-Instruct", # MoE (3.3B active, ~10GB VRAM)
+    "qwen3-coder-30b": "Qwen/Qwen2.5-Coder-32B-Instruct",   # Fallback to 32B Coder
     # Established models
     "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
     "mistral-nemo-12b": "mistralai/Mistral-Nemo-Instruct-2407",
@@ -91,13 +218,29 @@ TEXT_MODELS = {
 # --- Caption/Description Models ---
 CAPTION_MODELS = {
     "florence": "microsoft/Florence-2-large",
-    # Qwen3-VL series (latest, better compatibility)
-    "qwen3-vl-8b": "Qwen/Qwen3-VL-8B-Instruct",     # 8B, best quality
-    "qwen3-vl-4b": "Qwen/Qwen3-VL-4B-Instruct",     # 4B, balanced
-    "qwen3-vl-2b": "Qwen/Qwen3-VL-2B-Instruct",     # 2B, lightweight
-    "qwen-vl": "Qwen/Qwen3-VL-8B-Instruct",         # Alias (now points to Qwen3)
+    # Qwen2-VL series (latest, better compatibility)
+    "qwen3-vl-8b": "Qwen/Qwen2-VL-7B-Instruct",     # 7B, best quality
+    "qwen3-vl-4b": "Qwen/Qwen2-VL-7B-Instruct",     # Fallback to 7B (no 4B in 2.5) or 2B
+    "qwen3-vl-2b": "Qwen/Qwen2-VL-2B-Instruct",     # 2B, lightweight
+    "qwen-vl": "Qwen/Qwen2-VL-7B-Instruct",         # Alias
     "blip": "Salesforce/blip-image-captioning-large",
     "default": "microsoft/Florence-2-large"
+}
+
+# --- Translation Models ---
+TRANSLATION_MODELS = {
+    # Specialized Translation
+    "seamless-m4t-v2-large": "facebook/seamless-m4t-v2-large", # SOTA Speech/Text Translation
+    "nllb-200-3.3b": "facebook/nllb-200-3.3B",                   # High quality text translation
+    "nllb-200-distilled": "facebook/nllb-200-distilled-600M",    # Fast text translation
+    
+    "qwen3-8b": "Qwen/Qwen3-8B", # Qwen 3 (Base/Instruct hybrid)
+    "qwen3-14b": "Qwen/Qwen3-14B", # Qwen 3 (14B)
+    "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "alma-13b": "haoranxu/ALMA-13B-R",  # Specialized translation model
+    
+    "default_audio": "facebook/seamless-m4t-v2-large",
+    "default_text": "facebook/nllb-200-3.3B"
 }
 
 # --- Model Resource Requirements ---
@@ -160,9 +303,18 @@ MODEL_REQUIREMENTS = {
     "Qwen/Qwen2.5-Coder-7B-Instruct": {"vram": 6, "ram": 16, "max_resolution": None},
     "Qwen/Qwen3-Coder-30B-A3B-Instruct": {"vram": 10, "ram": 20, "max_resolution": None},  # MoE, 3.3B active
     # Vision-Language Models
-    "Qwen/Qwen3-VL-8B-Instruct": {"vram": 16, "ram": 28, "max_resolution": None},
-    "Qwen/Qwen3-VL-4B-Instruct": {"vram": 8, "ram": 16, "max_resolution": None},
-    "Qwen/Qwen3-VL-2B-Instruct": {"vram": 4, "ram": 8, "max_resolution": None},
+    "Qwen/Qwen2-VL-7B-Instruct": {"vram": 16, "ram": 28, "max_resolution": None},
+    "Qwen/Qwen2-VL-2B-Instruct": {"vram": 4, "ram": 8, "max_resolution": None},
+
+    # Translation Models
+    "facebook/seamless-m4t-v2-large": {"vram": 10, "ram": 16, "max_duration": 60}, # ~4.6B params
+    "facebook/nllb-200-3.3B": {"vram": 8, "ram": 16, "max_resolution": None},
+    "facebook/nllb-200-distilled-600M": {"vram": 4, "ram": 8, "max_resolution": None},
+    "Qwen/Qwen2.5-7B-Instruct": {"vram": 16, "ram": 24, "max_resolution": None},
+    "Qwen/Qwen3-8B": {"vram": 16, "ram": 24, "max_resolution": None},
+    "Qwen/Qwen3-14B": {"vram": 28, "ram": 48, "max_resolution": None},
+    "haoranxu/ALMA-13B-R": {"vram": 26, "ram": 48, "max_resolution": None}, # Based on LLaMA-2-13b base
+
 }
 
 

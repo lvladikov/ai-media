@@ -1,4 +1,4 @@
-# Vision
+# Analysis (Vision and Sound)
 
 Use Vision-Language Models (VLMs) to give eyes to your AI. This module analyzes images and videos and returns text descriptions of what it sees.
 

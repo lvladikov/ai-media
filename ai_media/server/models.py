@@ -108,6 +108,9 @@ class ArticleGenerateRequest(BaseModel):
     online: bool = Field(False, description="Enable online research")
     research_iterations: int = Field(3, description="Number of research iterations (if online)")
     max_images: int = Field(5, description="Maximum number of images to fetch (if online)")
+    translate: bool = Field(False, description="Enable translation of the output")
+    target_language: Optional[str] = Field("eng_Latn", description="Target language code (e.g. 'eng_Latn')")
+    translation_model: Optional[str] = Field("nllb-200-3.3b", description="Translation model ID")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
 
@@ -138,7 +141,12 @@ class ConvertRequest(BaseModel):
     target_format: str = Field(..., description="Target format (e.g., 'mp4', 'gif', 'pdf')")
     ocr_enabled: bool = Field(False, description="Enable OCR for images/scanned PDFs")
     ocr_model: str = Field("qwen-vl", description="OCR model to use ('qwen-vl', 'florence')")
+    translate: bool = Field(False, description="Enable translation")
+    target_language: Optional[str] = Field("en", description="Target language code (e.g., 'es', 'fr')")
+    translation_model: Optional[str] = Field("nllb-200-3.3b", description="Translation model ID")
+    render_method: Optional[str] = Field("smart", description="Image rendering method (smart, generative)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
+    is_direct_text: bool = Field(False, description="Flag for direct text input")
 
 
 class UpscaleRequest(BaseModel):
@@ -159,8 +167,21 @@ class TextExportRequest(BaseModel):
     filename: str = Field(..., description="Target filename")
 
 
-class VisionRequest(BaseModel):
-    """Vision/Description request."""
+class TranslateRequest(BaseModel):
+    """Translation request."""
+    input_path: str = Field(..., description="Path to input file")
+    target_language: str = Field(..., description="Target language code (e.g. 'fr')")
+    source_language: Optional[str] = Field(None, description="Source language code")
+    model: str = Field("default", description="Translation model")
+    task: Optional[str] = Field("t2tt", description="Task: t2tt, s2st, s2tt")
+    render_method: Optional[str] = Field("smart", description="Rendering method for image translation: 'smart' (Pillow/OpenCV inpainting)")
+    output_filename: Optional[str] = Field(None, description="Custom output filename")
+    force: bool = Field(False, description="Force execution")
+    bypass_warning: bool = Field(False, description="Skip resource warnings")
+
+
+class AnalysisRequest(BaseModel):
+    """Analysis/Description request."""
     input_path: str = Field(..., description="Path to input image or video")
     model: str = Field("default", description="Model name (e.g., 'florence', 'blip', 'qwen-vl')")
     job_id: Optional[str] = Field(None, description="Optional pre-defined job ID")

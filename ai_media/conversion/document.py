@@ -126,15 +126,25 @@ def _read_to_markdown(input_path, input_format, ocr_model="florence"):
                                     img = img.resize(new_size, Image.Resampling.LANCZOS)
                                     print(f"         (Resized to {new_size[0]}x{new_size[1]} for OCR)")
                                 
-                                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                                # Use temp folder from config instead of system temp
+                                from ..server.config import CONFIG
+                                import uuid
+                                temp_filename = os.path.join(CONFIG["paths"]["temp"], f"ocr_{uuid.uuid4().hex}.jpg")
+                                try:
                                     # Convert to RGB if needed (JPEG doesn't support RGBA)
                                     if img.mode in ('RGBA', 'P'):
                                         img = img.convert('RGB')
-                                    img.save(tmp.name, "JPEG", quality=90)
-                                    text = image_to_text(tmp.name, model_type=ocr_model)
+                                    img.save(temp_filename, "JPEG", quality=90)
+                                    text = image_to_text(temp_filename, model_type=ocr_model)
                                     if text:
                                         ocr_texts.append(text)
-                                    os.unlink(tmp.name)
+                                finally:
+                                    # Clean up temp file
+                                    if os.path.exists(temp_filename):
+                                        try:
+                                            os.unlink(temp_filename)
+                                        except Exception:
+                                            pass  # Ignore cleanup errors
                     
                     if ocr_texts:
                         markdown_content = "\n\n".join(ocr_texts)
@@ -325,7 +335,7 @@ def _write_from_markdown(markdown_content, output_path, output_format):
             f.write('\n'.join(rtf_lines))
 
 
-def convert_document(input_path, output_path, target_format=None, ocr_enabled=False, ocr_model="qwen-vl"):
+def convert_document(input_path, output_path, target_format=None, ocr_enabled=False, ocr_model="florence", **kwargs):
     """
     Convert a document or image to another format.
     
@@ -349,9 +359,14 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
         output_format = Path(output_path).suffix.lstrip('.').lower()
     
     if output_format not in SUPPORTED_FORMATS:
-        print(f"❌ Unsupported output format: {output_format}")
-        print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
-        return False
+        # Exception: Allow image formats if this is an Image Translation pipeline
+        image_exts = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff', 'gif']
+        is_image_translation = (output_format in image_exts and kwargs.get("translate"))
+        
+        if not is_image_translation:
+            print(f"❌ Unsupported output format: {output_format}")
+            print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
+            return False
     
     # Determine input format
     input_format = Path(input_path).suffix.lstrip('.').lower()
@@ -368,8 +383,11 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
         print(f"   Supported: {', '.join(SUPPORTED_FORMATS)}")
         return False
     
-    print(f"📄 Converting Document: {input_path}")
-    print(f"   {input_format.upper()} → {output_format.upper()}")
+    print(f"📄 Converting Document: {os.path.normpath(input_path)}")
+    arrow_msg = f"   {input_format.upper()} → {output_format.upper()}"
+    if input_format == output_format and input_format in ['jpg', 'jpeg', 'png']:
+        arrow_msg += " (Optimizing)"
+    print(arrow_msg)
     
     # Generate output path if only format string was provided
     if output_path and ('/' not in output_path and '\\' not in output_path and len(output_path) <= 6):
@@ -386,8 +404,38 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
         if input_format in image_exts and ocr_enabled:
             print(f"   📷 Image input detected. Using OCR ({ocr_model})...")
             from .ocr import image_to_text
-            from PIL import Image
-            import tempfile
+            
+            # Special Flow for Layout Preservation (Image Translation)
+            is_image_output = output_format in image_exts
+            if kwargs.get("translate") and is_image_output:
+                print(f"      ✨ Layout mode active: Image -> Image Translation...")
+                from ai_media.generators.image_translation import ImageTranslationGenerator
+                
+                # Check render method for logging (generator handles it too)
+                render_method = kwargs.get("render_method", "smart")
+                print(f"      🎨 Using Rendering Method: Smart Logic")
+                
+                generator = ImageTranslationGenerator()
+                try:
+                    generator.run(
+                        input_path=input_path,
+                        target_lang=kwargs.get("target_language"),
+                        render_method=render_method,
+                        translate_model=kwargs.get("translation_model", "nllb-200-3.3b"),
+                        ocr_model=ocr_model,
+                        output_path=output_path
+                    )
+                    print(f"✅ Saved to {os.path.normpath(output_path)}")
+                    return True
+                except Exception as e:
+                    print(f"❌ Image Translation failed: {e}")
+                    raise e
+                
+            else:
+                # Standard Text-Only OCR
+                from .ocr import image_to_text
+                from PIL import Image
+                import tempfile
             
             # Temporarily disable PIL's decompression bomb limit for large images
             # (we'll resize them down anyway)
@@ -409,10 +457,20 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
                     # Save resized image to temp file
                     if img.mode in ('RGBA', 'P'):
                         img = img.convert('RGB')
-                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-                        img.save(tmp.name, "JPEG", quality=90)
-                        markdown_content = image_to_text(tmp.name, model_type=ocr_model)
-                        os.unlink(tmp.name)
+                    # Use temp folder from config
+                    from ..server.config import CONFIG
+                    import uuid
+                    temp_filename = os.path.join(CONFIG["paths"]["temp"], f"ocr_resize_{uuid.uuid4().hex}.jpg")
+                    try:
+                        img.save(temp_filename, "JPEG", quality=90)
+                        markdown_content = image_to_text(temp_filename, model_type=ocr_model)
+                    finally:
+                        # Clean up temp file
+                        if os.path.exists(temp_filename):
+                            try:
+                                os.unlink(temp_filename)
+                            except Exception:
+                                pass  # Ignore cleanup errors
                 else:
                     markdown_content = image_to_text(input_path, model_type=ocr_model)
             finally:
@@ -420,16 +478,39 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
         else:
             markdown_content = _read_to_markdown(input_path, input_format, ocr_model=ocr_model)
         
+        # Step 2: Translate if requested
+        if kwargs.get("translate") and kwargs.get("target_language"):
+            print(f"   🌍 Translating content to {kwargs.get('target_language')}...")
+            from ai_media.generators.text import ArticleGenerator
+            # Use a temporary instance or static method if possible, but instance is fine
+            # We need to ensure models are loaded lightly or cached
+            
+            # Since convert runs in a separate process, loading here is safe-ish but slow
+            # Ideally we reuse the existing translate_text logic
+            
+            # Create a lightweight generator instance just for translation utils
+            # Note: ArticleGenerator init might load things, let's check.
+            # It loads nothing by default.
+            
+            gen = ArticleGenerator()
+            translated_content = gen.translate_text(markdown_content, target_lang=kwargs.get("target_language"), source_lang="auto", model_id=kwargs.get("translation_model", "nllb-200-3.3b"), keep_loaded=False)
+            
+            if translated_content:
+                markdown_content = translated_content
+            else:
+                raise ValueError("Translation failed (Model returned empty/None). Check server logs.")
+
         # Determine output format early for writing
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Step 2: Write to target format
+        # Step 3: Write to target format
         _write_from_markdown(markdown_content, output_path, output_format)
         
-        print(f"✅ Saved to {output_path}")
+        print(f"✅ Saved to {os.path.normpath(output_path)}")
         return True
         
     except Exception as e:
         # Re-raise the exception so the task runner gets the specific error message
         # The runner will handle logging and status update
         raise e
+

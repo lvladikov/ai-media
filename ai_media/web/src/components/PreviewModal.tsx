@@ -276,7 +276,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
         </div>
 
         {/* Content */}
-        <div className={`relative flex-1 min-h-0 overflow-auto scrollbar-themed bg-white dark:bg-zinc-950 border border-border ${showViewToggle ? 'rounded-b-lg rounded-tr-lg' : 'rounded-lg mt-4'}`}>
+        <div className={`relative flex-1 min-h-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-950 border border-border ${showViewToggle ? 'rounded-b-lg rounded-tr-lg' : 'rounded-lg mt-4'}`}>
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center z-10 bg-zinc-100 dark:bg-zinc-950">
               <Loader2 className="animate-spin" size={32} />
@@ -316,7 +316,7 @@ function MarkdownPreview({ url, onLoad, onError }: { url: string; onLoad: () => 
   if (!content) return null;
 
   return (
-    <div ref={containerRef} className="p-8 prose dark:prose-invert prose-slate max-w-none prose-headings:text-primary prose-p:text-secondary prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-primary prose-code:text-primary-300 prose-code:bg-secondary/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-primary prose-pre:border prose-pre:border-border [&_pre>code]:bg-transparent [&_pre>code]:p-0 [&_pre>code]:text-inherit">
+    <div ref={containerRef} className="flex-1 h-full overflow-y-auto scrollbar-themed p-8 prose dark:prose-invert prose-slate max-w-none prose-headings:text-primary prose-p:text-secondary prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-primary prose-code:text-primary-300 prose-code:bg-secondary/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-primary prose-pre:border prose-pre:border-border [&_pre>code]:bg-transparent [&_pre>code]:p-0 [&_pre>code]:text-inherit">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
@@ -452,13 +452,13 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
       </div>
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto scrollbar-themed"
+        className="flex-1 overflow-x-auto overflow-y-auto scrollbar-themed w-full h-full relative"
       >
         <pre
-          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm ${wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'}`}
-          style={{ minWidth: wordWrap ? undefined : 'max-content', fontFamily: 'JetBrains Mono, monospace' }}
+          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm ${wordWrap ? '!whitespace-pre-wrap !break-words w-full' : '!whitespace-pre min-w-full'}`}
+          style={{ fontFamily: 'JetBrains Mono, monospace' }}
         >
-          <code ref={codeRef} className={`language-${language}`}>
+          <code ref={codeRef} className={`language-${language} block`}>
             {content}
           </code>
         </pre>

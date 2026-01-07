@@ -97,7 +97,10 @@ pkg_generate_video = None
 pkg_generate_caption = None
 pkg_generate_edit = None
 pkg_remove_background = None
+pkg_generate_translation = None
 PkgArticleGenerator = None
+PkgSubtitlesGenerator = None
+PkgTranscriptionGenerator = None
 PkgPerformanceTracker = None
 PkgResourceMonitor = None
 pkg_convert_image = None
@@ -128,7 +131,7 @@ def load_ai_modules():
     """Load heavy AI modules on demand."""
     global pkg_parsers, pkg_system, pkg_performance, pkg_ffmpeg
     global pkg_generate_image, pkg_generate_audio, pkg_generate_video, pkg_generate_caption
-    global pkg_generate_edit, pkg_remove_background, PkgArticleGenerator
+    global pkg_generate_edit, pkg_remove_background, pkg_generate_translation, PkgArticleGenerator, PkgSubtitlesGenerator, PkgTranscriptionGenerator
     global PkgPerformanceTracker, PkgResourceMonitor
     global pkg_convert_image, pkg_convert_video, pkg_convert_audio, pkg_convert_document
     global pkg_simple_upscale_image, pkg_simple_upscale_video, pkg_upscale_image_fast
@@ -179,6 +182,15 @@ def load_ai_modules():
         pkg_generate_edit = generate_edit
         pkg_remove_background = remove_background
         PkgArticleGenerator = ArticleGenerator
+
+        from ai_media.generators.subtitles import SubtitlesGenerator
+        PkgSubtitlesGenerator = SubtitlesGenerator
+        
+        from ai_media.generators.translation import TranslationGenerator
+        pkg_generate_translation = TranslationGenerator().run
+        
+        from ai_media.generators.transcription import TranscriptionGenerator
+        PkgTranscriptionGenerator = TranscriptionGenerator
         
         from ai_media.utils.performance import (
             PerformanceTracker,
@@ -406,7 +418,7 @@ Examples:
   python ai-media.py -gc 'Write a Snake game in Python' (Code Gen)
   python ai-media.py -ga -p "Story about a cat" -o story.docx -atm mistral-nemo-12b
 
-  -- Vision --
+  -- Analysis --
   python ai-media.py -gd -ii video.mp4
   python ai-media.py -gd -ii image.jpg -cm blip (Use simpler model)
 
@@ -479,14 +491,14 @@ Supported Models (Code : Download Size | Description):
     - deepseek-r1-llama-70b      : ~40GB | ⚠️ HIGH RAM! R1 distilled to Llama-70B.
     - llama-3.1-8b (default)     : ~16GB | Writing, chat, and reasoning (🔒 Gated - Free Login Required)
     - mistral-nemo-12b           : ~24GB | Powerful 12B model. Large context and reasoning.
-    - qwen3-8b                   : ~16GB | Latest Qwen model. Strong instruction-following.
-    - qwen-2.5-14b               : ~28GB | Larger Qwen model. Great at detailed formatting.
+    - qwen3-8b                   : ~16GB | Qwen 3 8B (Reasoning). Strong instruction-following.
+    - qwen3-14b                  : ~28GB | Qwen 3 14B (Reasoning). Great at detailed formatting.
     - qwen-coder-32b             : ~24GB | Qwen 2.5 SOTA Code Gen. (⚠️ 120GB+ RAM!)
     - qwen-coder-14b             : ~12GB | Qwen 2.5 Fast & Capable Code Gen.
     - qwen-coder-7b              : ~6GB  | Qwen 2.5 Lightweight Code Gen.
     - qwen3-coder-30b            : ~10GB | MoE (3.3B active). Efficient SOTA.
 
-  Vision (Description Generation):
+  Analysis:
     - florence (default)         : ~1.5GB | SOTA details, rich descriptions, "seeing" the scene. Fast.
     - qwen-vl                    : ~30GB  | Qwen3-VL 8B. High precision OCR & captioning.
     - blip                       : ~1GB   | Simple, concise captions. Faster but less detailed. (Not for OCR)
@@ -520,8 +532,10 @@ Supported Models (Code : Download Size | Description):
     mode_group.add_argument("-c", "--chat", action="store_true", help="Interactive Chat Mode")
     mode_group.add_argument("-gc", "--generate-code", nargs="?", const=True, default=False, 
                             help="Generate code. Supports multi-file projects & auto-naming. E.g.: -gc 'Write a REST API'")
+    mode_group.add_argument("-gs", "--generate-subtitles", action="store_true", help="Generate Subtitles (using faster-whisper + NLLB).")
+    mode_group.add_argument("-trans", "--transcribe", action="store_true", help="Transcribe Audio/Video to text/markdown.")
     
-    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Vision - Generate Description for Image or Video.")
+    mode_group.add_argument("-gd", "--generate-description", nargs="?", const="USE_INPUT_IMAGE", help="Analysis - Generate Description for Image or Video.")
     mode_group.add_argument("-ti", "--transform-image", nargs="?", const="USE_GENERATED", metavar="FILE", help="Transform an image. Omit FILE to auto-use generated output from -i.")
     
     # Common Parameters (applies to most modes)
@@ -576,9 +590,48 @@ Supported Models (Code : Download Size | Description):
     text_group.add_argument("-al", "--article-length", choices=["quick", "standard", "detailed"], default="quick",
                             help="Article length: quick (fast, ~500 words, default), standard (~1500 words), detailed (comprehensive, ~3000 words).")
 
-    # Vision (Description Generation) Options
-    caption_group = parser.add_argument_group("Vision Options")
-    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip", "qwen-vl", "qwen3-vl-8b", "qwen3-vl-4b", "qwen3-vl-2b"], help="Vision models: 'florence' (default), 'blip', 'qwen-vl' (Qwen3-VL-8B), or 'qwen3-vl-2b/4b/8b'.")
+    # Translation Options
+    trans_group = parser.add_argument_group("Translation Options")
+    trans_group.add_argument("-tr", "--translate", action="store_true", help="Translate text or matching media file.")
+    trans_group.add_argument("-tl", "--target-language", help="Target language code (e.g. 'fra', 'deu', 'spa'). Required for translation.")
+    trans_group.add_argument("-sl", "--source-language", help="Source language code (e.g. 'eng'). Optional/Auto.")
+    trans_group.add_argument("-tm", "--translation-model", default="nllb-200-3.3b", 
+                             choices=list(TRANSLATION_MODELS.keys()), 
+                             help=f"Translation model. Options: {', '.join(k for k in TRANSLATION_MODELS.keys() if not k.startswith('default'))}. Default: nllb-200-3.3b")
+
+    # Analysis Options
+    caption_group = parser.add_argument_group("Analysis Options")
+    caption_group.add_argument("-cm", "--caption-model", default="florence", choices=["florence", "blip", "qwen-vl", "qwen3-vl-8b", "qwen3-vl-4b", "qwen3-vl-2b"], help="Analysis models: 'florence' (default), 'blip', 'qwen-vl' (Qwen3-VL-8B), or 'qwen3-vl-2b/4b/8b'.")
+    
+    # Subtitles Options
+    subtitles_group = parser.add_argument_group("Subtitles Options")
+    subtitles_group.add_argument("--subtitle-format", default="srt", 
+                                 choices=["srt", "vtt", "ass", "sub", "txt", "json"],
+                                 help="Output format: srt (default), vtt, ass, sub, txt, json")
+    subtitles_group.add_argument("--subtitle-fps", type=float, default=25.0,
+                                 help="FPS for SUB format (frame-based). Default: 25.0")
+    subtitles_group.add_argument("--subtitle-translate-to", 
+                                 help="Translate subtitles to target language(s). Comma-separated (e.g. 'fr,es,ja').")
+    subtitles_group.add_argument("--subtitle-source-lang", 
+                                 help="Source language code (e.g. 'en'). Auto-detected if omitted.")
+    subtitles_group.add_argument("--whisper-model", default="small", 
+                                 choices=["tiny", "base", "small", "medium", "large-v3"], 
+                                 help="Whisper model size. Default: small")
+    subtitles_group.add_argument("--subtitle-vad-preset", default="normal",
+                                 choices=["normal", "noisy", "sensitive"],
+                                 help="VAD preset: normal (default), noisy (strict, for noisy recordings), sensitive (for quiet speech)")
+    subtitles_group.add_argument("--subtitle-vad-min-silence", type=int,
+                                 help="VAD: Min silence duration (ms) to split segments. Default: 2000")
+    subtitles_group.add_argument("--subtitle-vad-threshold", type=float,
+                                 help="VAD: Speech probability threshold (0.0-1.0). Default: 0.5")
+    subtitles_group.add_argument("--subtitle-no-context", action="store_true",
+                                 help="Disable conditioning on previous text (prevents hallucination loops).")
+    # Legacy compatibility aliases
+    subtitles_group.add_argument("--translate-to", dest="subtitle_translate_to_legacy",
+                                 help=argparse.SUPPRESS)  # Hidden, for backward compat
+    subtitles_group.add_argument("--source-lang", dest="subtitle_source_lang_legacy",
+                                 help=argparse.SUPPRESS)  # Hidden, for backward compat
+
     
     # Creative Image Transformation
     transform_group = parser.add_argument_group("Creative Image Transformation Options")
@@ -603,8 +656,8 @@ Supported Models (Code : Download Size | Description):
     doc_conv_group = parser.add_argument_group("Document Conversion Options")
     doc_conv_group.add_argument("-cd", "--convert-document", metavar="FILE", help="Convert document (e.g., docx->pdf) or extract text from image (ocr).")
     doc_conv_group.add_argument("-cdt", "--convert-document-to", metavar="FMT", help="Output format: md, html, pdf, docx, rtf, txt, json. Use 'txt' or 'md' for images to trigger OCR.")
-    doc_conv_group.add_argument("-om", "--ocr-model", default="qwen-vl", choices=["florence", "qwen-vl"],
-                               help="OCR Model: 'qwen-vl' (default, high precision) or 'florence' (fast, ~1.5GB RAM).")
+    doc_conv_group.add_argument("-om", "--ocr-model", default="florence", choices=["florence", "qwen-vl"],
+                               help="OCR Model: 'florence' (default, fast, ~1.5GB RAM) or 'qwen-vl' (high precision).")
     
     # AI Upscaling (Standalone Mode)
     upscale_mode_group = parser.add_argument_group("AI Upscaling Options")
@@ -890,7 +943,7 @@ Supported Models (Code : Download Size | Description):
     # Auto-generate output filename from prompt if not provided
     # This centralized logic handles all generation modes
     # -------------------------------------------------------------------
-    if any([args.generate_image, args.generate_video, args.generate_audio, args.transform_image]):
+    if any([args.generate_image, args.generate_video, args.generate_audio, args.transform_image, args.transcribe]):
         import re
         if not args.output:
             # Sanitize prompt to create safe filename (first 2 words, alphanumeric only)
@@ -1055,6 +1108,171 @@ Supported Models (Code : Download Size | Description):
                    pkg_upscale_video_fast(outfile, upscale_out, factor=args.upscale_factor)
 
     # --- Standalone Modes ---
+    # Translate Mode
+    elif args.translate:
+        if not args.target_language:
+            print("❌ Error: --target-language is required for translation.")
+            sys.exit(1)
+        
+        load_ai_modules()
+        
+        input_data = args.prompt if args.prompt else args.input_image # repurpose input_image for file? or create input_file arg?
+        # Argument parser has -ii for input-image.
+        # But my new group didn't add --input-file.
+        # I can use args.input_image (reusing -ii) as generic file input, or check if prompt is a file path?
+        # Let's use args.input_image as the file input (since -ii is common param).
+        
+        if not args.prompt and not args.input_image:
+            print("❌ Error: --prompt (text) or -ii (file) required.")
+            sys.exit(1)
+            
+        data = args.prompt if args.prompt else args.input_image
+        is_file = bool(args.input_image)
+
+        task = "t2tt"
+        if is_file:
+             ext = os.path.splitext(data)[1].lower()
+             if ext in ['.wav', '.mp3', '.m4a', '.flac']:
+                 task = "s2st" if args.format in ['wav', 'mp3'] else "s2tt"
+                 print(f"🎤 Translating Audio ({task}): {data} -> {args.target_language}")
+             else:
+                 # Assume text file?
+                 # TranslationGenerator t2tt supports text string. If file, read it?
+                 if os.path.exists(data):
+                     try:
+                        with open(data, 'r', encoding='utf-8') as f:
+                            data = f.read()
+                        print(f"📄 Translating Text File: {args.input_image} -> {args.target_language}")
+                     except:
+                        print("❌ Error: Could not read input file (binary?). Translation currently supports text/audio.")
+                        sys.exit(1)
+                 else:
+                     print(f"❌ Error: File not found: {data}")
+                     sys.exit(1)
+        else:
+             print(f"📝 Translating Text: \"{data[:50]}...\" -> {args.target_language}")
+
+        try:
+             model = args.translation_model
+             
+             # Use Seamless only for speech translation, otherwise use text translator
+             if task in ["s2st", "s2tt"]:
+                 # Speech translation - use Seamless (TranslationGenerator)
+                 res = pkg_generate_translation(data, args.target_language, task=task, output_path=args.output)
+             else:
+                 # Text translation - use NLLB/LLM via translate_text
+                 # Text translation - use NLLB/LLM via ArticleGenerator
+                 from ai_media.generators.text import ArticleGenerator
+                 # Instantiate generator (bypass warnings for cleaner CLI output if needed)
+                 gen = ArticleGenerator(model_name=model, bypass_warning=args.bypass_warning, args=args)
+                 res = gen.translate_text(
+                     content=data,
+                     target_lang=args.target_language,
+                     source_lang=args.source_language or "auto",
+                     model_id=model
+                 )
+             
+             if res:
+                  print(f"✅ Translation Complete: {res if args.output else 'Output to console'}")
+                  if not args.output and task == "t2tt":
+                      print(f"\n{res}\n")
+        except Exception as e:
+             print(f"❌ Translation Failed: {e}")
+             sys.exit(1)
+
+    # Subtitle Generation
+    elif args.generate_subtitles:
+        input_file = args.input_image
+        if not input_file:
+             # Try prompt as input file if it looks like a file? No, standard is -ii.
+             print("❌ Error: Please provide input video/audio with -ii / --input-image")
+             sys.exit(1)
+            
+        if not os.path.exists(input_file):
+             print(f"❌ Error: Input file not found: {input_file}")
+             sys.exit(1)
+
+        # Resolve VAD preset to params
+        vad_params = {}
+        if args.subtitle_vad_preset == "noisy":
+            vad_params = {
+                "vad_min_silence_duration_ms": 500,
+                "vad_threshold": 0.7,
+                "condition_on_previous_text": False,
+                "no_speech_threshold": 0.4,
+            }
+        elif args.subtitle_vad_preset == "sensitive":
+            vad_params = {
+                "vad_min_silence_duration_ms": 1000,
+                "vad_threshold": 0.35,
+                "condition_on_previous_text": True,
+                "no_speech_threshold": 0.6,
+            }
+        
+        # Override with explicit VAD params if provided
+        if args.subtitle_vad_min_silence:
+            vad_params["vad_min_silence_duration_ms"] = args.subtitle_vad_min_silence
+        if args.subtitle_vad_threshold:
+            vad_params["vad_threshold"] = args.subtitle_vad_threshold
+        if args.subtitle_no_context:
+            vad_params["condition_on_previous_text"] = False
+
+        generator = PkgSubtitlesGenerator()
+        
+        # Handle legacy + new translate-to flags
+        translate_to = args.subtitle_translate_to or getattr(args, 'subtitle_translate_to_legacy', None)
+        targets = translate_to.split(",") if translate_to else None
+        
+        # Handle legacy + new source-lang flags  
+        source_lang = args.subtitle_source_lang or getattr(args, 'subtitle_source_lang_legacy', None)
+        
+        generator.run(
+            input_path=input_file,
+            model_size=args.whisper_model,
+            source_lang=source_lang,
+            target_langs=targets,
+            output_format=args.subtitle_format,
+            fps=args.subtitle_fps,
+            **vad_params
+        )
+        sys.exit(0)
+
+    elif args.transcribe:
+        input_file = args.input_image
+        if not input_file:
+             print("❌ Error: Please provide input file with -ii / --input-image")
+             sys.exit(1)
+             
+        if not os.path.exists(input_file):
+             print(f"❌ Error: Input file not found: {input_file}")
+             sys.exit(1)
+             
+        # Use output format from text options if standard, or infer from extension
+        fmt = "markdown"
+        if args.output:
+            if args.output.endswith(".json"):
+                fmt = "json"
+        elif args.output_format == "json":
+            fmt = "json"
+            
+        generator = PkgTranscriptionGenerator()
+        result = generator.run(input_file, output_format=fmt)
+        
+        # Output to file or stdout
+        if args.output:
+            outfile = args.output
+            # Ensure path
+            if not os.path.dirname(outfile):
+                 outfile = os.path.join(CONFIG["paths"]["media_output"], outfile)
+            pkg_system.ensure_paths(outfile)
+            
+            with open(outfile, 'w', encoding='utf-8') as f:
+                f.write(result)
+            print(f"✅ Transcription saved to {outfile}")
+        else:
+            print(result)
+        sys.exit(0)
+
     elif args.generate_description:
         if args.generate_description != "USE_INPUT_IMAGE":
             input_file = args.generate_description

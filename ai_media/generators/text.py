@@ -8,13 +8,13 @@ Uses LLMs like Llama, Qwen, DeepSeek, and Mistral.
 import os
 import re
 import time
-import gc
-import torch
 import threading
 from datetime import datetime
-from transformers import StoppingCriteria, StoppingCriteriaList
+from transformers import StoppingCriteria, StoppingCriteriaList, pipeline
+import torch
+import gc
 
-from ..models import TEXT_MODELS, get_model_id
+from ..models import TEXT_MODELS, NLLB_LANGUAGE_CODES, get_model_id
 from ..utils.system import get_optimal_device_and_dtype
 
 
@@ -85,8 +85,12 @@ class ArticleGenerator:
         self.torch = torch
         
         self.model_name = get_model_id(model_name, TEXT_MODELS)
-        self.device = device or get_optimal_device_and_dtype(quiet=True)[0]
+        self.device = device or get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)[0]
         self.pipeline = None
+        self.translation_pipeline = None
+        self.translation_model_id = None
+        self.model = None
+        self.tokenizer = None
         self.args = args
         self.force = force
         self.bypass_warning = bypass_warning
@@ -117,6 +121,320 @@ class ArticleGenerator:
             return
         self.is_cancelled = True
         print(f"🛑 Interruption requested for {self.model_name}")
+
+    def translate_text(self, content: str, target_lang: str, source_lang: str = "eng_Latn", model_id: str = "nllb-200-3.3b", keep_loaded: bool = False, is_chat: bool = False):
+        """Translate content using selected translation model with intelligent memory management.
+        
+        Args:
+            content: Text to translate
+            target_lang: Target language code (e.g., "en", "es", "spa_Latn")
+            source_lang: Source language code or "auto" for auto-detection (NLLB only)
+            model_id: Translation model ID (nllb-200-3.3b, alma-13b, qwen3-8b, etc.)
+            keep_loaded: If True, keep model in memory after translation (for chat). Default: False
+            is_chat: If True, preserves <think> tags in output for chat UI. Default: False (strips reasoning)
+            
+        Returns:
+            Translated text or None on failure
+            
+        Notes:
+            - NLLB models: Fast specialized pipeline, supports auto-detect
+            - LLM models: Slower prompt-based translation, requires explicit source language
+            - If keep_loaded=False, model unloads immediately after translation
+        """
+        if not content.strip():
+            return ""
+
+        from ai_media.models import TRANSLATION_MODELS
+        
+        # Get HuggingFace model ID
+        hf_model_id = TRANSLATION_MODELS.get(model_id, TRANSLATION_MODELS.get("default_text"))
+        is_nllb = "nllb" in model_id.lower()
+        
+        print(f"🌍 Translating with {model_id} ({'keeping loaded' if keep_loaded else 'will unload'})")
+        
+        # Auto-detect source language if requested (Global for both NLLB and LLMs)
+        if source_lang == "auto":
+            try:
+                from langdetect import detect
+                detected = detect(content)
+                # Map 2-letter code to NLLB/Standard format which both paths understand
+                # NLLB needs 'eng_Latn', LLM mapper understands 'eng_Latn' or 'en'
+                # We normalize to NLLB code if possible, or keep detected 2-letter
+                source_lang = NLLB_LANGUAGE_CODES.get(detected, detected)
+                print(f"   🔍 Detected language: {detected} -> {source_lang}")
+            except Exception as e:
+                print(f"   ⚠️ Auto-detect failed: {e}, defaulting to English")
+                source_lang = "eng_Latn"
+
+        # === NLLB MODELS: Specialized Translation Pipeline ===
+        if is_nllb:
+            # Map language codes to NLLB format
+            tgt_nllb = NLLB_LANGUAGE_CODES.get(target_lang, target_lang)
+            src_nllb = NLLB_LANGUAGE_CODES.get(source_lang, source_lang) # Already normalized above ideally
+            
+            if not tgt_nllb:
+                print(f"   ❌ Unknown target language: {target_lang}")
+                return None
+
+            # Bypass if source and target are the same language
+            if src_nllb == tgt_nllb:
+                print(f"   ⏭️ Source and target language match ({src_nllb}), skipping translation.")
+                return content
+                
+            print(f"   📝 {src_nllb} -> {tgt_nllb}")
+            if self.progress_callback:
+                self.progress_callback("generating", 95, f"Translating to {target_lang}...")
+
+            try:
+                from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+                
+                # Check for cached translation model
+                if self.translation_pipeline and self.translation_model_id == model_id:
+                     print(f"   ⚡ Using cached translation model: {model_id}")
+                     translator = self.translation_pipeline
+                else:
+                    # Unload previous if exists
+                    if self.translation_pipeline:
+                         print(f"   ♻️ Switching translation model: {self.translation_model_id} -> {model_id}")
+                         del self.translation_pipeline
+                         self.translation_pipeline = None
+                         self.translation_model_id = None
+                         gc.collect()
+                         if self.device.type == "cuda":
+                             self.torch.cuda.empty_cache()
+                         elif self.device.type == "mps":
+                             self.torch.mps.empty_cache()
+
+                    device = self.device
+                    dtype = self.torch.float32
+                    if device.type == "cuda":
+                        from ..utils.system import is_bfloat16_supported
+                        dtype = self.torch.bfloat16 if is_bfloat16_supported() else self.torch.float16
+                    
+                    # Load NLLB model
+                    print(f"   ⏳ Loading {model_id}...")
+                    dtype_name = str(dtype).replace("torch.", "")
+                    print(f"   Platform: {device.type.upper()} | Dtype: {dtype_name}")
+                    
+                    tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
+                    model = AutoModelForSeq2SeqLM.from_pretrained(hf_model_id, torch_dtype=dtype).to(device)
+                    
+                    translator = pipeline(
+                        "translation",
+                        model=model,
+                        tokenizer=tokenizer,
+                        # Don't bake in languages here, allow dynamic override
+                        max_length=512,
+                        device=0 if device.type == "cuda" else -1
+                    )
+                    
+                    # Cache the new pipeline
+                    self.translation_pipeline = translator
+                    self.translation_model_id = model_id
+                    print(f"   ✅ Model loaded")
+                
+                # Translate line-by-line to preserve formatting (headers, lists, etc)
+                lines = content.split('\n')
+                translated_lines = []
+                
+                def translate_chunk(text):
+                    if not text.strip(): 
+                        return ""
+                    try:
+                        # Pass dynamic language args
+                        res = translator(text, src_lang=src_nllb, tgt_lang=tgt_nllb)
+                        return res[0]['translation_text']
+                    except Exception as e:
+                        print(f"   ⚠️ Chunk translation failed: {e}")
+                        return text
+                
+                # Iterate each line to prevent NLLB from stripping newlines in batches
+                for line in lines:
+                    if not line.strip():
+                        translated_lines.append("")
+                    else:
+                        translated_lines.append(translate_chunk(line))
+                
+                result = "\n".join(translated_lines)
+                print(f"   ✅ Translation complete ({len(result)} chars)")
+                return result
+
+            except Exception as e:
+                print(f"   ❌ NLLB translation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+            finally:
+                # Clean up ONLY if explicit unload requested (keep_loaded=False)
+                # But since we cache in self.translation_pipeline, we don't del local vars
+                # If keep_loaded=False, we unload from self.
+                if not keep_loaded:
+                    print(f"   🧹 Unloading {model_id}...")
+                    if self.translation_pipeline:
+                        del self.translation_pipeline
+                        self.translation_pipeline = None
+                        self.translation_model_id = None
+                    
+                    # Also clear separate vars if they were created locally (not really needed if pipeline wraps them)
+                    if 'model' in locals() and model: del model
+                    if 'tokenizer' in locals() and tokenizer: del tokenizer
+                    
+                    gc.collect()
+                    if hasattr(self, 'device'): # self.device might be used
+                         if self.device.type == "cuda":
+                             self.torch.cuda.empty_cache()
+                         elif self.device.type == "mps":
+                             self.torch.mps.empty_cache()
+                    print(f"   ✅ Model unloaded")
+        
+        # === LLM MODELS: Prompt-Based Translation ===
+        else:
+            # Map language codes to readable names for prompts
+            lang_names = {
+                "eng_Latn": "English", "en": "English",
+                "spa_Latn": "Spanish", "es": "Spanish",
+                "fra_Latn": "French", "fr": "French",
+                "deu_Latn": "German", "de": "German",
+                "ita_Latn": "Italian", "it": "Italian",
+                "por_Latn": "Portuguese", "pt": "Portuguese",
+                "zho_Hans": "Chinese (Simplified)", "zh": "Chinese",
+                "jpn_Jpan": "Japanese", "ja": "Japanese",
+                "kor_Hang": "Korean", "ko": "Korean",
+                "rus_Cyrl": "Russian", "ru": "Russian",
+                "arb_Arab": "Arabic", "ar": "Arabic",
+                "hin_Deva": "Hindi", "hi": "Hindi",
+            }
+            
+            # Try to resolve readable language name using pycountry or smart fallback
+            def get_lang_name(code):
+                # Check hardcoded map first
+                if code in lang_names: return lang_names[code]
+                
+                # Try pycountry if installed
+                try:
+                    import pycountry
+                    # Try 3-letter ISO code (e.g., 'bul' from 'bul_Cyrl')
+                    iso_code = code.split('_')[0]
+                    lang = pycountry.languages.get(alpha_3=iso_code)
+                    if lang: return lang.name
+                except ImportError:
+                    pass
+                
+                # Fallback: Use code but try to make it readable (bul_Cyrl -> Bul)
+                # Just return code if all else fails, user can fix prompt manually if really needed
+                return code
+
+            src_name = get_lang_name(source_lang)
+            tgt_name = get_lang_name(target_lang)
+            
+            print(f"   📝 {src_name} -> {tgt_name} (LLM translation)")
+            
+            # Check if we need to load the LLM or switch models
+            current_model_loaded = (self.model is not None)
+            is_same_model = (self.model_name == hf_model_id) if current_model_loaded else False
+            
+            if current_model_loaded and not is_same_model:
+                print(f"   ♻️ Switching model for translation: {self.model_name} -> {hf_model_id}")
+                self._unload_model()
+                current_model_loaded = False
+            
+            need_to_load = not current_model_loaded
+            
+            try:
+                # Load LLM if not already loaded
+                if need_to_load:
+                    print(f"   ⏳ Loading {model_id}...")
+                    # Temporarily change model_name to load translation LLM
+                    original_model_name = self.model_name
+                    self.model_name = hf_model_id
+                    success = self._load_model()
+                    if not success:
+                        msg = f"Failed to load {model_id}"
+                        if self.last_error:
+                            msg += f": {self.last_error}"
+                        raise Exception(msg)
+                else:
+                    print(f"   ✅ Using already-loaded model")
+                
+                # Create translation prompt
+                prompt = f"""Translate the following {src_name} text to {tgt_name}.
+Provide ONLY the translation, no explanations or additional text.
+
+{src_name} text:
+{content}
+
+{tgt_name} translation:"""
+                
+                # Check if model has a chat template or is ALMA
+                if "alma" in model_id.lower():
+                    # ALMA models require specific prompt format:
+                    # Translate this from {src} to {tgt}:
+                    # {src}: {content}
+                    # {tgt}:
+                    prompt = f"Translate this from {src_name} to {tgt_name}:\n{src_name}: {content}\n{tgt_name}:"
+                    full_prompt = prompt
+                elif self.pipeline.tokenizer.chat_template:
+                    # Create chat structure for instruction-tuned models
+                    messages = [
+                        {"role": "user", "content": prompt}
+                    ]
+                    # Apply chat template
+                    full_prompt = self.pipeline.tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                else:
+                    # Fallback for base models or those without template
+                    # Just use the raw prompt which is already formatted as a completion task
+                    full_prompt = prompt
+                
+                # Generate translation
+                # Use a lock to prevent concurrent access issues
+                with self._lock:
+                    outputs = self.pipeline(
+                        full_prompt,
+                        max_new_tokens=2048,
+                        do_sample=True,
+                        temperature=0.3, # Low temp for translation accuracy
+                        return_full_text=False
+                    )
+                
+                result = outputs[0]['generated_text'].strip()
+                
+                # Handle reasoning blocks (<think>)
+                if result:
+                    if not is_chat:
+                        # Strip reasoning for non-chat contexts (CLI, etc.)
+                        import re
+                        result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+                    # If is_chat is True, we preserve <think> tags for the UI to render
+                
+                if result:
+                    print(f"   ✅ Translation complete ({len(result)} chars)")
+                    return result
+                else:
+                    print(f"   ❌ LLM returned empty translation")
+                    return None
+                    
+            except Exception as e:
+                print(f"   ❌ LLM translation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+            finally:
+                # Unload LLM if we loaded it AND keep_loaded=False
+                if need_to_load and not keep_loaded:
+                    print(f"   🧹 Unloading {model_id}...")
+                    self._unload_model()
+                    print(f"   ✅ Model unloaded")
+                elif not need_to_load and not keep_loaded:
+                    # Model was already loaded (chat context), but we DON'T unload
+                    # because chat needs to keep it for follow-up messages
+                    pass
+
+
+    def _translate_content(self, content: str, target_lang: str, model_id: str = "nllb-200-3.3b"):
+        """Legacy alias for internal article gen use."""
+        return self.translate_text(content, target_lang, source_lang="eng_Latn", model_id=model_id)
 
         
     @staticmethod
@@ -220,7 +538,7 @@ class ArticleGenerator:
     def _load_model(self):
         """Load the LLM pipeline."""
         if self.pipeline:
-            return
+            return True
             
         if self.is_cancelled:
             print(f"🛑 Model loading skipped for {self.model_name} (Cancelled)")
@@ -230,7 +548,8 @@ class ArticleGenerator:
         
         if self.progress_callback:
             self.progress_callback("loading", 10, f"Loading Text Model: {self.model_name}...")
-        print(f"📚 Loading Text Model: {self.model_name}...")
+        else:
+            print(f"📚 Loading Text Model: {self.model_name}...")
         
         # Check resources before loading
         from ..utils.system import check_resources_and_warn
@@ -330,7 +649,8 @@ class ArticleGenerator:
             device_map_info = model_kwargs.get('device_map', 'Default')
             if self.progress_callback:
                 self.progress_callback("loading", 15, f"Using Device Map: {device_map_info}")
-            print(f"   Using Device Map: {device_map_info}")
+            else:
+                print(f"   Using Device Map: {device_map_info}")
             
             if self.progress_callback:
                 self.progress_callback("loading", 20, "Downloading/Loading model weights... (check terminal for progress)")
@@ -363,11 +683,16 @@ class ArticleGenerator:
                 tokenizer=tokenizer,
             )
             
+            # Update internal state references
+            self.model = model
+            self.tokenizer = tokenizer
+            
             dtype_name = str(dtype).replace("torch.", "")
             print(f"   Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
             if self.progress_callback:
                 self.progress_callback("loading", 20, f"Model loaded. Platform: {self.device.type.upper()}")
-            print("✅ Model loaded.")
+            else:
+                print("✅ Model loaded.")
             return True
             
         except RuntimeError as e:
@@ -446,7 +771,8 @@ class ArticleGenerator:
 
         if self.progress_callback:
             self.progress_callback("generating", 30, f"Deep Researching: '{refined_query}' ({iterations} iterations)...")
-        print(f"\n🔎 Deep Researching: '{refined_query}' ({iterations} iterations)...")
+        else:
+            print(f"\n🔎 Deep Researching: '{refined_query}' ({iterations} iterations)...")
         results = []
         
         # 1. Initial Broad Search
@@ -491,9 +817,10 @@ class ArticleGenerator:
         if should_search_images:
             try:
                 image_query = f"{query} photos"
-                print(f"   🖼️  Searching for images...")
                 if self.progress_callback:
                     self.progress_callback("generating", 45, "Searching for images...")
+                else:
+                    print(f"   🖼️  Searching for images...")
 
                 image_search = list(self.ddgs.images(image_query, max_results=max_images))
                 
@@ -504,9 +831,10 @@ class ArticleGenerator:
                         image_results.append(f"![{img_title}]({img_url})")
                 
                 if image_results:
-                    print(f"   ✅ Found {len(image_results)} images")
                     if self.progress_callback:
                         self.progress_callback("generating", 48, f"Found {len(image_results)} images")
+                    else:
+                        print(f"   ✅ Found {len(image_results)} images")
             except Exception as e:
                 print(f"   ⚠️  Image search failed: {e}")
             
@@ -521,7 +849,7 @@ class ArticleGenerator:
         return research_context
 
     def generate_article(self, topic, output_file, format="md", online=False, 
-                        research_iter=3, max_images=5, length="quick"):
+                        research_iter=3, max_images=5, length="quick", translate=False, target_language=None, translation_model="nllb-200-3.3b"):
         """Generate full article with optional research.
         
         Args:
@@ -556,7 +884,8 @@ class ArticleGenerator:
         
         if self.progress_callback:
             self.progress_callback("generating", 40, f"Writing {style} article on '{topic}'...")
-        print(f"✍️  Writing {style} article on '{topic}'...")
+        else:
+            print(f"✍️  Writing {style} article on '{topic}'...")
         
         # Prompt Engineering
         if research_data:
@@ -649,10 +978,30 @@ class ArticleGenerator:
                     format=format,
                     online=True,
                     research_iter=research_iter,
-                    length=length
+                    length=length,
+                    max_images=max_images,
+                    translate=translate,
+                    target_language=target_language
                 )
         
-        return True
+        final_output_path = output_file
+
+        # Validation / Translation Step
+        if translate and target_language:
+            translated_content = self._translate_content(final_md, target_language, model_id=translation_model)
+            if translated_content:
+                # Save translated file
+                base, ext = os.path.splitext(output_file)
+                trans_file = f"{base}.{target_language}{ext}"
+                try:
+                    self._save_formatted(translated_content, trans_file, format, online=online)
+                    trans_file = os.path.normpath(trans_file)
+                    print(f"✅ Translated article saved to: {trans_file}")
+                    final_output_path = trans_file
+                except Exception as e:
+                    print(f"⚠️ Failed to save translation: {e}")
+        
+        return final_output_path
 
     def generate_code(self, prompt, output_file=None):
         """Generate Code from Prompt (supports multi-file output)."""
@@ -800,14 +1149,13 @@ class ArticleGenerator:
                 
                 if not should_write:
                     continue
-
                 dir_path = os.path.dirname(final_path)
                 if dir_path:
                     os.makedirs(dir_path, exist_ok=True)
                 
                 with open(final_path, "w", encoding="utf-8") as f:
                     f.write(content)
-                print(f"✅ Code saved to: {final_path}")
+                print(f"✅ Code saved to: {os.path.normpath(final_path)}")
             except Exception as e:
                 print(f"❌ Error saving {filepath}: {e}")
                 
@@ -911,7 +1259,7 @@ class ArticleGenerator:
                 else:
                     f.write(content_bytes.decode("utf-8"))
                     
-            print(f"✅ Saved to {filename}")
+            print(f"✅ Saved to {os.path.normpath(filename)}")
         except Exception as e:
             print(f"❌ Error saving {filename}: {e}")
             
@@ -1366,3 +1714,4 @@ class ArticleGenerator:
                 break
             except Exception as e:
                 console.print(f"[bold red]❌ Error:[/bold red] {e}")
+

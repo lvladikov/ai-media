@@ -1,9 +1,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
-import { generateArticle, fetchModels, type ModelInfo } from '../hooks/useApi';
+import { generateArticle, useModels } from '../hooks/useApi';
 import { API_BASE_URL } from '../config';
 import { FileText, Loader2, Globe, AlertTriangle } from 'lucide-react';
+import { TranslateOptions } from './common/TranslateOptions';
 
 import { ValidationTooltip } from './common/ValidationTooltip';
 import { RandomPrompt } from './common/RandomPrompt';
@@ -25,7 +26,8 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
   'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
   'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)', vram: '~8GB' },
   'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
-  'qwen-2.5-14b': { label: 'Qwen 2.5 14B Instruct', vram: '~14GB' },
+  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning - 16GB VRAM)', vram: '~16GB' },
+  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning - 28GB VRAM)', vram: '~28GB' },
   'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
   'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
 };
@@ -33,8 +35,10 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
-  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen-2.5-14b', 'qwen3-coder-30b', 'qwen-coder-32b'
+  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b', 'qwen3-coder-30b', 'qwen-coder-32b'
 ];
+
+
 
 export function ArticleGenerator() {
   const { addJob } = useAppStore();
@@ -45,6 +49,9 @@ export function ArticleGenerator() {
   const [online, setOnline] = useState(false);
   const [researchIterations, setResearchIterations] = useState(3);
   const [maxImages, setMaxImages] = useState(5);
+  const [translate, setTranslate] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('eng_Latn');
+  const [translationModel, setTranslationModel] = useState('nllb-200-3.3b');
   const [filename, setFilename] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
@@ -52,31 +59,7 @@ export function ArticleGenerator() {
   const [duration, setDuration] = useState<number | null>(null);
   const [reasoning, setReasoning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-
-  // Fetch models on mount
-  useEffect(() => {
-    fetchModels()
-      .then((data) => {
-        if (data.text) {
-          setAvailableModels(data.text);
-
-          // Find default model based on backend flag
-          let initialModel = '';
-          const defaultModel = data.text.find((m: ModelInfo) => m.is_default);
-
-          if (defaultModel) {
-            initialModel = defaultModel.name;
-          } else if (data.text.length > 0) {
-            initialModel = data.text[0].name;
-          }
-
-          setModel(initialModel);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch models:', err));
-  }, []);
 
   const handleGenerate = async () => {
     if (!topic.trim()) return;
@@ -95,6 +78,10 @@ export function ArticleGenerator() {
         length,
         research_iterations: researchIterations,
         max_images: maxImages,
+        translate: translate,
+        target_language: targetLanguage,
+        // @ts-ignore - API pending update
+        translation_model: translationModel,
         output_filename: filename || undefined
       });
 
@@ -120,6 +107,29 @@ export function ArticleGenerator() {
       setError("Failed to start generation job");
     }
   };
+  // Use global models cache
+  const { models } = useModels();
+  const availableModels = models?.text || [];
+
+  // Set default model when available
+  useEffect(() => {
+    if (availableModels.length > 0 && !model) {
+      // Find default model based on backend flag
+      const defaultModel = availableModels.find((m: any) => m.is_default);
+      let initialModel = '';
+
+      if (defaultModel) {
+        initialModel = defaultModel.name;
+      } else if (availableModels.length > 0) {
+        initialModel = availableModels[0].name;
+      }
+
+      if (initialModel) {
+        setModel(initialModel);
+      }
+    }
+  }, [availableModels, model]);
+
 
   // Watch for job completion to show result inline after modal closes
   useEffect(() => {
@@ -310,7 +320,7 @@ export function ArticleGenerator() {
                   onChange={setResearchIterations}
                   min={1}
                   max={10}
-                  className="w-full h-8 text-sm"
+                  className="w-full h-8 text-sm input bg-primary border-border"
                 />
               </div>
               <div>
@@ -320,11 +330,27 @@ export function ArticleGenerator() {
                   onChange={setMaxImages}
                   min={0}
                   max={20}
-                  className="w-full h-8 text-sm"
+                  className="w-full h-8 text-sm input bg-primary border-border"
                 />
               </div>
             </div>
           )}
+        </div>
+
+        {/* Translation */}
+        <div className="pt-2 border-t border-border">
+          <TranslateOptions
+            enabled={translate}
+            onEnabledChange={setTranslate}
+            selectedModel={translationModel}
+            onModelChange={setTranslationModel}
+            targetLanguage={targetLanguage}
+            onLanguageChange={setTargetLanguage}
+            title="Translate Output"
+            hideLanguageSelector={false}
+            hideModelSelector={false}
+            infoMessage="Choose NLLB for speed and broad language coverage. Use LLM models for more natural, context-aware translations - especially valuable for professional or creative content."
+          />
         </div>
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -351,7 +377,7 @@ export function ArticleGenerator() {
                     <FileText size={24} />
                   </div>
                   <div>
-                    <h3 className="font-medium text-primary">{result?.split('/').pop()}</h3>
+                    <h3 className="font-medium text-primary">{result?.split(/[/\\]/).pop()}</h3>
                     {duration && <p className="text-xs text-tertiary">Generated in {formatDuration(duration * 1000)}</p>}
                   </div>
                 </div>
@@ -404,7 +430,7 @@ export function ArticleGenerator() {
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
           filePath={result}
-          fileName={result?.split('/').pop() || 'article.md'}
+          fileName={result?.split(/[/\\]/).pop() || 'article.md'}
         />
       )}
     </div>

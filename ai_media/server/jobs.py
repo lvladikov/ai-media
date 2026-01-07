@@ -161,7 +161,8 @@ async def cancel_job(job_id: str):
             "video": "video",
             "transform": "transform",
             "upscale": "upscale",
-            "vision": "vision"
+            "analysis": "analysis",
+            "translate": "text"
         }
         
         category = type_map.get(job["type"])

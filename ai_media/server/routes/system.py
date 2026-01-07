@@ -102,6 +102,47 @@ async def get_constants():
     return {"resolutions": get_resolutions()}
 
 
+@router.get("/api/system/languages")
+async def get_languages():
+    """
+    Get all NLLB languages with human-readable names.
+    Uses pycountry for name resolution, cached for performance.
+    """
+    from ai_media.models import get_nllb_languages_with_names, ALL_NLLB_CODES
+    
+    languages = get_nllb_languages_with_names()
+    
+    return {
+        "languages": [
+            {"label": name, "value": code}
+            for name, code in languages
+        ],
+        "total": len(ALL_NLLB_CODES)
+    }
+
+
+@router.get("/api/system/translation-models")
+async def get_translation_models():
+    """Get available translation models."""
+    from ai_media.models import TRANSLATION_MODELS, MODEL_REQUIREMENTS
+    
+    models = []
+    for name, model_id in TRANSLATION_MODELS.items():
+        if name.startswith("default"):
+            continue
+        
+        reqs = MODEL_REQUIREMENTS.get(model_id, {})
+        models.append({
+            "value": name,
+            "label": name.replace("-", " ").replace(".", " ").title(),
+            "model_id": model_id,
+            "vram_required": reqs.get("vram"),
+            "ram_required": reqs.get("ram"),
+        })
+    
+    return {"models": models}
+
+
 @router.get("/api/models")
 async def get_all_models():
     """Get all available models grouped by category."""

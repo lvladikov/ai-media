@@ -4,7 +4,7 @@ import type { Job } from '../store';
 import { History, Clock, CheckCircle, XCircle, Loader2, Eye, StopCircle } from 'lucide-react';
 import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
-import { VisionPreviewModal } from './common/VisionPreviewModal';
+import { AnalysisPreviewModal } from './common/AnalysisPreviewModal';
 import { ComparisonPreviewModal } from './common/ComparisonPreviewModal';
 import { cancelJob } from '../hooks/useApi';
 
@@ -174,9 +174,9 @@ export function JobsView() {
 
       {selectedJob && viewType === 'preview' && selectedJob.result_path && (
         <>
-          {/* Vision jobs use VisionPreviewModal */}
-          {selectedJob.type === 'vision' && (
-            <VisionPreviewModal
+          {/* Analysis jobs use AnalysisPreviewModal */}
+          {selectedJob.type === 'analysis' && (
+            <AnalysisPreviewModal
               isOpen={true}
               onClose={handleClose}
               originalPath={String(selectedJob.params?.input || '')}
@@ -201,7 +201,7 @@ export function JobsView() {
           )}
 
           {/* Article/Code and other jobs use generic PreviewModal (has Code/Preview toggle for md/html) */}
-          {selectedJob.type !== 'vision' && selectedJob.type !== 'upscale' && selectedJob.type !== 'transform' && (
+          {selectedJob.type !== 'analysis' && selectedJob.type !== 'upscale' && selectedJob.type !== 'transform' && (
             <PreviewModal
               isOpen={true}
               onClose={handleClose}

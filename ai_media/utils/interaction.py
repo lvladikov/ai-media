@@ -283,7 +283,7 @@ def get_key():
 # Interactive Menu with Mouse Support
 # =============================================================================
 
-def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=15):
+def prompt_menu(prompt, options, allow_back=True, default_index=0, page_size=20):
     """Show interactive menu with arrow key navigation, pagination, and mouse support.
     
     Args:

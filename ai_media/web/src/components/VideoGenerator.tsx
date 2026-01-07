@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
-import { generateVideo, fetchModels } from '../hooks/useApi';
+import { generateVideo, useModels } from '../hooks/useApi';
 import { API_BASE_URL } from '../config';
 import { Film, Loader2, AlertTriangle, Info } from 'lucide-react';
 import { NumberInput } from './common/NumberInput';
@@ -14,13 +14,7 @@ import { ErrorAlert } from './common/ErrorAlert';
 import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
 
-interface ModelInfo {
-  name: string;
-  model_id: string;
-  vram_required: number | null;
-  ram_required: number | null;
-  max_resolution: [number, number] | null;
-}
+
 
 // Display info matching CLI
 const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
@@ -53,19 +47,12 @@ export function VideoGenerator() {
   const [result, setResult] = useState<string | null>(null);
   const [genDuration, setGenDuration] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  // Use global models cache
+  // Use global models cache
+  const { models } = useModels();
+  const availableModels = models?.video || [];
 
-  // Fetch models on mount
-  useEffect(() => {
-    fetchModels()
-      .then((data) => {
-        if (data.video) {
-          setAvailableModels(data.video);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch models:', err));
-  }, []);
 
   // Update defaults when model changes
   useEffect(() => {
@@ -136,7 +123,7 @@ export function VideoGenerator() {
       const updatedJob = state.jobs.find(j => j.job_id === currentJobId);
       if (updatedJob) {
         hasSeenJob = true;
-        
+
         if (updatedJob.status === 'complete') {
           setResult(updatedJob.result_path);
 
