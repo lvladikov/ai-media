@@ -742,6 +742,7 @@ Supported Models (Code : Download Size | Description):
         host = args.host if args.host else CONFIG["server"]["host"]
         server_port = args.port if args.port else CONFIG["server"]["port"]
         web_port = CONFIG["client"]["port"]
+        web_host = CONFIG["client"]["host"]
         
         # Determine if reload should be on (default True for clients, False for server-only)
         reload_enabled = args.reload
@@ -768,24 +769,25 @@ Supported Models (Code : Download Size | Description):
             
             if start_web or start_electron:
                 def delayed_launch():
-                    # Wait for server to be ready (smart polling)
                     import socket
-                    print("⏳ Waiting for server to start...", end="", flush=True)
                     
-                    retries = 30 # Wait up to 30 seconds
-                    server_ready = False
-                    
-                    while retries > 0:
-                        try:
-                            with socket.create_connection((host, server_port), timeout=1):
-                                server_ready = True
-                                break
-                        except (OSError, ConnectionRefusedError):
-                            time.sleep(1)
-                            print(".", end="", flush=True)
-                            retries -= 1
-                    
-                    print(f"\n{'✅ Server ready!' if server_ready else '⚠️ Server wait timed out (proceeding anyway)'}")
+                    def wait_for_port(check_host, check_port, label, retries=30):
+                        print(f"⏳ Waiting for {label} to start...", end="", flush=True)
+                        ready = False
+                        while retries > 0:
+                            try:
+                                with socket.create_connection((check_host, check_port), timeout=1):
+                                    ready = True
+                                    break
+                            except (OSError, ConnectionRefusedError):
+                                time.sleep(1)
+                                print(".", end="", flush=True)
+                                retries -= 1
+                        print(f"\n{'✅ ' + label + ' ready!' if ready else '⚠️ ' + label + ' wait timed out (proceeding anyway)'}")
+                        return ready
+
+                    # Wait for server to be ready
+                    wait_for_port(host, server_port, "Server")
                     
                     # Helper nested here to capture procs list
                     def start_client(cmd, name, env=None):
@@ -796,9 +798,11 @@ Supported Models (Code : Download Size | Description):
                     if start_web:
                         procs.append(start_client("npm run dev:client", "Web", env=env))
                     if start_electron:
-                        # Small delay for Electron just to ensure Web/Vite bundler starts its own output first
-                        # (Purely cosmetic to keep logs clean)
-                        time.sleep(1)
+                        # Wait for Web Client (Vite) to be ready if we started it
+                        if start_web:
+                            # Use configured host or localhost for Vite check
+                            wait_for_port(web_host, web_port, "Web client")
+                            
                         procs.append(start_client("npm run electron", "Electron", env=env))
 
                 # Start the launch thread
@@ -807,7 +811,7 @@ Supported Models (Code : Download Size | Description):
                 launch_thread.daemon = True
                 launch_thread.start()
             
-            from ai_media.server import main as server_main
+            from ai_media.server.app import main as server_main
             
             # Restrict watcher to source code only to avoid loops with generated content in media-output/
             reload_dirs = ["ai_media", "ai-media.py"] if reload_enabled else None
