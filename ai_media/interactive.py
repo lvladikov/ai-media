@@ -1615,7 +1615,7 @@ def run_interactive(jump_point=None):
                 print("=" * 60)
                 os.system(f'"{sys.executable}" -m unittest ai_media.testing.unit_tests.{choice} -v')
 
-            prompt_menu("Press Enter to continue...", [], allow_back=True)
+            wait_for_back(prompt=None)
 
     def integration_test_menu():
         """Integration Tests submenu - tests from ai_media/testing/integration-tests.json."""

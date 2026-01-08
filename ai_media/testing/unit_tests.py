@@ -3009,9 +3009,7 @@ class TestConvertDocumentTranslation(unittest.TestCase):
         # Verify translation was called
         MockArticleGenerator.assert_called()
         mock_gen_instance.translate_text.assert_called_with(
-            "Hello World",
-            target_lang="es",
-            source_lang="auto"
+            "Hello World", target_lang="es", source_lang="auto", model_id="nllb-200-3.3b", keep_loaded=False
         )
         
         # Verify write used translated content
