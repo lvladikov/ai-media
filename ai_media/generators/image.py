@@ -140,7 +140,7 @@ class ImageGenerator:
                         super().update(n)
                         if hasattr(self, 'total') and self.total:
                             try:
-                                percent = int(self.n / self.total * 100)
+                                percent = min(100, int(self.n / self.total * 100))
                                 current_time = time.time()
                                 
                                 # Throttle: Only update every 0.2s or if complete (100%)
@@ -471,7 +471,7 @@ class ImageGenerator:
                         # steps is the total inference steps
                         # step is the current step index (0-based)
                         current_step = step
-                        percent = int(((current_step + 1) / steps) * 100)
+                        percent = min(100, int(((current_step + 1) / steps) * 100))
                         
                         # Calculate ETA
                         # We skip step 0 for speed estimation because it includes significant 
@@ -491,7 +491,7 @@ class ImageGenerator:
                              
                              if measure_steps > 0:
                                  avg_time_per_step = duration / measure_steps
-                                 remaining_steps = steps - (current_step + 1)
+                                 remaining_steps = max(0, steps - (current_step + 1))
                                  eta_seconds = int(remaining_steps * avg_time_per_step)
                                  mins, secs = divmod(eta_seconds, 60)
                                  eta_str = f"{mins:02d}:{secs:02d}"

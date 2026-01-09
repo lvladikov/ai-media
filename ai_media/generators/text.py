@@ -690,7 +690,7 @@ Provide ONLY the translation, no explanations or additional text.
                             super().update(n)
                             if hasattr(self, 'total') and self.total:
                                 try:
-                                    percent = int(self.n / self.total * 100)
+                                    percent = min(100, int(self.n / self.total * 100))
                                     desc = self.desc or "Loading"
                                     # Use the capture.callback which is self._log_status
                                     # Pass terminal=False because the original TQDM (stderr) already prints the bar
