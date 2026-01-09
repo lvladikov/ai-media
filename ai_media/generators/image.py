@@ -99,9 +99,11 @@ class ImageGenerator:
             clear_gpu_memory()
             
     def stop(self):
-        """Signal generation to stop and unload."""
+        """Signal generation to stop."""
         self._cancelled = True
-        self.unload()
+        # Do NOT unload, so next request is fast.
+        # Use self.unload() explicitly if full cleanup is needed.
+        
     def _ensure_pipeline_loaded(self):
         """Load the pipeline if not already loaded."""
         if self.pipe:
@@ -130,29 +132,56 @@ class ImageGenerator:
                 original_tqdm = tqdm.tqdm
                 
                 class TqdmCallbackWrapper(original_tqdm):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        self._last_callback_time = 0
+
                     def update(self, n=1):
                         super().update(n)
                         if hasattr(self, 'total') and self.total:
                             try:
                                 percent = int(self.n / self.total * 100)
-                                desc = self.desc or "Loading"
-                                # Use terminal=False because original TQDM (stderr) already prints the bar
-                                capture.callback("loading", percent, f"{desc}: {percent}%", terminal=False)
+                                current_time = time.time()
+                                
+                                # Throttle: Only update every 0.2s or if complete (100%)
+                                # This prevents the output buffer from filling up during fast loading
+                                if percent >= 100 or (current_time - self._last_callback_time) > 0.2:
+                                    self._last_callback_time = current_time
+                                    desc = self.desc or "Loading"
+                                    # Use terminal=False because original TQDM (stderr) already prints the bar
+                                    capture.callback("loading", percent, f"{desc}: {percent}%", terminal=False)
                             except:
                                 pass
 
                 # Apply patch to source tqdm
                 tqdm.tqdm = TqdmCallbackWrapper
+                # Also patch tqdm.auto if loaded
+                if "tqdm.auto" in sys.modules:
+                     sys.modules["tqdm.auto"].tqdm = TqdmCallbackWrapper
                 
                 # CRITICAL: Also patch diffusers/transformers/accelerate references
-                original_diffusers_tqdm = None
-                try:
-                    import diffusers.utils.logging as d_logging
-                    if hasattr(d_logging, 'tqdm'):
-                        original_diffusers_tqdm = d_logging.tqdm
-                        d_logging.tqdm = TqdmCallbackWrapper
-                except ImportError:
-                    pass
+                # Store originals to restore later
+                original_external_tqdms = {} 
+                
+                target_modules = [
+                    "diffusers.utils.logging",
+                    "transformers.utils.logging",
+                    "accelerate.utils"
+                ]
+                
+                for mod_name in target_modules:
+                    try:
+                        if mod_name in sys.modules:
+                            mod = sys.modules[mod_name]
+                        else:
+                            import importlib
+                            mod = importlib.import_module(mod_name)
+                            
+                        if hasattr(mod, 'tqdm'):
+                            original_external_tqdms[mod_name] = mod.tqdm
+                            mod.tqdm = TqdmCallbackWrapper
+                    except (ImportError, AttributeError):
+                        pass
 
                 try:
                     # Determine Pipeline Class based on model
@@ -254,8 +283,15 @@ class ImageGenerator:
                 finally:
                     # Restore TQDM
                     tqdm.tqdm = original_tqdm
-                    if original_diffusers_tqdm:
-                         d_logging.tqdm = original_diffusers_tqdm
+                    if "tqdm.auto" in sys.modules:
+                        sys.modules["tqdm.auto"].tqdm = original_tqdm
+                        
+                    for mod_name, original in original_external_tqdms.items():
+                         try:
+                             if mod_name in sys.modules:
+                                 sys.modules[mod_name].tqdm = original
+                         except:
+                             pass
         except Exception as e:
             self._log_status("error", 0, f"Error loading image pipeline: {e}")
             # Fallback (no capture)
@@ -283,6 +319,7 @@ class ImageGenerator:
                  guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, 
                  force=False, bypass_warning=False, progress_callback=None):
         """Generate an image."""
+        self._cancelled = False # Reset cancellation flag
         self.progress_callback = progress_callback
         
         if not output_file:
@@ -387,15 +424,51 @@ class ImageGenerator:
                 warnings.filterwarnings("ignore", category=RuntimeWarning, 
                                         message="invalid value encountered in cast")
                 
+                # Track pure inference time (ignoring setup/step 0 overhead)
+                inference_baseline_time = None
+
                 # Define callback for Diffusers
                 def callback_on_step_end(pipe, step, timestep, callback_kwargs):
+                     nonlocal inference_baseline_time
+                     
+                     # Check for cancellation
+                     if self._cancelled:
+                         raise KeyboardInterrupt("Generation cancelled by user.")
+
                      if progress_callback:
                         # Calculate progress
                         # steps is the total inference steps
                         # step is the current step index (0-based)
                         current_step = step
-                        percent = round((current_step / steps) * 100)
-                        progress_callback(percent, f"Generating: {percent}%")
+                        percent = int(((current_step + 1) / steps) * 100)
+                        
+                        # Calculate ETA
+                        # We skip step 0 for speed estimation because it includes significant 
+                        # model offloading/setup time (often 10s+) which skews the average.
+                        eta_str = ""
+                        
+                        if current_step == 0:
+                            # Mark the time when step 0 FINISHED. 
+                            # Future steps will be measured relative to this timestamp.
+                            inference_baseline_time = time.time()
+                            eta_str = "Calculating..."
+                        elif inference_baseline_time is not None:
+                             # Steps completed SINCE baseline (step 0): current_step
+                             # e.g. at step 1, 1 step has passed. at step 2, 2 steps have passed.
+                             duration = time.time() - inference_baseline_time
+                             measure_steps = current_step
+                             
+                             if measure_steps > 0:
+                                 avg_time_per_step = duration / measure_steps
+                                 remaining_steps = steps - (current_step + 1)
+                                 eta_seconds = int(remaining_steps * avg_time_per_step)
+                                 mins, secs = divmod(eta_seconds, 60)
+                                 eta_str = f"{mins:02d}:{secs:02d}"
+                        
+                        if eta_str:
+                             progress_callback(percent, f"Generating: {percent}%, Remaining Time: {eta_str}")
+                        else:
+                             progress_callback(percent, f"Generating: {percent}%")
                     
                      return callback_kwargs
 
@@ -449,6 +522,9 @@ class ImageGenerator:
             print("")  # Spacer
             return [output_file]
             
+        except KeyboardInterrupt:
+            print("\n🛑 Generation Cancelled.")
+            return []
         except ImportError as e:
             print(f"❌ Error: Missing dependencies. {e}")
             return []

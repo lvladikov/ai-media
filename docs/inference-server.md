@@ -87,6 +87,14 @@ Once running, the server provides:
 
 [Continue](https://continue.dev/) is an open-source AI code assistant. You can configure it to use AI-Media as its backend.
 
+### Install Continue from the VS Code Marketplace, or if you want to install it via command line (for example, in Antigravity), you can do this via:
+
+```bash
+antigravity --install-extension continue.continue
+```
+
+### Configure Continue
+
 1. **Start AI-Media Server**:
    ```bash
    python ai-media.py --inference-server

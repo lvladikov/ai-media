@@ -46,6 +46,12 @@ def load_config() -> Dict[str, Any]:
         except Exception as e:
             print(f"⚠️ Error loading config.json: {e}, using defaults")
     
+    # Normalize paths to use OS-specific separators (Fix for mixed slashes)
+    if "paths" in default_config:
+        for key, value in default_config["paths"].items():
+            if isinstance(value, str):
+                default_config["paths"][key] = os.path.normpath(value)
+
     return default_config
 
 

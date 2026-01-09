@@ -221,7 +221,7 @@ def _handle_memory_command(model_name, action, stream=False):
             "usage": None
         }
 
-async def _handle_image_generation(request: Request, prompt: str, model_name: str, stream: bool = False):
+async def _handle_image_generation(request: Request, prompt: str, model_name: str, stream: bool = False, response_prefix: str = None):
     """Handle image generation requests."""
     from ai_media.generators.image import ImageGenerator
     from ai_media.server.config import load_config
@@ -275,6 +275,11 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
     
     if stream:
         async def image_stream_generator():
+            if response_prefix:
+                # Yield the prefix as the "assistant" message content (before the thinking block)
+                # This allows the user to see the random prompt immediately
+                yield "data: " + json.dumps(make_chunk(response_prefix + "\n\n")) + "\n\n"
+
             # Use asyncio.Queue to bridge sync callback -> async generator
             progress_queue = asyncio.Queue()
             
@@ -298,92 +303,121 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                             bypass_warning=True  # Skip resource confirmation prompts
                         )
                     loop.call_soon_threadsafe(progress_queue.put_nowait, ("DONE", result, None))
-                except Exception as e:
+                except BaseException as e:
+                    # Catch KeyboardInterrupt and other system exits
                     loop.call_soon_threadsafe(progress_queue.put_nowait, ("ERROR", None, str(e)))
-            
-            # Start generation in background thread
-            loop.run_in_executor(None, run_generation)
             
             # Yield Start of Thinking Block
             yield "data: " + json.dumps(make_chunk('<think>\n')) + "\n\n"
             yield "data: " + json.dumps(make_chunk(f'Loading {model_name}...\n\n')) + "\n\n"
+
+            # Force flush and allow Client UI to initialize the Thinking container
+            # This is critical when `response_prefix` was used, as the client needs to switch context.
+            await asyncio.sleep(0.5)
+
+            # Start generation in background thread AFTER header is sent to prevent progress lag
+            loop.run_in_executor(None, run_generation)
             
             # Stream progress updates as they arrive
             result = None
             last_progress = {} # prefix -> last_percent
             
-            while True:
-                item = await progress_queue.get()
-                msg_type = item[0]
-                
-                if msg_type == "DONE":
-                    # Auto-complete any remaining 100%s
-                    for prefix, percent in last_progress.items():
-                        if percent < 100:
-                            yield "data: " + json.dumps(make_chunk(f'{prefix}{100}%\n\n')) + "\n\n"
-                    result = item[1]
-                    break
-                elif msg_type == "ERROR":
-                    error_msg = item[2]
-                    yield "data: " + json.dumps(make_chunk(f'❌ Error: {error_msg}\n')) + "\n\n"
-                    break
-                elif msg_type == "PROGRESS":
-                    percent = item[1]
-                    message = item[2]
+            try:
+                while True:
+                    item = await progress_queue.get()
                     
-                    # Detect prefix (e.g. "Loading: 50%" -> "Loading: ")
-                    import re
-                    match = re.search(r'^(.*?)\d+%$', message.strip())
-                    if match:
-                        prefix = match.group(1)
-                        # If we have a NEW prefix, complete the OLD one if it exists
-                        for old_prefix, old_percent in list(last_progress.items()):
-                            if old_prefix != prefix and old_percent < 100:
-                                yield "data: " + json.dumps(make_chunk(f'{old_prefix}{100}%\n\n')) + "\n\n"
-                                last_progress[old_prefix] = 100
+                    # Conflation: If the queue has backed up, skip intermediate PROGRESS updates
+                    # and jump straight to the latest status. This fixes the "lag" where the UI
+                    # is displaying "Loading..." while the server is already "Generating: 50%".
+                    while not progress_queue.empty():
+                        try:
+                            next_item = progress_queue.get_nowait()
+                            # Always prioritize DONE/ERROR signals.
+                            # If we have [Prog 20%, Prog 21%, DONE], we effectively jump to DONE.
+                            # If we have [Prog 20%, Prog 21%], we jump to 21%.
+                            item = next_item
+                        except asyncio.QueueEmpty:
+                            break
+                    
+                    msg_type = item[0]
+                    
+                    if msg_type == "DONE":
+                        # Auto-complete any remaining 100%s
+                        for prefix, percent in last_progress.items():
+                            if percent < 100:
+                                yield "data: " + json.dumps(make_chunk(f'{prefix}{100}%\n\n')) + "\n\n"
+                        result = item[1]
+                        break
+                    elif msg_type == "ERROR":
+                        error_msg = item[2]
+                        # Check if error was a cancellation
+                        if "cancelled" in str(error_msg).lower():
+                             yield "data: " + json.dumps(make_chunk(f'🛑 Generation Cancelled.\n')) + "\n\n"
+                        else:
+                             yield "data: " + json.dumps(make_chunk(f'❌ Error: {error_msg}\n')) + "\n\n"
+                        break
+                    elif msg_type == "PROGRESS":
+                        percent = item[1]
+                        message = item[2]
                         
-                        last_progress[prefix] = percent
-                    
-                    yield "data: " + json.dumps(make_chunk(f'{message}\n\n')) + "\n\n"
-            
-
-            # Yield End of Thinking Block
-            yield "data: " + json.dumps(make_chunk('</think>\n\n')) + "\n\n"
-            
-            if result and len(result) > 0:
-                abs_path = result[0]
-                
-                # Load Config for consistent URL construction
-                try:
-                    config = load_config()
-                    server_host = config.get("server", {}).get("host") 
-                    server_port = config.get("server", {}).get("port")
-                    
-                    if not server_host or not server_port:
-                        raise ValueError("Missing 'server.host' or 'server.port' in config.json")
+                        # Detect prefix (e.g. "Loading: 50%" or "Generating: 32%, Eta...")
+                        import re
+                        match = re.search(r'^(.*?)\d+%', message.strip())
+                        if match:
+                            prefix = match.group(1)
+                            # Remove incorrect auto-complete for interleaved bars
+                            last_progress[prefix] = percent
                         
-                except Exception as e:
-                    yield "data: " + json.dumps(make_chunk(f'⚠️ Config Error: {str(e)}\n')) + "\n\n"
-                    server_host = "ERROR_MISSING_CONFIG" 
-                    server_port = "ERROR"
-
-                # Construct URL using Config
-                scheme = request.url.scheme
-                clean_path = str(abs_path).lstrip('/')
-                image_url = f"{scheme}://{server_host}:{server_port}/api/files/{clean_path}"
+                        yield "data: " + json.dumps(make_chunk(f'{message}\n\n')) + "\n\n"
+                        # Force flush buffer by sending a keep-alive comment
+                        yield ":\n\n"
                 
-                # Standard Markdown URL
-                final_content = f"\n![Generated Image]({image_url})"
+    
+                # Yield End of Thinking Block
+                yield "data: " + json.dumps(make_chunk('</think>\n\n')) + "\n\n"
                 
-                yield "data: " + json.dumps(make_chunk(final_content)) + "\n\n"
-                
-                # Yield Finish
-                yield "data: " + json.dumps(make_chunk(None, finish_reason='stop')) + "\n\n"
-                yield "data: [DONE]\n\n"
-            else:
-                 yield "data: " + json.dumps(make_chunk('\n❌ Generation failed. Check server logs.')) + "\n\n"
-                 yield "data: " + json.dumps(make_chunk(None, finish_reason='stop')) + "\n\n"
-                 yield "data: [DONE]\n\n"
+                if result and len(result) > 0:
+                    abs_path = result[0]
+                    
+                    # Load Config for consistent URL construction
+                    try:
+                        config = load_config()
+                        server_host = config.get("server", {}).get("host") 
+                        server_port = config.get("server", {}).get("port")
+                        
+                        if not server_host or not server_port:
+                            raise ValueError("Missing 'server.host' or 'server.port' in config.json")
+                            
+                    except Exception as e:
+                        yield "data: " + json.dumps(make_chunk(f'⚠️ Config Error: {str(e)}\n')) + "\n\n"
+                        server_host = "ERROR_MISSING_CONFIG" 
+                        server_port = "ERROR"
+    
+                    # Construct URL using Config
+                    scheme = request.url.scheme
+                    clean_path = str(abs_path).lstrip('/')
+                    image_url = f"{scheme}://{server_host}:{server_port}/api/files/{clean_path}"
+                    
+                    # Standard Markdown URL
+                    final_content = f"\n![Generated Image]({image_url})"
+                    
+                    yield "data: " + json.dumps(make_chunk(final_content)) + "\n\n"
+                    
+                    # Yield Finish
+                    yield "data: " + json.dumps(make_chunk(None, finish_reason='stop')) + "\n\n"
+                    yield "data: [DONE]\n\n"
+                elif not result: # Only yield failure if no result and NO error (e.g. cancelled handled above)
+                     # If we had an ERROR map, we broke. If we just have no result but no ERROR (shouldn't happen), assume fail.
+                     pass
+                     
+            except asyncio.CancelledError:
+                print(f"Client disconnected. Stopping generation for {model_name}...")
+                img_generator.stop()
+                raise
+            finally:
+                # Ensure we stop if we leave the loop for ANY reason (error, done, disconnect)
+                # But only if it's still running? stop() is safe to call multiple times.
+                img_generator.stop()
 
         return StreamingResponse(image_stream_generator(), media_type="text/event-stream")
 
@@ -424,8 +458,12 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
         image_url = f"{scheme}://{server_host}:{server_port}/api/files/{clean_path}"
         
         response_content = f"![Generated Image]({image_url})"
+        if response_prefix:
+            response_content = response_prefix + response_content
     else:
         response_content = "Failed to generate image."
+        if response_prefix:
+            response_content = response_prefix + "\n" + response_content
 
     return {
         "id": request_id,
@@ -840,6 +878,8 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
 
         # 4. RANDOM PROMPT COMMAND
         from ai_media.utils.prompts import is_random_prompt_trigger, get_random_prompt
+        response_prefix = None
+        
         if is_random_prompt_trigger(last_msg_content):
             # Determine prompt type based on model
             is_image = model_name in IMAGE_MODELS or model_name in IMAGE_MODELS.values()
@@ -847,28 +887,34 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
             random_prompt = get_random_prompt(prompt_type)
             print(f"Random Prompt ({prompt_type}): {random_prompt}")
             
-            # Return the random prompt (not execute it, just show it)
-            if request.stream:
-
-                async def random_stream():
-                    request_id = f"chatcmpl-{uuid.uuid4()}"
-                    created = int(time.time())
-                    content = f"🎲 **Random Prompt**\n\n{random_prompt}"
-                    chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created, 
-                             "model": model_name, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]}
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                    final_chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created,
-                                   "model": model_name, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
-                    yield f"data: {json.dumps(final_chunk)}\n\n"
-                    yield "data: [DONE]\n\n"
-                return StreamingResponse(random_stream(), media_type="text/event-stream")
+            if is_image:
+                 # IF IMAGE MODEL: Don't return text, but PROCEED to generate image with this prompt
+                 last_msg = random_prompt
+                 response_prefix = f"🎲 **Random Prompt**\n\n{random_prompt}\n\n"
+                 # Fallthrough to IMAGE_GENERATION_HANDLING below...
             else:
-                return {
-                    "id": f"chatcmpl-{uuid.uuid4()}", "object": "chat.completion", "created": int(time.time()),
-                    "model": model_name,
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": f"🎲 **Random Prompt**\n\n{random_prompt}"}, "finish_reason": "stop"}],
-                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-                }
+                # IF TEXT/CODE: Return the random prompt (not execute it, just show it)
+                if request.stream:
+    
+                    async def random_stream():
+                        request_id = f"chatcmpl-{uuid.uuid4()}"
+                        created = int(time.time())
+                        content = f"🎲 **Random Prompt**\n\n{random_prompt}"
+                        chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created, 
+                                 "model": model_name, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]}
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        final_chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created,
+                                       "model": model_name, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                        yield f"data: {json.dumps(final_chunk)}\n\n"
+                        yield "data: [DONE]\n\n"
+                    return StreamingResponse(random_stream(), media_type="text/event-stream")
+                else:
+                    return {
+                        "id": f"chatcmpl-{uuid.uuid4()}", "object": "chat.completion", "created": int(time.time()),
+                        "model": model_name,
+                        "choices": [{"index": 0, "message": {"role": "assistant", "content": f"🎲 **Random Prompt**\n\n{random_prompt}"}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                    }
 
         # --- IMAGE GENERATION HANDLING ---
         if model_name in IMAGE_MODELS or model_name in IMAGE_MODELS.values():
@@ -901,7 +947,7 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
                          "usage": None
                      }
 
-             return await _handle_image_generation(raw_request, last_msg, model_name, stream=request.stream)
+             return await _handle_image_generation(raw_request, last_msg, model_name, stream=request.stream, response_prefix=response_prefix)
 
         # --- TEXT GENERATION HANDLING (Existing Logic) ---
         # Enforce single model policy (Unload image models if any)
