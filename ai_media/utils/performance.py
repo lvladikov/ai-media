@@ -162,10 +162,14 @@ class PerformanceTracker:
 
     def print_estimate(self, est_time, est_cpu, est_ram, est_vram, est_gpu):
         """Print formatted estimation stats to console."""
+        print(self.get_estimate_msg(est_time, est_cpu, est_ram, est_vram, est_gpu))
+
+    def get_estimate_msg(self, est_time, est_cpu, est_ram, est_vram, est_gpu):
+        """Return formatted estimation stats as a string."""
         if est_time > 0:
-            print(f"{emoji('⏱️ ', '')} Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%")
+            return f"{emoji('⏱️ ', '')} Estimated Resources: Time: {format_time(est_time)} | RAM: {est_ram:.1f}GB | VRAM: {est_vram:.1f}GB | CPU: {est_cpu:.1f}% | GPU: {est_gpu:.1f}%"
         else:
-            print(f"{emoji('⏱️ ', '')} Estimated Resources: (New combination - no history)")
+            return f"{emoji('⏱️ ', '')} Estimated Resources: (New combination - no history)"
 
     def print_actual(self, time_taken, cpu, ram, vram, gpu):
         """Print formatted actual stats to console."""

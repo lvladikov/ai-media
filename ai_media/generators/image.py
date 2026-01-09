@@ -79,6 +79,11 @@ class ImageGenerator:
                 
                 # Strip terminal-specific instructions for web UI
                 clean_ui_msg = message.replace(" (check terminal for progress)", "")
+                
+                # Filter out bypass warnings from UI (keep only in terminal)
+                if "(Proceeding due to --bypass-warning flag)" in clean_ui_msg:
+                    return
+
                 self.progress_callback(percent=progress, message=clean_ui_msg)
             except Exception as e:
                 print(f"⚠️ Progress callback error: {e}")
@@ -323,7 +328,7 @@ class ImageGenerator:
 
     def generate(self, prompt, width=1024, height=1024, output_file=None, steps=None, 
                  guidance_scale=None, negative_prompt="", unsafe=False, report_json=None, 
-                 force=False, bypass_warning=False, progress_callback=None, **kwargs):
+                 force=False, bypass_warning=False, progress_callback=None, allow_header=True, **kwargs):
         """Generate an image."""
         self._cancelled = False # Reset cancellation flag
         self.progress_callback = progress_callback
@@ -373,13 +378,19 @@ class ImageGenerator:
             est_values = tracker.estimate_image(self.model_id, width, height, device, dtype=dtype_name)
             
             # Display Info Header
-            print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
-            tracker.print_estimate(*est_values)
+            if allow_header:
+                self._log_status("loading", 0, f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+                est_msg = tracker.get_estimate_msg(*est_values)
+                if est_msg:
+                    self._log_status("loading", 0, est_msg)
             
         except ImportError:
-            print("❌ Failed to import torch/diffusers. Please check installation.")
+            self._log_status("error", 0, "❌ Failed to import torch/diffusers. Please check installation.")
             return []
 
+        # Reverted: User found full header dump too noisy
+        # self._log_status("loading", 0, f"🎨 Generating Image")
+        # self._log_status("loading", 0, f"   Model:  {self.model_id}") ...
         print(f"🎨 Generating Image")
         print(f"   Model:  {self.model_id}")
         print(f"   Prompt: '{prompt}'")
@@ -391,8 +402,7 @@ class ImageGenerator:
         
         # Helper to pipe messages to client if callback available
         def log_warn(msg):
-            print(msg)
-            if self.progress_callback: self.progress_callback(0, msg.strip())
+            self._log_status("loading", 0, msg)
             
         # Check resources
         if not check_resources_and_warn(self.model_id, width=width, height=height, force=force, bypass_warning=bypass_warning,
@@ -409,7 +419,10 @@ class ImageGenerator:
                     width, height = new_w, new_h
 
             # Ensure Pipeline is Loaded
-            self._ensure_pipeline_loaded()
+            # We capture stray stderr warnings from diffusers/torch during the whole generation
+            capture = TqdmCapture(self._log_status)
+            with contextlib.redirect_stderr(capture):
+                self._ensure_pipeline_loaded()
             pipe = self.pipe
             
             # Use defaults from load
@@ -522,6 +535,8 @@ class ImageGenerator:
                         except Exception:
                             pass # Fallback to trusting the caller if inspection fails
 
+                    # Reverted: User found TqdmCapture here too noisy (dumps all stderr)
+                    # with contextlib.redirect_stderr(capture):
                     output = pipe(
                         prompt=prompt, 
                         height=height, 
@@ -574,7 +589,7 @@ class ImageGenerator:
             print("\n🛑 Generation Cancelled.")
             return []
         except ImportError as e:
-            print(f"❌ Error: Missing dependencies. {e}")
+            self._log_status("error", 0, f"❌ Error: Missing dependencies. {e}")
             return []
         except Exception as e:
             err_str = str(e).lower()
@@ -624,11 +639,19 @@ class ImageGenerator:
                 log_warn(f"   Closest valid size: {new_w}x{new_h}")
                 
                 try:
-                    choice = input(f"   🔄 Retry with {new_w}x{new_h}? [y/N]: ").lower().strip()
-                    if choice in ['y', 'yes']:
+                    if bypass_warning or force:
+                         log_warn(f"   (Proceeding due to --bypass-warning flag)")
+                         choice = 'y'
+                    else:
+                         choice = input(f"   🔄 Retry with {new_w}x{new_h}? [Y/n]: ").lower().strip()
+                         
+                    if choice in ['', 'y', 'yes']:
                         print("")  # Spacer
                         return self.generate(prompt, width=new_w, height=new_h, output_file=output_file, 
-                                             model_id=self.model_name, unsafe=unsafe)
+                                             model_id=self.model_name, unsafe=unsafe,
+                                             force=force, bypass_warning=bypass_warning,
+                                             progress_callback=progress_callback,
+                                             allow_header=False)
                 except KeyboardInterrupt:
                     pass
                 print("")
@@ -669,12 +692,12 @@ class ImageGenerator:
                     
                     log_warn(f"   ✨ Alternative: Generate at {base_w}x{base_h} and Auto-Upscale {upscale_factor:.1f}x?")
                     log_warn(f"      This produces a {final_w}x{final_h} image using the Upscaler model.")
-                    if bypass_warning:
-                         log_warn(f"   🔄 Try Auto-Upscale workflow? [y/N]: y")
+                    if bypass_warning or force:
+                         log_warn(f"   (Proceeding due to --bypass-warning flag)")
                          choice = 'y'
                     else:
-                         choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
-                    if choice in ['y', 'yes']:
+                         choice = input(f"   🔄 Try Auto-Upscale workflow? [Y/n]: ").lower().strip()
+                    if choice in ['', 'y', 'yes']:
                         log_warn(f"\n📉 Switching to base resolution: {base_w}x{base_h}...")
                         # Import upscaler here to avoid circular import
                         from ..upscaling import upscale_image_file
@@ -682,7 +705,8 @@ class ImageGenerator:
                         output = self.generate(prompt, width=base_w, height=base_h, output_file=output_file, 
                                              model_id=self.model_name, unsafe=unsafe,
                                              force=force, bypass_warning=bypass_warning,
-                                             progress_callback=progress_callback)
+                                             progress_callback=progress_callback,
+                                             allow_header=False)
                         if output:
                             # 2. Upscale Result
                             print("")
@@ -708,12 +732,12 @@ class ImageGenerator:
                 try:
                     log_warn(f"   ✨ Alternative: Generate at 1280x720 and Auto-Upscale x4?")
                     log_warn(f"      This produces a 5120x2880 (5K) image using the Upscaler model.")
-                    if bypass_warning:
-                         log_warn(f"   🔄 Try Auto-Upscale workflow? [y/N]: y")
+                    if bypass_warning or force:
+                         log_warn(f"   (Proceeding due to --bypass-warning flag)")
                          choice = 'y'
                     else:
-                         choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
-                    if choice in ['y', 'yes']:
+                         choice = input(f"   🔄 Try Auto-Upscale workflow? [Y/n]: ").lower().strip()
+                    if choice in ['', 'y', 'yes']:
                         log_warn("\n📉 Switching to base resolution: 1280x720...")
                         # Import upscaler here to avoid circular import
                         from ..upscaling import upscale_image_file
@@ -721,7 +745,8 @@ class ImageGenerator:
                         output = self.generate(prompt, width=1280, height=720, output_file=output_file, 
                                              model_id=self.model_name, unsafe=unsafe,
                                              force=force, bypass_warning=bypass_warning,
-                                             progress_callback=progress_callback)
+                                             progress_callback=progress_callback,
+                                             allow_header=False)
                         if output:
                             # 2. Upscale Result
                             print("")
@@ -734,7 +759,7 @@ class ImageGenerator:
                     pass
                 print("")
             else:
-                print(f"❌ Generation failed: {e}")
+                self._log_status("error", 0, f"❌ Generation failed: {e}")
             return []
 
 

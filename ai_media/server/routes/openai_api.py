@@ -330,35 +330,76 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
             result = None
             last_progress = {} # prefix -> last_percent
             
+            def complete_progress(current_msg=None):
+                """Helper to yield 100% for any previous prefixes if they finished abruptly."""
+                import re
+                prefix = None
+                if current_msg:
+                    # Detect prefix (e.g. "Loading: 50%" -> "Loading: ")
+                    match = re.search(r'^(.*?)\d+%$', current_msg.strip())
+                    if match:
+                        prefix = match.group(1)
+                    # Also detect non-percent headers like "Generating Image"
+                    elif ":" not in current_msg and "..." not in current_msg:
+                         # Treat as a new phase, clearing previous ones
+                         # But non-percent headers don't have a "prefix" to track 100% against
+                         pass
+                
+                updates = []
+                for old_prefix, old_percent in list(last_progress.items()):
+                    # If we switched to a new prefix, OR we finished (current_msg=None)
+                    if (prefix is None or old_prefix != prefix) and old_percent < 100:
+                        updates.append(f"data: {json.dumps(make_chunk(f'{old_prefix}100%' + '\n\n'))}\n\n")
+                        last_progress[old_prefix] = 100
+                
+                # Update current prefix tracking
+                if prefix:
+                     match = re.search(r'(\d+)%$', current_msg)
+                     if match:
+                        last_progress[prefix] = int(match.group(1))
+                return updates
+
             try:
                 while True:
                     item = await progress_queue.get()
                     
                     # Conflation: If the queue has backed up, skip intermediate PROGRESS updates
-                    # and jump straight to the latest status. This fixes the "lag" where the UI
-                    # is displaying "Loading..." while the server is already "Generating: 50%".
+                    # BUT only if they are for the same "phase" (same prefix).
+                    # Never skip headers, errors, or DONE signals.
                     while not progress_queue.empty():
                         try:
                             next_item = progress_queue.get_nowait()
-                            # Always prioritize DONE/ERROR signals.
-                            # If we have [Prog 20%, Prog 21%, DONE], we effectively jump to DONE.
-                            # If we have [Prog 20%, Prog 21%], we jump to 21%.
-                            item = next_item
+                            
+                            # Stop conflating if we see a non-progress item
+                            if next_item[0] != "PROGRESS":
+                                # Put it back? No, we can't put back easily.
+                                # Strategy: Peek? Queue doesn't support peek.
+                                # Better Strategy: Only skip if next_item is also PROGRESS AND matches context?
+                                # Simple safe fix: 
+                                # If next is DONE/ERROR, take it and discard current `item` (jump to end/fail).
+                                # If next is PROGRESS, take it (jump ahead).
+                                item = next_item
+                                if item[0] != "PROGRESS":
+                                    break
+                            else:
+                                item = next_item
                         except asyncio.QueueEmpty:
                             break
                     
                     msg_type = item[0]
                     
                     if msg_type == "DONE":
-                        # Auto-complete any remaining 100%s
-                        for prefix, percent in last_progress.items():
-                            if percent < 100:
-                                yield "data: " + json.dumps(make_chunk(f'{prefix}{100}%\n\n')) + "\n\n"
+                        # Auto-complete any remaining 100%s BEFORE yielding result
+                        for update in complete_progress(None):
+                            yield update
                         result = item[1]
                         break
                     elif msg_type == "ERROR":
+                        # Auto-complete pending bars BEFORE showing error
+                        for update in complete_progress(None):
+                            yield update
+                            
                         error_msg = item[2]
-                        # Check if error was a cancellation
                         if "cancelled" in str(error_msg).lower():
                              yield "data: " + json.dumps(make_chunk(f'🛑 Generation Cancelled.\n')) + "\n\n"
                         else:
@@ -368,19 +409,13 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                         percent = item[1]
                         message = item[2]
                         
-                        # Detect prefix (e.g. "Loading: 50%" or "Generating: 32%, Eta...")
-                        import re
-                        match = re.search(r'^(.*?)\d+%', message.strip())
-                        if match:
-                            prefix = match.group(1)
-                            # Remove incorrect auto-complete for interleaved bars
-                            last_progress[prefix] = percent
+                        # Yield completions for previous phases first
+                        for update in complete_progress(message):
+                            yield update
                         
                         yield "data: " + json.dumps(make_chunk(f'{message}\n\n')) + "\n\n"
-                        # Force flush buffer by sending a keep-alive comment
-                        yield ":\n\n"
+                        yield ":\n\n" # keep-alive
                 
-    
                 # Yield End of Thinking Block
                 yield "data: " + json.dumps(make_chunk('</think>\n\n')) + "\n\n"
                 
@@ -423,8 +458,6 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                 img_generator.stop()
                 raise
             finally:
-                # Ensure we stop if we leave the loop for ANY reason (error, done, disconnect)
-                # But only if it's still running? stop() is safe to call multiple times.
                 img_generator.stop()
 
         return StreamingResponse(image_stream_generator(), media_type="text/event-stream")
