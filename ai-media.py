@@ -526,7 +526,7 @@ Supported Models (Code : Download Size | Description):
     mode_group.add_argument("-v", "--generate-video", action="store_true", help="Generate Video")
     mode_group.add_argument("-a", "--generate-audio", action="store_true", help="Generate Audio")
     
-    # NEW: Article Modes
+    # Article Modes
     mode_group.add_argument("-ga", "--generate-article", action="store_true", help="Generate Article (Offline)")
     mode_group.add_argument("-gr", "--generate-research", action="store_true", help="Generate Article + Research (Online)")
     mode_group.add_argument("-c", "--chat", action="store_true", help="Interactive Chat Mode")
@@ -574,7 +574,7 @@ Supported Models (Code : Download Size | Description):
     audio_group.add_argument("-b", "--bit-depth", type=int, choices=[16, 24, 32], default=16, help="Bit depth for audio conversion.")
     audio_group.add_argument("-r", "--bit-rate", help="Bit rate (e.g. 192k) for audio conversion.")
     
-    # NEW: Text Options
+    # Text Options
     text_group = parser.add_argument_group("Text/Article Options (Articles, Research, Chat, Code)")
     text_models_help = [k + " (Gated)" if k in ["llama-3.1-8b"] else k for k in TEXT_MODELS.keys()]
     text_group.add_argument("-atm", "--article-model", default="default", 
@@ -692,15 +692,50 @@ Supported Models (Code : Download Size | Description):
     server_group.add_argument("--serve", action="store_true", help="Start the web server and launch both Web and Electron clients (Loads Server + both Web & Electron)")
     server_group.add_argument("--serve-web-only-client", action="store_true", help="Start the web server and launch only the Web client")
     server_group.add_argument("--serve-no-client", action="store_true", help="Start the backend server only (no clients)")
+    server_group.add_argument("--inference-server", action="store_true", help="Start OpenAI-compatible Inference Server (Continue/LM Studio compatible).")
+    server_group.add_argument("--inference-server-verbose", action="store_true", help="Start Inference Server with Request/Response logging.")
     server_group.add_argument("--reload", action="store_true", help="Enable auto-reload for development (On by default for Client modes)")
     server_group.add_argument("--host", default=None, help="Host for the web server (Overrides config)")
     server_group.add_argument("--port", type=int, default=None, help="Port for the backend server (Overrides config)")
+    
+    # Maintenance / Cleanup
+    cleanup_group = parser.add_argument_group("Maintenance / Cleanup Options")
+    cleanup_group.add_argument("--clear-data-output", action="store_true", help="Clear testing/data/outputs folder.")
+    cleanup_group.add_argument("--clear-media-output", action="store_true", help="Clear configured media_output folder.")
+    cleanup_group.add_argument("--clear-all", action="store_true", help="Clear both testing/data/outputs and configured media_output folders.")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
     parser.add_argument("--list-models", action="store_true", help="List all available models and exit.")
 
     # --- Parse Arguments ---
     args = parser.parse_args()
+    
+    # Handle Cleanup Commands
+    if args.clear_data_output or args.clear_media_output or args.clear_all:
+        from ai_media.utils.cleanup import clear_directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        data_output_dir = os.path.join(script_dir, "ai_media", "testing", "data", "outputs")
+        # CONFIG is module-level global
+        media_output_dir = CONFIG["paths"]["media_output"]
+        
+        if args.clear_data_output or args.clear_all:
+            print(f"🧹 Clearing {data_output_dir}...")
+            deleted = clear_directory(data_output_dir)
+            if deleted:
+                print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
+            else:
+                print("   ✅ Directory already empty.")
+            
+        if args.clear_media_output or args.clear_all:
+            print(f"🧹 Clearing {media_output_dir}...")
+            deleted = clear_directory(media_output_dir)
+            if deleted:
+                print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
+            else:
+                print("   ✅ Directory already empty.")
+            
+        sys.exit(0)
     
     # List Models
     if args.list_models:
@@ -736,7 +771,7 @@ Supported Models (Code : Download Size | Description):
         sys.exit(0)
     
     # Server Mode - start web server
-    serve_any = args.serve or args.serve_web_only_client or args.serve_no_client
+    serve_any = args.serve or args.serve_web_only_client or args.serve_no_client or args.inference_server or args.inference_server_verbose
     if serve_any:
         # Load config for host/ports (allowing CLI overrides)
         host = args.host if args.host else CONFIG["server"]["host"]
@@ -803,22 +838,48 @@ Supported Models (Code : Download Size | Description):
                             # Use configured host or localhost for Vite check
                             wait_for_port(web_host, web_port, "Web client")
                             
-                        procs.append(start_client("npm run electron", "Electron", env=env))
-
-                # Start the launch thread
+                        procs.append(start_client("npm run dev:electron", "Electron", env=env))
+                
+                # Start wait thread
                 import threading
-                launch_thread = threading.Thread(target=delayed_launch)
-                launch_thread.daemon = True
-                launch_thread.start()
-            
-            from ai_media.server.app import main as server_main
-            
-            # Restrict watcher to source code only to avoid loops with generated content in media-output/
-            reload_dirs = ["ai_media", "ai-media.py"] if reload_enabled else None
-            
+                wait_thread = threading.Thread(target=delayed_launch)
+                wait_thread.daemon = True
+                wait_thread.start()
+        
+            if args.inference_server:
+                print(f"\n🤖 Inference Server Ready!")
+                print(f"   Shape your existing tools to use Custom OpenAI API:")
+                print(f"   • Base URL: http://{host}:{server_port}/v1")
+                print(f"   • API Key:  (Any string, e.g. 'local')")
+                print(f"   • Models:   Auto-detected from ai-media text models")
+                print(f"   ---------------------------------------------------")
+
+            # Watch specific subdirectories to avoid triggering reloads on output files
+            valid_server_dirs = [
+                "ai_media/server/routes",
+                "ai_media/server/websockets",
+            ]
+
             # Print newline before server starts to separate it from any background thread output
             print() 
-            server_main(host=host, port=server_port, reload=reload_enabled, reload_dirs=reload_dirs)
+            
+            # Set verbose flag appropriately
+            if args.inference_server_verbose:
+                CONFIG["server"]["verbose_inference"] = True
+                
+            # Inference Server message
+            if args.inference_server or args.inference_server_verbose:
+                print("\n🚀 Starting AI-Media Inference Server (OpenAI Compatible)...")
+                print(f"👉 Compatible with Continue, LM Studio, etc.")
+                if args.inference_server_verbose:
+                    print("📝 Verbose Logging: Enabled (Requests/Responses will be printed)")
+                else:
+                    print("📝 Verbose Logging: Disabled (Use --inference-server-verbose to enable)")
+                print("💡 To stop the server at any time press CTRL+C or send a message through chat 'stop inference server'")
+            
+            from ai_media.server.app import main as server_main
+            server_main(host=host, port=server_port, reload=reload_enabled, reload_excludes=["*.log", "*.json", "output/*"], reload_dirs=valid_server_dirs if reload_enabled else None)
+            
         finally:
             # Cleanup background processes
             for p in procs:
@@ -868,7 +929,7 @@ Supported Models (Code : Download Size | Description):
         
     # --- Dispatch ---
     
-    # NEW: Article Generation Dispatch
+    # Article Generation Dispatch
     if args.chat:
         gen = PkgArticleGenerator(model_name=args.chat_model)
         gen.chat_session()
@@ -885,6 +946,12 @@ Supported Models (Code : Download Size | Description):
         if not prompt:
             print("❌ Error: Code generation code requires a prompt (e.g. -gc 'Write a script...' or -gc -p '...')")
             sys.exit(1)
+        
+        # Handle random prompt trigger
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random(prompt, "code")
+        if was_random:
+            print(f"🎲 Using random prompt: {prompt}")
             
         # Default to media output dir if no output specified
         code_output = args.output
@@ -933,8 +1000,14 @@ Supported Models (Code : Download Size | Description):
                 print("⏭️  Skipped.")
                 sys.exit(0)
         
+        # Handle random prompt trigger
+        from ai_media.utils.prompts import maybe_replace_with_random
+        topic, was_random = maybe_replace_with_random(args.prompt, "article")
+        if was_random:
+            print(f"🎲 Using random topic: {topic}")
+        
         gen.generate_article(
-            topic=args.prompt, 
+            topic=topic, 
             output_file=outfile, 
             format=output_format,
             online=online,
@@ -1012,8 +1085,14 @@ Supported Models (Code : Download Size | Description):
         
         # Resolve Model ID
         model_id = get_model_id(args.image_model, IMAGE_MODELS)
+        
+        # Handle random prompt trigger
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random(args.prompt, "image")
+        if was_random:
+            print(f"🎲 Using random prompt: {prompt}")
             
-        success = pkg_generate_image(args.prompt, outfile, w, h, model_id, negative_prompt=args.negative_prompt, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
+        success = pkg_generate_image(prompt, outfile, w, h, model_id, negative_prompt=args.negative_prompt, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
         if not success:
             sys.exit(1)
         
@@ -1081,8 +1160,14 @@ Supported Models (Code : Download Size | Description):
         if not pkg_system.check_resources_and_warn(VIDEO_MODELS[args.video_model], w, h, dur, args.force, MODEL_REQUIREMENTS):
            sys.exit(0)
 
+        # Handle random prompt trigger
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random(args.prompt, "video")
+        if was_random:
+            print(f"🎲 Using random prompt: {prompt}")
+
         success = pkg_generate_video(
-            prompt=args.prompt, 
+            prompt=prompt, 
             output_path=outfile, 
             duration=dur,
             model_name=VIDEO_MODELS[args.video_model], 

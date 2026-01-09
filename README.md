@@ -2,10 +2,11 @@
 
 Generate images, videos, and audio locally using state-of-the-art open source AI models. Write articles, chat interactively, and generate code—all powered by local LLMs running entirely on your machine. Optionally enable live web search for deep research and real-time context in chat. Transform and edit images with natural language instructions or remove backgrounds. Describe and analyze media content. Upscale existing media with or without AI. Convert media and documents between formats instantly, including **extracting text from images using OCR**.
 
-AI-Media provides **three ways to interact** with these powerful local models:
+AI-Media provides **four ways to interact** with these powerful local models:
 - **CLI** — Direct command-line execution for scripting and automation
 - **Interactive Mode** — Guided Python menus with arrow key navigation (and mouse support on some terminals)
 - **Web Client & Desktop App** — Full-featured React Web Client running in browser or as an Electron app, with real-time resource monitoring and job management
+- **Inference Server** — OpenAI-compatible API for using local models with external tools like VS Code (Continue) and LM Studio
 
 Under the hood, it wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a unified Python wrapper. Unit and integration tests verify all functionality.
 
@@ -19,7 +20,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 🎬 **Video Generation** - **Text-to-Video**, **Image-to-Video**, and **Text/Image + Audio (prompt) to Video**. See [Video Options](docs/video-generation.md#options), [Examples](docs/video-generation.md#examples) and [Models](docs/video-generation.md#models).
 - 🎵 **Audio Generation** - **Text-to-Audio** (either instructional prompt with most models, or text to speech with multi language support and human speaker voices with the Bark model) and **Image-to-Audio** / **Video-to-Audio** (using Visual Captioning + Audio Generation). Models: MusicGen, AudioLDM 2. See [Audio Options](docs/audio-generation.md#options), [Examples](docs/audio-generation.md#examples) and [Models](docs/audio-generation.md#models).
 - 📝 **Analysis** - **Generate a description** for an image or video (sample 10 evenly picked frames used) using models like Florence/BLIP (via `transformers`). See [Analysis Options](docs/analysis.md#options), [Examples](docs/analysis.md#examples) and [Models](docs/analysis.md#models). If you are interested in producing a subtitle file based on Audio or Video using AI, see my [auto-subtitles project](https://github.com/lvladikov/auto-subtitles).
-- ✍️ **Article/Research/Code Generation** - Generate comprehensive **Articles** (offline), perform **Deep Research** (online search + summary), and generate **Code** for scripts, including multi file and folder projects (offline). Includes an interactive **Chat** session that runs on **fully offline models** but can dynamically pull live web content via the `/search` command. Chat can **read, discuss, generate, and save content (code or otherwise)**. See [Article Options](docs/article-generation.md#article--text-options), [Code Options](docs/article-generation.md#code-options), [Examples](docs/article-generation.md#examples) and [Models](docs/article-generation.md#text-models).
+- ✍️ **Article/Research/Code Generation** - Generate comprehensive **Articles** (offline), perform **Deep Research** (online search + summary), and generate **Code** for scripts, including multi file and folder projects (offline). Includes an interactive **Chat** session that runs on **fully offline models** but can dynamically pull live web content via the `/search` command. Chat can **read, discuss, generate, and save content (code or otherwise)**. See [Article Options](docs/text-generation.md#article--text-options), [Code Options](docs/text-generation.md#code-options), [Examples](docs/text-generation.md#examples) and [Models](docs/text-generation.md#text-models).
 - 🪄 **Creative Image Transformations** - **Edit images using natural language instructions** (InstructPix2Pix) or **remove backgrounds** (RMBG-1.4). Supports style transfer (Anime, Oil Painting), content modification (features, age), and utility tasks (Background Removal, Silhouettes). See [Transform Options](docs/creative-transformations.md#options), [Examples](docs/creative-transformations.md#examples) and [Models](docs/creative-transformations.md#models).
 - 🔄 **Media Conversion** - **Instantly convert** images, videos, and audio between formats (no AI, uses PIL/FFmpeg). See [Media Conversion Options](docs/media-conversion.md#media-conversion-options) and [Examples](docs/media-conversion.md#examples).
 - 📄 **Document Conversion** - **Convert documents** between formats (MD, HTML, PDF, DOCX, RTF, TXT, JSON). See [Document Conversion Options](docs/media-conversion.md#document-conversion-options).
@@ -27,6 +28,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 - 📈 **Upscaling** - **Upscale** images and videos using AI (Real-ESRGAN for fast/faithful, Stable Diffusion for creative) or simple non-AI (Lanczos/FFmpeg). Supports any resolution (8K+ auto-encodes as HEVC). See [Upscaling Options](docs/upscaling.md#options), [Examples](docs/upscaling.md#examples) and [Models](docs/upscaling.md#models).
 - 🖥️ **Interactive Mode** - Optional **guided menu system** with arrow key navigation for all features, when no parameters are provided to the main script. [See details](#interactive-mode).
 - 🌐 **Web Client & Desktop App** - Browser-based interface and Electron desktop app for all features with real-time resource monitoring. Launch with `python ai-media.py --serve` (both clients), or `--serve-web-only-client` (only Web Client). See [Web Client](docs/web-client.md).
+- 🧩 **Inference Server** - **OpenAI-compatible API** for using local models with external tools like **Continue** (VS Code) or **LM Studio**. Launch with `python ai-media.py --inference-server`. See [Inference Server](docs/inference-server.md).
 - 🧪 **Testing** - **Unit and integration tests** to verify the functionality of the tool. See [Testing](docs/testing.md).
 - ⚙️ **Power User Controls**
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
@@ -261,6 +263,9 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | `--bypass-warning` | Specifically skip resource warning prompts (avoids hanging in non-interactive environments). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", `{w:1280, h:720}`. Default: 720p. |
 | `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](docs/performance-tracking.md). |
+| `--clear-data-output` | Clear `testing/data/outputs` folder. |
+| `--clear-media-output` | Clear configured `media_output` folder. |
+| `--clear-all` | Clear both `testing/data/outputs` and configured `media_output` folders. |
 
 ## Quick Examples per Feature
 
@@ -288,7 +293,7 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 🎨 **Image Generation** | [docs/image-generation.md](docs/image-generation.md) |
 | 🎬 **Video Generation** | [docs/video-generation.md](docs/video-generation.md) |
 | 🎵 **Audio Generation** | [docs/audio-generation.md](docs/audio-generation.md) |
-| ✍️ **Article, Chat & Code** | [docs/article-generation.md](docs/article-generation.md) |
+| ✍️ **Article, Chat & Code** | [docs/text-generation.md](docs/text-generation.md) |
 | 📝 **Analysis (Vision and Sound)** | [docs/analysis.md](docs/analysis.md) |
 | 🪄 **Creative Transformations** | [docs/creative-transformations.md](docs/creative-transformations.md) |
 | 🔄 **Media & Document Conversion** | [docs/media-conversion.md](docs/media-conversion.md) |
@@ -296,6 +301,7 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 📈 **Upscaling** | [docs/upscaling.md](docs/upscaling.md) |
 | 🖥️ **Interactive Menu** | [docs/interactive-menu.md](docs/interactive-menu.md) |
 | 🌐 **Web Client & Electron** | [docs/web-client.md](docs/web-client.md) |
+| 🧩 **Inference Server** | [docs/inference-server.md](docs/inference-server.md) |
 | 🧪 **Testing & Codec Analysis** | [docs/testing.md](docs/testing.md) |
 | 🔧 **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | 📊 **Performance Tracking** | [docs/performance-tracking.md](docs/performance-tracking.md) |

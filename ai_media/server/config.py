@@ -21,6 +21,7 @@ def load_config() -> Dict[str, Any]:
         "server": {
             "host": "127.0.0.1",
             "port": 8000,
+            "verbose_inference": False,
         },
         "client": {
             "host": "127.0.0.1",
@@ -56,7 +57,7 @@ if not CONFIG["paths"]["temp"]:
     CONFIG["paths"]["temp"] = os.path.join(CONFIG["paths"]["media_output"], "temp")
 
 # Create temp directory if it doesn't exist
-os.makedirs(CONFIG["paths"]["temp"], exist_ok=True)
+# os.makedirs(CONFIG["paths"]["temp"], exist_ok=True) # Lazy creation by users (e.g. document conversion)
 
 # Set HF Home if configured
 if CONFIG["paths"]["hf_home"]:

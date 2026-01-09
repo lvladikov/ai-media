@@ -20,6 +20,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "resolveJsonModule": true,
+    /* Path aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../data/*"]
+    },
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -29,6 +34,7 @@
     "noUncheckedSideEffectImports": true
   },
   "include": [
-    "src"
+    "src",
+    "../data"
   ]
 }

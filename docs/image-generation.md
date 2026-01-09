@@ -69,9 +69,9 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
 | **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | **Default**. Fast (4 steps) and Good Quality. 🔒 **Gated**. |
 | **Qwen 2.5 Image (Auto)** | `qwen-image-auto` | ~20-40GB | ~20-40GB | **Best Quality**. Automatically picks best model for your hardware (MPS/CUDA). |
-| **[Qwen 2.5 Img (Lightning)](https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning)** | `qwen-image-lightning` | ~40GB | ~40GB | **Fastest Qwen**. 8 steps. Works on **MPS (Mac)** & CUDA. |
-| **[Qwen 2.5 Img (4-bit)](https://huggingface.co/ovedrive/qwen-image-4bit)** | `qwen-image-4bit` | ~20GB | ❌ N/A | **Low VRAM (CUDA Only)**. 4-bit quantized. 8 steps. |
-| **[Qwen 2.5 Img (Full)](https://huggingface.co/Qwen/Qwen-Image)** | `qwen-image-2512` | ~40GB | ~40GB | Manual Full Model selection. Float32. |
+| **Qwen 2.5 Img (Lightning)** | `qwen-image-lightning` | ~40GB | ~40GB | **Fastest Qwen**. 8 steps. Works on **MPS (Mac)** & CUDA. |
+| **Qwen 2.5 Img (4-bit)** | `qwen-image-4bit` | ~20GB | ❌ N/A | **Low VRAM (CUDA Only)**. 4-bit quantized. 8 steps. |
+| **Qwen 2.5 Img (Full)** | `qwen-image-2512` | ~40GB | ~40GB | Manual Full Model selection. Float32. |
 | **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
 | **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
@@ -119,9 +119,15 @@ Both models share the same **8.1B parameter** architecture but differ in speed a
 
 ### Basic Usage (Quick Start)
 
+> [!TIP]
+> **Need inspiration?** Use `rndPr`, `rndPrompt`, `randomPrompt`, or `random prompt` as your prompt to get a randomly selected creative image prompt.
+
 ```bash
 # Generate a standard 720p image (Default model: SD 3.5 Turbo)
 python ai-media.py -i -p "Cyberpunk city at night with neon lights"
+
+# Generate with a random prompt
+python ai-media.py -i -p rndPr
 
 # Explicit output filename
 python ai-media.py --generate-image --prompt "A cute robot holding a flower" --output robot.png

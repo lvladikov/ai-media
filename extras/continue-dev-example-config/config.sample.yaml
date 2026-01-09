@@ -1,0 +1,176 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+
+models:
+  # AI Media Local Text Models
+  - name: AI Media (Llama 3.1)
+    provider: openai
+    model: llama-3.1-8b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Mistral Nemo 12B)
+    provider: openai
+    model: mistral-nemo-12b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 2.5 Coder 7B)
+    provider: openai
+    model: qwen-coder-7b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 2.5 Coder 14B)
+    provider: openai
+    model: qwen-coder-14b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 2.5 Coder 32B)
+    provider: openai
+    model: qwen-coder-32b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 3 Coder 30B)
+    provider: openai
+    model: qwen3-coder-30b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 3 8B Reasoning)
+    provider: openai
+    model: qwen3-8b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Qwen 3 14B Reasoning)
+    provider: openai
+    model: qwen3-14b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (DeepSeek R1 Qwen 7B)
+    provider: openai
+    model: deepseek-r1-qwen-7b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (DeepSeek R1 Qwen 14B)
+    provider: openai
+    model: deepseek-r1-qwen-14b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (DeepSeek R1 Qwen 32B)
+    provider: openai
+    model: deepseek-r1-qwen-32b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (DeepSeek R1 Llama 8B)
+    provider: openai
+    model: deepseek-r1-llama-8b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (DeepSeek R1 Llama 70B)
+    provider: openai
+    model: deepseek-r1-llama-70b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  # AI Media Local Image Models
+  - name: AI Media (Image/SDXL Turbo)
+    provider: openai
+    model: sdxl
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/SD 1.5)
+    provider: openai
+    model: sd-1.5
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/SD 3.5 Medium)
+    provider: openai
+    model: sd3.5-medium
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/SD 3.5 Large)
+    provider: openai
+    model: sd3.5-large
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/SD 3.5 Large Turbo)
+    provider: openai
+    model: sd3.5-turbo
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Qwen 2.5 Image)
+    provider: openai
+    model: qwen-image-auto
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Qwen 2.5 Image Lightning)
+    provider: openai
+    model: qwen-image-lightning
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Qwen 2.5 Image 4-bit CUDA)
+    provider: openai
+    model: qwen-image-4bit
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Qwen 2.5 Image Full)
+    provider: openai
+    model: qwen-image-2512
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Flux Schnell)
+    provider: openai
+    model: flux
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Flux Dev)
+    provider: openai
+    model: flux-dev
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/FLUX.2 4-bit)
+    provider: openai
+    model: flux2
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/FLUX.2 Full)
+    provider: openai
+    model: flux2-full
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  # Hugging Face Hosted Models
+
+  - name: DeepSeek R1 (via HF)
+    provider: openai
+    model: deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+    apiKey: hf_yourHuggingFaceApiKeyHere
+    apiBase: https://router.huggingface.co/v1
+
+  - name: Qwen 2.5 Coder (via HF)
+    provider: openai
+    model: Qwen/Qwen2.5-Coder-32B-Instruct
+    apiKey: hf_yourHuggingFaceApiKeyHere
+    apiBase: https://router.huggingface.co/v1

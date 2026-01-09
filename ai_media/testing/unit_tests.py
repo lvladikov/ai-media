@@ -1963,7 +1963,7 @@ class TestLoadingTimer(unittest.TestCase):
 
 
 # =============================================================================
-# New Video Model Integration Tests (Wan 2.2, LTX, Mochi, Hunyuan)
+# Video Model Integration Tests (Wan 2.2, LTX, Mochi, Hunyuan)
 # =============================================================================
 
 class TestVideoModelIntegration(unittest.TestCase):
@@ -2653,7 +2653,7 @@ class TestServerCache(unittest.TestCase):
         self.assertIsNone(self.cache.get("image", "sdxl"))
         self.cache._clear_memory.assert_called()
         
-        # New model should not be in cache yet
+        # model should not be in cache yet
         self.assertIsNone(self.cache.get("image", "sdxl"))
 
     def test_unload_all(self):
@@ -3169,3 +3169,254 @@ class TestTranslationBFloat16(unittest.TestCase):
         # Verify float32 was used
         call_kwargs = self.AutoModelForCausalLM.from_pretrained.call_args[1]
         self.assertEqual(call_kwargs['dtype'], "float32")
+
+
+# =============================================================================
+# Random Prompts Utility Tests
+# =============================================================================
+
+class TestRandomPromptsUtility(unittest.TestCase):
+    """Tests for ai_media/utils/prompts.py random prompt functions."""
+    
+    def test_is_random_prompt_trigger_rndpr(self):
+        """Test 'rndPr' is recognized as trigger (case insensitive)."""
+        from ai_media.utils.prompts import is_random_prompt_trigger
+        self.assertTrue(is_random_prompt_trigger("rndPr"))
+        self.assertTrue(is_random_prompt_trigger("rndpr"))
+        self.assertTrue(is_random_prompt_trigger("RNDPR"))
+        self.assertTrue(is_random_prompt_trigger("  rndPr  "))
+    
+    def test_is_random_prompt_trigger_rndprompt(self):
+        """Test 'rndPrompt' is recognized as trigger."""
+        from ai_media.utils.prompts import is_random_prompt_trigger
+        self.assertTrue(is_random_prompt_trigger("rndPrompt"))
+        self.assertTrue(is_random_prompt_trigger("rndprompt"))
+    
+    def test_is_random_prompt_trigger_randomprompt(self):
+        """Test 'randomPrompt' is recognized as trigger."""
+        from ai_media.utils.prompts import is_random_prompt_trigger
+        self.assertTrue(is_random_prompt_trigger("randomPrompt"))
+        self.assertTrue(is_random_prompt_trigger("randomprompt"))
+    
+    def test_is_random_prompt_trigger_random_prompt(self):
+        """Test 'random prompt' is recognized as trigger."""
+        from ai_media.utils.prompts import is_random_prompt_trigger
+        self.assertTrue(is_random_prompt_trigger("random prompt"))
+        self.assertTrue(is_random_prompt_trigger("RANDOM PROMPT"))
+    
+    def test_is_random_prompt_trigger_non_triggers(self):
+        """Test non-trigger strings are not recognized."""
+        from ai_media.utils.prompts import is_random_prompt_trigger
+        self.assertFalse(is_random_prompt_trigger("A cyberpunk city"))
+        self.assertFalse(is_random_prompt_trigger("random"))
+        self.assertFalse(is_random_prompt_trigger("prompt"))
+        self.assertFalse(is_random_prompt_trigger("rnd"))
+        self.assertFalse(is_random_prompt_trigger(""))
+    
+    def test_get_random_prompt_returns_string(self):
+        """Test get_random_prompt returns a non-empty string."""
+        from ai_media.utils.prompts import get_random_prompt
+        result = get_random_prompt("image")
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 0)
+    
+    def test_get_random_prompt_different_types(self):
+        """Test get_random_prompt works for different prompt types."""
+        from ai_media.utils.prompts import get_random_prompt
+        # Should not raise for any of these types
+        for ptype in ["image", "video", "audio", "article", "code"]:
+            result = get_random_prompt(ptype)
+            self.assertIsInstance(result, str)
+    
+    def test_get_random_prompt_unknown_type_fallback(self):
+        """Test unknown type falls back to image prompts."""
+        from ai_media.utils.prompts import get_random_prompt
+        result = get_random_prompt("unknown_type")
+        self.assertIsInstance(result, str)
+    
+    def test_maybe_replace_with_random_trigger(self):
+        """Test maybe_replace_with_random replaces triggers."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("rndPr", "image")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt, "rndPr")
+        self.assertGreater(len(prompt), 0)
+    
+    def test_maybe_replace_with_random_non_trigger(self):
+        """Test maybe_replace_with_random passes through non-triggers."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        original = "A beautiful sunset over mountains"
+        prompt, was_random = maybe_replace_with_random(original, "image")
+        self.assertFalse(was_random)
+        self.assertEqual(prompt, original)
+    
+    def test_maybe_replace_with_random_code_type(self):
+        """Test maybe_replace_with_random works with code type."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("randomPrompt", "code")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt, "randomPrompt")
+        self.assertGreater(len(prompt), 5)
+    
+    def test_maybe_replace_with_random_article_type(self):
+        """Test maybe_replace_with_random works with article type."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("rndPrompt", "article")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt, "rndPrompt")
+        self.assertGreater(len(prompt), 5)
+    
+    def test_get_random_prompt_code_returns_code_task(self):
+        """Test code prompts return programming-related content."""
+        from ai_media.utils.prompts import get_random_prompt
+        result = get_random_prompt("code")
+        self.assertIsInstance(result, str)
+        # Code prompts should be non-empty programming tasks
+        self.assertGreater(len(result), 10)
+    
+    def test_get_random_prompt_article_returns_topic(self):
+        """Test article prompts return article topics."""
+        from ai_media.utils.prompts import get_random_prompt
+        result = get_random_prompt("article")
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 5)
+
+
+# =============================================================================
+# ImageGenerator Class Tests
+# =============================================================================
+
+class TestImageGeneratorClass(unittest.TestCase):
+    """Tests for ai_media/generators/image.py ImageGenerator class."""
+    
+    def test_image_generator_init(self):
+        """Test ImageGenerator can be instantiated."""
+        from ai_media.generators.image import ImageGenerator
+        gen = ImageGenerator(model_id="sdxl")
+        self.assertIsNotNone(gen)
+        self.assertEqual(gen.model_name, "sdxl")
+    
+    def test_image_generator_model_id_resolution(self):
+        """Test ImageGenerator resolves model IDs correctly."""
+        from ai_media.generators.image import ImageGenerator
+        # Default should resolve to sd3.5-turbo HuggingFace ID
+        gen = ImageGenerator(model_id="default")
+        self.assertIn("stabilityai", gen.model_id.lower())
+    
+    def test_generate_image_wrapper_function(self):
+        """Test generate_image wrapper function exists and is callable."""
+        from ai_media.generators.image import generate_image
+        self.assertTrue(callable(generate_image))
+    
+    @patch('ai_media.generators.image.ImageGenerator')
+    def test_generate_image_wrapper_calls_generator(self, MockGenerator):
+        """Test generate_image wrapper creates generator and calls generate."""
+        from ai_media.generators.image import generate_image
+        mock_instance = MagicMock()
+        mock_instance.generate.return_value = ["output.jpg"]
+        MockGenerator.return_value = mock_instance
+        
+        result = generate_image("test prompt", "output.jpg", 512, 512)
+        
+        MockGenerator.assert_called_once()
+        mock_instance.generate.assert_called_once()
+        self.assertTrue(result)
+
+
+# =============================================================================
+# Inference Server Tests (Random Prompt Integration)
+# =============================================================================
+
+class TestInferenceServerRandomPrompt(unittest.TestCase):
+    """Tests for random prompt handling in inference server."""
+    
+    def test_image_models_import(self):
+        """Test IMAGE_MODELS can be imported from models."""
+        from ai_media.models import IMAGE_MODELS
+        self.assertIn("sdxl", IMAGE_MODELS)
+        self.assertIn("flux", IMAGE_MODELS)
+    
+    def test_text_models_import(self):
+        """Test TEXT_MODELS can be imported from models."""
+        from ai_media.models import TEXT_MODELS
+        self.assertIn("default", TEXT_MODELS)
+        self.assertIn("llama-3.1-8b", TEXT_MODELS)
+    
+    def test_code_models_in_text_models(self):
+        """Test code models exist within TEXT_MODELS."""
+        from ai_media.models import TEXT_MODELS
+        # Code models are integrated into TEXT_MODELS
+        self.assertIn("qwen-coder-7b", TEXT_MODELS)
+        self.assertIn("qwen-coder-14b", TEXT_MODELS)
+    
+    def test_prompts_utility_import(self):
+        """Test prompts utility can be imported."""
+        from ai_media.utils.prompts import is_random_prompt_trigger, get_random_prompt, maybe_replace_with_random
+        self.assertTrue(callable(is_random_prompt_trigger))
+        self.assertTrue(callable(get_random_prompt))
+        self.assertTrue(callable(maybe_replace_with_random))
+    
+    def test_random_prompt_for_image_model(self):
+        """Test random prompt replacement for image model type."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("rndPr", "image")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt.lower(), "rndpr")
+    
+    def test_random_prompt_for_text_model(self):
+        """Test random prompt replacement for text/article model type."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("randomPrompt", "article")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt.lower(), "randomprompt")
+    
+    def test_random_prompt_for_code_model(self):
+        """Test random prompt replacement for code model type."""
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random("rndPrompt", "code")
+        self.assertTrue(was_random)
+        self.assertNotEqual(prompt.lower(), "rndprompt")
+
+
+class TestCleanupUtility(unittest.TestCase):
+    @patch("os.listdir")
+    @patch("os.path.exists")
+    @patch("os.path.isfile")
+    @patch("os.path.isdir")
+    @patch("os.unlink")
+    @patch("shutil.rmtree")
+    def test_clear_directory(self, mock_rmtree, mock_unlink, mock_isdir, mock_isfile, mock_exists, mock_listdir):
+        from ai_media.utils.cleanup import clear_directory
+        
+        # Setup mocks
+        mock_exists.return_value = True
+        mock_listdir.return_value = ["file1.txt", "dir1", ".hidden"]
+        
+        # Mock isfile/isdir behavior based on name
+        def side_effect_isfile(path):
+            return "file1.txt" in path
+        def side_effect_isdir(path):
+            return "dir1" in path
+            
+        mock_isfile.side_effect = side_effect_isfile
+        mock_isdir.side_effect = side_effect_isdir
+        
+        # Run
+        deleted = clear_directory("/fake/path")
+        
+        # Verify
+        # file1.txt and dir1 should be deleted. .hidden should be skipped.
+        self.assertEqual(len(deleted), 2)
+        self.assertIn("file1.txt", deleted)
+        self.assertIn("dir1/", deleted)
+        
+        # Should unlink file1.txt
+        found_unlink = any("file1.txt" in call.args[0] for call in mock_unlink.call_args_list)
+        self.assertTrue(found_unlink)
+        # Should rmtree dir1
+        found_rmtree = any("dir1" in call.args[0] for call in mock_rmtree.call_args_list)
+        self.assertTrue(found_rmtree)
+
+if __name__ == '__main__':
+    unittest.main()
+

@@ -129,6 +129,8 @@ def _read_to_markdown(input_path, input_format, ocr_model="florence"):
                                 # Use temp folder from config instead of system temp
                                 from ..server.config import CONFIG
                                 import uuid
+                                # Ensure temp dir exists
+                                os.makedirs(CONFIG["paths"]["temp"], exist_ok=True)
                                 temp_filename = os.path.join(CONFIG["paths"]["temp"], f"ocr_{uuid.uuid4().hex}.jpg")
                                 try:
                                     # Convert to RGB if needed (JPEG doesn't support RGBA)
@@ -460,6 +462,8 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
                     # Use temp folder from config
                     from ..server.config import CONFIG
                     import uuid
+                    # Ensure temp dir exists
+                    os.makedirs(CONFIG["paths"]["temp"], exist_ok=True)
                     temp_filename = os.path.join(CONFIG["paths"]["temp"], f"ocr_resize_{uuid.uuid4().hex}.jpg")
                     try:
                         img.save(temp_filename, "JPEG", quality=90)

@@ -52,6 +52,11 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@shared': path.resolve(__dirname, '../data'),
+      },
+    },
     server: {
       host: finalApiHost, // Bind to the configured host
       port: webPort,      // Bind to web port (from env or default)

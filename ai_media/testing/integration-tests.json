@@ -165,6 +165,42 @@
       "description": "Generate image with explicit --image-model sdxl flag"
     },
     {
+      "name": "Image - SDXL Random Prompt (rndPr)",
+      "command": "-i -p \"rndPr\" -o ai_media/testing/data/outputs/img_sdxl_rndpr.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sdxl_rndpr.jpg"
+      ],
+      "description": "Generate image using random prompt trigger 'rndPr'"
+    },
+    {
+      "name": "Image - SDXL Random Prompt (rndPrompt)",
+      "command": "-i -p \"rndPrompt\" -o ai_media/testing/data/outputs/img_sdxl_rndprompt.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sdxl_rndprompt.jpg"
+      ],
+      "description": "Generate image using random prompt trigger 'rndPrompt'"
+    },
+    {
+      "name": "Image - SDXL Random Prompt (randomPrompt)",
+      "command": "-i -p \"randomPrompt\" -o ai_media/testing/data/outputs/img_sdxl_randomprompt.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sdxl_randomprompt.jpg"
+      ],
+      "description": "Generate image using random prompt trigger 'randomPrompt'"
+    },
+    {
+      "name": "Image - SDXL Random Prompt (random prompt)",
+      "command": "-i -p \"random prompt\" -o ai_media/testing/data/outputs/img_sdxl_random_prompt.jpg -s 64x64 --image-model sdxl --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sdxl_random_prompt.jpg"
+      ],
+      "description": "Generate image using random prompt trigger 'random prompt'"
+    },
+    {
       "name": "Image - SD 3.5 Medium",
       "timeout": 3600,
       "command": "-i -p \"A blue car\" -o ai_media/testing/data/outputs/img_sd35_medium.jpg -s 64x64 --image-model sd3.5-medium --force --unsafe",
@@ -1585,6 +1621,15 @@
       "description": "Test interactive menu jump by path (test/unit)"
     },
     {
+      "name": "Interactive - Jump Cleanup",
+      "command": "--interactive cleanup",
+      "interactive": true,
+      "expectedStdoutItems": [
+        "Cleanup / Maintenance"
+      ],
+      "description": "Test interactive menu jump by name (cleanup)"
+    },
+    {
       "name": "Interactive - Jump transform",
       "command": "--interactive transform",
       "interactive": true,
@@ -1719,6 +1764,58 @@
         "saved to"
       ],
       "description": "Generate Python code file"
+    },
+    {
+      "name": "Code - Random Prompt (rndPr)",
+      "timeout": 600,
+      "command": "-gc \"rndPr\" -o ai_media/testing/data/outputs/code_rndpr.py --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/code_rndpr.py"
+      ],
+      "expectedStdoutItems": [
+        "Using random prompt"
+      ],
+      "description": "Generate code using random prompt trigger 'rndPr'"
+    },
+    {
+      "name": "Code - Random Prompt (randomPrompt)",
+      "timeout": 600,
+      "command": "-gc \"randomPrompt\" -o ai_media/testing/data/outputs/code_randomprompt.py --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/code_randomprompt.py"
+      ],
+      "expectedStdoutItems": [
+        "Using random prompt"
+      ],
+      "description": "Generate code using random prompt trigger 'randomPrompt'"
+    },
+    {
+      "name": "Article - Random Prompt (rndPr)",
+      "timeout": 600,
+      "command": "-ga -p \"rndPr\" -o ai_media/testing/data/outputs/article_rndpr.md --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_rndpr.md"
+      ],
+      "expectedStdoutItems": [
+        "Using random topic"
+      ],
+      "description": "Generate article using random prompt trigger 'rndPr'"
+    },
+    {
+      "name": "Article - Random Prompt (randomPrompt)",
+      "timeout": 600,
+      "command": "-ga -p \"randomPrompt\" -o ai_media/testing/data/outputs/article_randomprompt.md --force",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_randomprompt.md"
+      ],
+      "expectedStdoutItems": [
+        "Using random topic"
+      ],
+      "description": "Generate article using random prompt trigger 'randomPrompt'"
     },
     {
       "name": "Code - Qwen Coder 32B",

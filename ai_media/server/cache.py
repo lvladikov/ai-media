@@ -103,6 +103,19 @@ class ModelCache:
         except Exception:
             pass
     
+    def ensure_only(self, keep_category: str):
+        """
+        Unload all model categories EXCEPT the specified one.
+        Currently enforces single-model policy for VRAM management.
+        """
+        with self._lock:
+            # Create list of categories to unload (all except keep_category)
+            to_unload = [cat for cat in self._cache if cat != keep_category]
+            
+            for cat in to_unload:
+                _safe_print(f"🧹 Policy Enforced: Unloading {cat} to load {keep_category}...")
+                self._unload_internal(cat)
+
     def get_status(self) -> Dict[str, str]:
         """Get current cache status."""
         return {cat: info.get("model_name", "unknown") for cat, info in self._cache.items()}

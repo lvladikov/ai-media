@@ -82,29 +82,29 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 > *   **DeepSeek R1**: "Distilled" models that show their internal thinking process (Chain-of-Thought). "Distillation" transfers R1's reasoning capabilities into smaller, faster base models like Qwen or Llama. The result: you get R1's explicit reasoning style on consumer hardware, using the efficient architecture of the base model.
 > *   **Qwen 3**: Latest generation models with native robust reasoning and instruction following capabilities.
 
-| Model | Code | Download | VRAM | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **Qwen 3 8B (Reasoning)** | `qwen3-8b` | ~16GB | ~16GB | **(Default)** Latest Qwen. Strong instruction-following. |
-| **Qwen 3 14B (Reasoning)** | `qwen3-14b` | ~28GB | ~28GB | Qwen 3. Great at detailed formatting. |
-| **DeepSeek R1 Qwen 7B** | `deepseek-r1-qwen-7b` | ~4GB | ~7GB | Lightweight, fast. Good starting point. |
-| **DeepSeek R1 Qwen 14B** | `deepseek-r1-qwen-14b` | ~8GB | ~14GB | Better reasoning quality. |
-| **DeepSeek R1 Qwen 32B** | `deepseek-r1-qwen-32b` | ~18GB | ~24GB | High quality. |
-| **DeepSeek R1 Llama 8B** | `deepseek-r1-llama-8b` | ~5GB | ~8GB | Llama architecture variant. |
-| **DeepSeek R1 Llama 70B** | `deepseek-r1-llama-70b` | ~35GB | ~40GB | Best quality. |
+| Model | Code | Download | VRAM | Context | Best For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Qwen 3 8B (Reasoning)** | `qwen3-8b` | ~16GB | ~16GB | 128k | **(Default)** Latest Qwen. Strong instruction-following. |
+| **Qwen 3 14B (Reasoning)** | `qwen3-14b` | ~28GB | ~28GB | 128k | Qwen 3. Great at detailed formatting. |
+| **DeepSeek R1 Qwen 7B** | `deepseek-r1-qwen-7b` | ~4GB | ~7GB | 128k | Lightweight, fast. Good starting point. |
+| **DeepSeek R1 Qwen 14B** | `deepseek-r1-qwen-14b` | ~8GB | ~14GB | 128k | Better reasoning quality. |
+| **DeepSeek R1 Qwen 32B** | `deepseek-r1-qwen-32b` | ~18GB | ~24GB | 128k | High quality. |
+| **DeepSeek R1 Llama 8B** | `deepseek-r1-llama-8b` | ~5GB | ~8GB | 128k | Llama architecture variant. |
+| **DeepSeek R1 Llama 70B** | `deepseek-r1-llama-70b` | ~35GB | ~40GB | 128k | Best quality. |
 
 > [!NOTE]
 > All DeepSeek R1 distilled models are **fully open and ungated** (MIT license). No HuggingFace login required.
 
 ### General-Purpose
 
-| Model | Code | Download | VRAM | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **Llama 3.1 8B** | `llama-3.1-8b` | ~5GB | ~16GB | 🔒 **Gated**. Open SOTA 8B. General writing, chat, reasoning. |
-| **Mistral Nemo 12B** | `mistral-nemo-12b` | ~7GB | ~24GB | Powerful 12B. Large context window, strong reasoning. |
-| **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | SOTA Code Gen. ⚠️ 120GB+ RAM on MPS! |
-| **Qwen 2.5 Coder 14B** | `qwen-coder-14b` | ~10GB | ~12GB | Fast & Capable Code Gen. |
-| **Qwen 2.5 Coder 7B** | `qwen-coder-7b` | ~5GB | ~6GB | Lightweight Code Gen. |
-| **Qwen3 Coder 30B** | `qwen3-coder-30b` | ~8GB | ~10GB | **MoE** (3.3B active). Efficient SOTA. |
+| Model | Code | Download | VRAM | Context | Best For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Llama 3.1 8B** | `llama-3.1-8b` | ~5GB | ~16GB | 128k | 🔒 **Gated**. Open SOTA 8B. General writing, chat, reasoning. |
+| **Mistral Nemo 12B** | `mistral-nemo-12b` | ~7GB | ~24GB | 128k | Powerful 12B. Large context window, strong reasoning. |
+| **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | 128k | SOTA Code Gen. ⚠️ 120GB+ RAM on MPS! |
+| **Qwen 2.5 Coder 14B** | `qwen-coder-14b` | ~10GB | ~12GB | 128k | Fast & Capable Code Gen. |
+| **Qwen 2.5 Coder 7B** | `qwen-coder-7b` | ~5GB | ~6GB | 128k | Lightweight Code Gen. |
+| **Qwen3 Coder 30B** | `qwen3-coder-30b` | ~8GB | ~10GB | 32k | **MoE** (3.3B active). Efficient SOTA. |
 
 - All models are quantized (4-bit) on CUDA where possible to fit in consumer GPU memory.
 
@@ -114,10 +114,16 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 
 ### Article Generation (`-ga`)
 
+> [!TIP]
+> **Need inspiration?** Use `rndPr`, `rndPrompt`, `randomPrompt`, or `random prompt` as your topic to get a randomly selected article topic.
+
 ```bash
 # Quick Article (Default settings)
 python ai-media.py -ga -p "The benefits of meditation"
 python ai-media.py --generate-article --prompt "The benefits of meditation"
+
+# Generate with a random topic
+python ai-media.py -ga -p rndPr
 
 # Detailed Article with Specific Model
 # Using a reasoning model (DeepSeek R1 distilled) for deeper analysis.
@@ -159,10 +165,16 @@ python ai-media.py -c --chat-model deepseek-r1-llama-8b
 
 ### Code Generation (`-gc`)
 
+> [!TIP]
+> **Need inspiration?** Use `rndPr`, `rndPrompt`, `randomPrompt`, or `random prompt` as your prompt to get a randomly selected code task.
+
 ```bash
 # Simple Script (Auto-saved)
 python ai-media.py -gc "Write a python script to ping a server"
 python ai-media.py --generate-code "Write a python script to ping a server"
+
+# Generate with a random prompt
+python ai-media.py -gc rndPr
 
 # Specific Filename
 python ai-media.py -gc "Write a snake game in html/js" -o snake.html

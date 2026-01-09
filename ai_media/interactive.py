@@ -159,6 +159,7 @@ def run_interactive(jump_point=None):
         'test/codec': ('test', 'codec'),
         'sysinfo': ('sysinfo', None),
         'web': ('web', None),
+        'cleanup': ('cleanup', None),
         # By number (matching menu order)
         '1': ('image', None),
         '1/1': ('image', 'sdxl'),
@@ -196,6 +197,7 @@ def run_interactive(jump_point=None):
         '13/3': ('test', 'codec'),
         '14': ('sysinfo', None),
         '15': ('web', None),
+        '16': ('cleanup', None),
     }
     
     # Parse jump point
@@ -383,6 +385,7 @@ def run_interactive(jump_point=None):
             ("🧪  Run Tests", "test"),
             ("ℹ️   System Information", "sysinfo"),
             ("🌐  Web Server Mode", "web"),
+            ("🧹  Cleanup", "cleanup"),
             ("❌  Exit", None)
         ]
         
@@ -457,9 +460,16 @@ def run_interactive(jump_point=None):
         
         # Prompt
         print()
+        print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise Image prompt!\n")
         prompt = prompt_text("📝 Enter prompt")
         if prompt is None:
             return
+        
+        # Handle random prompt trigger
+        from ai_media.utils.prompts import maybe_replace_with_random
+        prompt, was_random = maybe_replace_with_random(prompt, "image")
+        if was_random:
+            print(f"🎲 Random prompt: {prompt}")
 
         # Negative Prompt (Optional)
         print("   (Tip: List content to exclude, e.g. 'blur, text'. Do NOT use 'no' or 'without'.)")
@@ -1268,9 +1278,16 @@ def run_interactive(jump_point=None):
             
             # Topic/Prompt
             print("✏️  Enter your topic or prompt:\n")
+            print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise topic!\n")
             topic = prompt_text("Topic")
             if not topic:
                 return
+            
+            # Handle random prompt trigger
+            from ai_media.utils.prompts import maybe_replace_with_random
+            topic, was_random = maybe_replace_with_random(topic, "article")
+            if was_random:
+                print(f"🎲 Using random topic: {topic}")
             
             # Model selection
             print("\n📦 Select Model:\n")
@@ -1366,10 +1383,17 @@ def run_interactive(jump_point=None):
             print("   (be more specific for better results)\n")
             print("💡 Tip: Include folder name for multi-file projects, e.g.:")
             print('   "Create React example in folder react-example"\n')
+            print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise Coding prompt!\n")
             print("(Leave empty to go back)\n")
             description = prompt_text("Description", required=False)
             if not description:
                 return
+            
+            # Handle random prompt trigger
+            from ai_media.utils.prompts import maybe_replace_with_random
+            description, was_random = maybe_replace_with_random(description, "code")
+            if was_random:
+                print(f"🎲 Random prompt: {description}")
             
             # Model selection
             print("\n📦 Select Code Model:\n")
@@ -1468,7 +1492,7 @@ def run_interactive(jump_point=None):
                 except:
                     pass
                 
-                wait_for_back("Press Enter to return to menu...")
+                wait_for_back(None)
             else:
                 clear_screen()
                 show_header("Codec Limits Test")
@@ -1512,7 +1536,7 @@ def run_interactive(jump_point=None):
                     except:
                         pass
                     
-                    wait_for_back("Press Enter to return to menu...")
+                    wait_for_back(None)
                 else:
                     clear_screen()
                     show_header("Codec Limits Test")
@@ -1630,14 +1654,14 @@ def run_interactive(jump_point=None):
             clear_screen()
             show_header("App Run Tests")
             print(f"❌ Error loading tests: {e}")
-            prompt_menu("Press Enter...", [], allow_back=True)
+            prompt_menu(None, [], allow_back=True)
             return
 
         if not tests:
             clear_screen()
             show_header("App Run Tests")
             print("❌ No tests found.")
-            wait_for_back("Press Enter...")
+            wait_for_back(None)
             return
 
         # Build options
@@ -1691,7 +1715,7 @@ def run_interactive(jump_point=None):
                 pattern = prompt_text("Pattern", required=True)
                 if pattern:
                     run_self_command(f"--test-verbose \"{pattern}\"")
-                    prompt_menu("Press Enter to continue...", [], allow_back=True)
+                    prompt_menu(None, [], allow_back=True)
                 continue
             else:
                 # Run specific test
@@ -1708,6 +1732,8 @@ def run_interactive(jump_point=None):
             show_header("Web Server Mode")
             
             options = [
+                ("🧩  Start Inference Server (OpenAI Compatible)", "INFERENCE"),
+                ("🧩  Start Inference Server (OpenAI Compatible, Verbose)", "INFERENCE_VERBOSE"),
                 ("🚀  Start Server (No Client)", "SERVER_ONLY"),
                 ("🌐  Start Client (Web)", "WEB_CLIENT"),
                 ("🔥  Start Both Server and Web Client", "BOTH_WEB"),
@@ -1716,7 +1742,7 @@ def run_interactive(jump_point=None):
                 ("📦  Versioning Scripts", "VERSION_OPTS"),
             ]
             
-            choice = prompt_choice("Select an option:", options, allow_back=True, default_index=3)
+            choice = prompt_choice("Select an option:", options, allow_back=True, default_index=4)
             
             if choice is None: return
             
@@ -1725,6 +1751,10 @@ def run_interactive(jump_point=None):
             code = 0
             if choice == "SERVER_ONLY":
                 code = run_self_command("--serve-no-client")
+            elif choice == "INFERENCE":
+                code = run_self_command("--inference-server")
+            elif choice == "INFERENCE_VERBOSE":
+                code = run_self_command("--inference-server-verbose")
             elif choice == "WEB_CLIENT":
                 code = run_shell_command("npm run dev:client", cwd=web_dir)
             elif choice == "BOTH_WEB":
@@ -1783,7 +1813,7 @@ def run_interactive(jump_point=None):
             
             # Run npm version command
             run_shell_command(f"npm run {choice}", cwd=web_dir)
-            wait_for_back("Press Enter to continue...")
+            wait_for_back(None)
 
     def electron_build_menu():
         """Electron build options submenu."""
@@ -1813,6 +1843,25 @@ def run_interactive(jump_point=None):
 
 
     
+    def cleanup_menu():
+        """Cleanup options submenu."""
+        while True:
+            clear_screen()
+            show_header("Cleanup / Maintenance")
+            
+            options = [
+                ("🧹  Clear testing/data/outputs", "--clear-data-output"),
+                ("🗑️   Clear media_output", "--clear-media-output"),
+                ("🔥  Clear All", "--clear-all")
+            ]
+            
+            choice = prompt_choice("Select cleanup action:", options, allow_back=True)
+            if choice is None: return
+            
+            # Execute cleanup
+            run_self_command(choice)
+            wait_for_back(None)
+
     # Main loop
     first_run = True
     while True:
@@ -1865,6 +1914,8 @@ def run_interactive(jump_point=None):
             system_info_menu()
         elif action == "web":
             web_server_menu()
+        elif action == "cleanup":
+            cleanup_menu()
 
 # --- Test Runner ---
 

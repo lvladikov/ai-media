@@ -535,21 +535,39 @@ Provide ONLY the translation, no explanations or additional text.
             self.torch.cuda.empty_cache()
             self.torch.cuda.ipc_collect()
 
+    def _log_status(self, status, progress, message, terminal=True):
+        """Helper to report progress to callback and/or terminal."""
+        if self.progress_callback:
+            try:
+                # status: "loading" | "generating" | "error"
+                # progress: 0-100
+                
+                # Strip terminal-specific instructions for web UI
+                clean_ui_msg = message.replace(" (check terminal for progress)", "")
+                self.progress_callback(status, progress, clean_ui_msg)
+            except Exception as e:
+                print(f"⚠️ Progress callback error: {e}")
+        
+        # Also print to terminal for server logs (with different icon if needed)
+        if terminal:
+            # Avoid double emojis if message already has one
+            if not any(emoji in message for emoji in ["📚", "⏳", "⚠️", "✅", "🛑"]):
+                 print(f"⏳ {message}")
+            else:
+                 print(message)
+
     def _load_model(self):
         """Load the LLM pipeline."""
         if self.pipeline:
             return True
             
         if self.is_cancelled:
-            print(f"🛑 Model loading skipped for {self.model_name} (Cancelled)")
+            self._log_status("error", 0, f"Model loading skipped for {self.model_name} (Cancelled)")
             return
         
         from transformers import AutoTokenizer, pipeline
         
-        if self.progress_callback:
-            self.progress_callback("loading", 10, f"Loading Text Model: {self.model_name}...")
-        else:
-            print(f"📚 Loading Text Model: {self.model_name}...")
+        self._log_status("loading", 10, f"Loading Text Model: {self.model_name}...")
         
         # Check resources before loading
         from ..utils.system import check_resources_and_warn
@@ -561,8 +579,7 @@ Provide ONLY the translation, no explanations or additional text.
         
         if not check_resources_and_warn(self.model_name, force=eff_force, bypass_warning=eff_bypass, 
                                          model_requirements=MODEL_REQUIREMENTS):
-            if self.progress_callback:
-                self.progress_callback("error", 0, "Aborted: System resource check failed.")
+            self._log_status("error", 0, "Aborted: System resource check failed.")
             return False
 
         try:
@@ -582,10 +599,10 @@ Provide ONLY the translation, no explanations or additional text.
             # Workaround: Qwen3/Llama have numerical instability on MPS float16 (but we must use it for huge models)
             if self.device.type == "mps" and any(m in self.model_name.lower() for m in ["qwen3", "llama"]):
                 if dtype == self.torch.float32:
-                    print(f"   ⚠️  {self.model_name} detected on MPS - using fp32 for stability...")
+                    self._log_status("loading", 12, f"{self.model_name} detected on MPS - using fp32 for stability...")
                     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 else:
-                    print(f"   ⚠️  {self.model_name} detected on MPS - using fp16 to conserve memory (may be unstable)...")
+                    self._log_status("loading", 12, f"{self.model_name} detected on MPS - using fp16 to conserve memory (may be unstable)...")
             
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             
@@ -599,6 +616,8 @@ Provide ONLY the translation, no explanations or additional text.
                         bnb_4bit_compute_dtype=dtype,
                         llm_int8_enable_fp32_cpu_offload=True
                     )
+                    # Suppress "clean_up_tokenization_spaces" warning
+                    tokenizer.clean_up_tokenization_spaces = True
                 except ImportError:
                     pass
             
@@ -633,10 +652,16 @@ Provide ONLY the translation, no explanations or additional text.
                     # Only process for web callback if there's actual content
                     if self.callback and text.strip():
                         try:
+                            # Filter out raw TQDM bar lines as these are messy in the UI
+                            # Our TqdmCallbackWrapper (monkey patch) handles these elegantly
+                            if "|" in text and "%" in text:
+                                return
+
                             # Strip ANSI escape codes (like [A) ONLY for web logs
                             clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
                             if clean_text.strip():
-                                self.callback("loading", 0, clean_text) 
+                                # Pass terminal=False because we already wrote to sys.__stderr__ above
+                                self.callback("loading", 0, clean_text, terminal=False) 
                         except ConnectionAbortedError:
                             raise # Propagate cancel signal
                         except:
@@ -647,30 +672,59 @@ Provide ONLY the translation, no explanations or additional text.
 
             # Ensure model_kwargs are clean for from_pretrained
             device_map_info = model_kwargs.get('device_map', 'Default')
-            if self.progress_callback:
-                self.progress_callback("loading", 15, f"Using Device Map: {device_map_info}")
-            else:
-                print(f"   Using Device Map: {device_map_info}")
-            
-            if self.progress_callback:
-                self.progress_callback("loading", 20, "Downloading/Loading model weights... (check terminal for progress)")
+            self._log_status("loading", 15, f"Using Device Map: {device_map_info}")
+            self._log_status("loading", 20, "Downloading/Loading model weights... (check terminal for progress)")
             
             # Capture stderr during loading
             try:
-                if self.progress_callback:
-                    capture = TqdmCapture(self.progress_callback)
-                    with contextlib.redirect_stderr(capture):
+                # We pass our helper directly to capture progress
+                capture = TqdmCapture(self._log_status)
+                with contextlib.redirect_stderr(capture):
+                    # Monkey patch TQDM to ensure we capture progress bars even if stderr redirect fails
+                    # transformers often uses tqdm.auto, so we try to patch standard tqdm which others inherit/alias
+                    import tqdm
+                    original_tqdm = tqdm.tqdm
+                    
+                    class TqdmCallbackWrapper(original_tqdm):
+                        def update(self, n=1):
+                            super().update(n)
+                            if hasattr(self, 'total') and self.total:
+                                try:
+                                    percent = int(self.n / self.total * 100)
+                                    desc = self.desc or "Loading"
+                                    # Use the capture.callback which is self._log_status
+                                    # Pass terminal=False because the original TQDM (stderr) already prints the bar
+                                    capture.callback("loading", percent, f"{desc}: {percent}%", terminal=False)
+                                except:
+                                    pass
+
+                    # Apply patch to source tqdm
+                    tqdm.tqdm = TqdmCallbackWrapper
+                    
+                    # CRITICAL: Also patch transformers/accelerate references which imported it early
+                    # 'Loading checkpoint shards' usually comes from transformers.modeling_utils which uses logging.tqdm
+                    original_transformers_tqdm = None
+                    try:
+                        from transformers.utils import logging as hf_logging
+                        if hasattr(hf_logging, 'tqdm'):
+                            original_transformers_tqdm = hf_logging.tqdm
+                            hf_logging.tqdm = TqdmCallbackWrapper
+                    except ImportError:
+                        pass
+                        
+                    try:
                         model = AutoModelForCausalLM.from_pretrained(
                             self.model_name,
                             **model_kwargs
                         )
-                else:
-                     model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
-                        **model_kwargs
-                    )
+                    finally:
+                        # Restore TQDM source
+                        tqdm.tqdm = original_tqdm
+                        # Restore transformers reference
+                        if original_transformers_tqdm:
+                            hf_logging.tqdm = original_transformers_tqdm
             except Exception as e:
-                print(f"Error loading model with capture: {e}")
+                self._log_status("error", 0, f"Error loading model with capture: {e}")
                 # Fallback
                 model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
@@ -688,11 +742,7 @@ Provide ONLY the translation, no explanations or additional text.
             self.tokenizer = tokenizer
             
             dtype_name = str(dtype).replace("torch.", "")
-            print(f"   Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
-            if self.progress_callback:
-                self.progress_callback("loading", 20, f"Model loaded. Platform: {self.device.type.upper()}")
-            else:
-                print("✅ Model loaded.")
+            self._log_status("loading", 20, f"Model loaded. Platform: {self.device.type.upper()} | Dtype: {dtype_name}")
             return True
             
         except RuntimeError as e:

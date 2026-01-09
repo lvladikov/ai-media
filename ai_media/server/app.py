@@ -49,8 +49,14 @@ async def lifespan(app: FastAPI):
     force_cleanup()
 
 
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+def create_app(include_inference_api: bool = False) -> FastAPI:
+    """Create and configure the FastAPI application.
+    
+    Args:
+        include_inference_api: If True, include OpenAI-compatible inference routes.
+                               These are heavy and should only be loaded when running
+                               the full inference server, not for web-only or CLI modes.
+    """
     app = FastAPI(
         title="AI-Media API",
         description="API for AI-powered media generation, transformation, and conversion.",
@@ -86,6 +92,11 @@ def create_app() -> FastAPI:
     app.include_router(jobs_ws.router)
     app.include_router(chat_ws.router)
     app.include_router(code_ws.router)
+    
+    # Conditionally include inference API (heavy routes)
+    if include_inference_api:
+        from .routes import openai_api
+        app.include_router(openai_api.router)
     
     return app
 
@@ -160,7 +171,7 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
             log_config["loggers"][logger_name] = {"level": "WARNING"}
 
     uvicorn.run(
-        "ai_media.server.app:create_app",
+        "ai_media.server.app:create_app_with_inference",
         host=host,
         port=port,
         factory=True,
@@ -169,5 +180,14 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
     )
 
 
+def create_app_with_inference() -> FastAPI:
+    """Factory function for uvicorn to create app WITH inference API.
+    
+    Used when running full inference server mode.
+    """
+    return create_app(include_inference_api=True)
+
+
 # Create app instance for uvicorn when running with factory=True
-app = create_app()
+# Default: no inference API (for web-only mode, Electron, etc.)
+app = create_app(include_inference_api=False)
