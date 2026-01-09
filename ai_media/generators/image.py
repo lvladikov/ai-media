@@ -248,7 +248,13 @@ class ImageGenerator:
                              except Exception as e:
                                  self._log_status("loading", 30, f"⚠️ Lightning setup failed: {e}")
                          else:
-                             pipe = DiffusionPipeline.from_pretrained(self.model_id, torch_dtype=qwen_dtype)
+                             # Suppress harmless warnings about quantization and config attributes
+                             import warnings
+                             with warnings.catch_warnings():
+                                 warnings.filterwarnings("ignore", message=".*no linear modules were found.*")
+                                 warnings.filterwarnings("ignore", message=".*pooled_projection_dim.*")
+                                 warnings.filterwarnings("ignore", message=".*torch_dtype is deprecated.*")
+                                 pipe = DiffusionPipeline.from_pretrained(self.model_id, torch_dtype=qwen_dtype)
 
                          if device.type == "cuda": use_offload = True
                          is_lightning = "lightning" in self.model_name.lower()
@@ -315,12 +321,22 @@ class ImageGenerator:
         self.pipe = pipe
         self.defaults = extra_kwargs
 
-    def generate(self, prompt, width=1024, height=1024, output_file=None, steps=30, 
-                 guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, 
-                 force=False, bypass_warning=False, progress_callback=None):
+    def generate(self, prompt, width=1024, height=1024, output_file=None, steps=None, 
+                 guidance_scale=None, negative_prompt="", unsafe=False, report_json=None, 
+                 force=False, bypass_warning=False, progress_callback=None, **kwargs):
         """Generate an image."""
         self._cancelled = False # Reset cancellation flag
         self.progress_callback = progress_callback
+        
+        # Track if specific steps were requested by user
+        user_specified_steps = steps is not None
+        if steps is None:
+            steps = 30  # Default fallback for display/estimation if model doesn't override
+
+        # Track if specific guidance was requested
+        user_specified_guidance = guidance_scale is not None
+        if guidance_scale is None:
+             guidance_scale = 7.5 # Fallback default
         
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -369,13 +385,18 @@ class ImageGenerator:
         print(f"   Prompt: '{prompt}'")
         print(f"   Size:   {width}x{height}")
         print(f"   Output: {output_file}")
-        print(f"   Steps:  {steps}")
-        print(f"   CFG:    {guidance_scale}")
+        print(f"   Steps:  {steps if user_specified_steps else 'Auto (Model Default)'}")
+        print(f"   CFG:    {guidance_scale if user_specified_guidance else 'Auto (Model Default)'}")
         print("")  # Spacer
         
+        # Helper to pipe messages to client if callback available
+        def log_warn(msg):
+            print(msg)
+            if self.progress_callback: self.progress_callback(0, msg.strip())
+            
         # Check resources
         if not check_resources_and_warn(self.model_id, width=width, height=height, force=force, bypass_warning=bypass_warning,
-                                         model_requirements=MODEL_REQUIREMENTS):
+                                         model_requirements=MODEL_REQUIREMENTS, callback=self.progress_callback):
             return []
         
         try:
@@ -384,7 +405,7 @@ class ImageGenerator:
                 if width % 16 != 0 or height % 16 != 0:
                     new_w = round(width / 16) * 16
                     new_h = round(height / 16) * 16
-                    print(f"   ℹ️  Adjusting {width}x{height} → {new_w}x{new_h} (SD 3.5 requirement)")
+                    log_warn(f"   ℹ️  Adjusting {width}x{height} → {new_w}x{new_h} (SD 3.5 requirement)")
                     width, height = new_w, new_h
 
             # Ensure Pipeline is Loaded
@@ -393,14 +414,24 @@ class ImageGenerator:
             
             # Use defaults from load
             extra_kwargs = self.defaults.copy()
-            if "negative_prompt" not in extra_kwargs and negative_prompt:
+            
+            # Sync negative prompt - pass explicit "" if user didn't specify, to ensure CFG works if model expects it
+            if "negative_prompt" not in extra_kwargs and negative_prompt is not None:
                 extra_kwargs["negative_prompt"] = negative_prompt
             
-            # Sync steps variable with actual inference configuration
-            if "num_inference_steps" in extra_kwargs:
-                steps = extra_kwargs["num_inference_steps"]
+            # Sync guidance scale
+            # Priority: User Input > Model Default > General Default
+            if "guidance_scale" in extra_kwargs and not user_specified_guidance:
+                 guidance_scale = extra_kwargs["guidance_scale"]
             else:
-                extra_kwargs["num_inference_steps"] = steps
+                 extra_kwargs["guidance_scale"] = guidance_scale
+            
+            # Sync steps variable with actual inference configuration
+            # Priority: User Input > Model Default > General Default (30)
+            if "num_inference_steps" in extra_kwargs and not user_specified_steps:
+                 steps = extra_kwargs["num_inference_steps"] # Use model default
+            else:
+                 extra_kwargs["num_inference_steps"] = steps # Override model default with user choice
 
             # Disable NSFW safety checker if requested
             if unsafe and getattr(pipe, 'safety_checker', None) is not None:
@@ -474,6 +505,23 @@ class ImageGenerator:
 
                 # Start Resource Monitoring
                 with ResourceMonitor() as monitor:
+                    # SAFETY: Filter kwargs to prevent crashing models that don't support specific args (like negative_prompt)
+                    import inspect
+                    if hasattr(pipe, "__call__"):
+                        try:
+                            sig = inspect.signature(pipe.__call__)
+                            supported_args = set(sig.parameters.keys())
+                            has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                            
+                            if not has_kwargs:
+                                keys_to_remove = [k for k in extra_kwargs if k not in supported_args]
+                                for k in keys_to_remove:
+                                    if k == "negative_prompt":
+                                        log_warn(f"   ⚠️ Warning: Model {self.model_name} does not support negative prompts. Ignoring.")
+                                    del extra_kwargs[k]
+                        except Exception:
+                            pass # Fallback to trusting the caller if inspection fails
+
                     output = pipe(
                         prompt=prompt, 
                         height=height, 
@@ -510,10 +558,10 @@ class ImageGenerator:
             # Check for NSFW content interception
             if hasattr(output, "nsfw_content_detected") and output.nsfw_content_detected:
                 if output.nsfw_content_detected[0]:
-                    print(f"⚠️  Warning: Potential NSFW content detected.\n")
-                    print(f"The model's safety checker has blocked the image (returning a black frame).")
-                    print(f"👉 Please modify your prompt and try again.")
-                    print(f"💡 If your prompt is appropriate, try again with --unsafe to disable the safety checker.\n")
+                    log_warn(f"⚠️  Warning: Potential NSFW content detected.\n")
+                    log_warn(f"The model's safety checker has blocked the image (returning a black frame).")
+                    log_warn(f"👉 Please modify your prompt and try again.")
+                    log_warn(f"💡 If your prompt is appropriate, try again with --unsafe to disable the safety checker.\n")
             
             image.save(output_file)
             print(f"✅ Image saved to {output_file}")
@@ -540,40 +588,40 @@ class ImageGenerator:
                 # Check if this is the default model (SD 3.5 Turbo)
                 is_default = self.model_id == IMAGE_MODELS.get("default", "") or "stable-diffusion-3.5" in self.model_id.lower()
                 
-                print(f"\n❌ Access Denied / Authentication Error")
-                print(f"   Error Details: {e}")
-                print(f"")
-                print(f"   Possible causes:")
-                print(f"   1. The model '{self.model_id}' is Gated and requires license acceptance.")
-                print(f"   2. Your Hugging Face token is invalid or expired (triggers 401/403).")
-                print(f"")
-                print(f"   🔧 Troubleshooting:")
-                print(f"      1. Visit: https://huggingface.co/{self.model_id}")
-                print(f"         (If it asks to 'Agree', accept it. If not, it's open.)")
-                print(f"      2. Run: huggingface-cli login (to refresh your token)")
-                print(f"")
+                log_warn(f"\n❌ Access Denied / Authentication Error")
+                log_warn(f"   Error Details: {e}")
+                log_warn(f"")
+                log_warn(f"   Possible causes:")
+                log_warn(f"   1. The model '{self.model_id}' is Gated and requires license acceptance.")
+                log_warn(f"   2. Your Hugging Face token is invalid or expired (triggers 401/403).")
+                log_warn(f"")
+                log_warn(f"   🔧 Troubleshooting:")
+                log_warn(f"      1. Visit: https://huggingface.co/{self.model_id}")
+                log_warn(f"         (If it asks to 'Agree', accept it. If not, it's open.)")
+                log_warn(f"      2. Run: huggingface-cli login (to refresh your token)")
+                log_warn(f"")
                 
                 if is_default:
-                    print(f"   💡 Quick Alternative: Use an ungated model (no login required):")
-                    print(f"      python ai-media.py -i -p \"your prompt\" --image-model sdxl")
-                    print(f"")
-                    print(f"   📖 See README.md > Gated Models for full setup instructions.")
+                    log_warn(f"   💡 Quick Alternative: Use an ungated model (no login required):")
+                    log_warn(f"      python ai-media.py -i -p \"your prompt\" --image-model sdxl")
+                    log_warn(f"")
+                    log_warn(f"   📖 See README.md > Gated Models for full setup instructions.")
                 else:
-                    print(f"   💡 Alternative: Use '--image-model sdxl' (ungated, no login required).")
+                    log_warn(f"   💡 Alternative: Use '--image-model sdxl' (ungated, no login required).")
             elif "divisible by 8" in err_str or "divisible by 16" in err_str:
                 # Extract the actual divisor from the error message
                 import re
                 divisor_match = re.search(r'divisible by (\d+)', err_str)
                 divisor = int(divisor_match.group(1)) if divisor_match else 8
                 
-                print(f"❌ Resolution Error: {e}")
+                log_warn(f"❌ Resolution Error: {e}")
                 
                 # Smart Correction
                 new_w = round(width / divisor) * divisor
                 new_h = round(height / divisor) * divisor
                 
-                print(f"\n💡 Tip: Dimensions must be multiples of {divisor}.")
-                print(f"   Closest valid size: {new_w}x{new_h}")
+                log_warn(f"\n💡 Tip: Dimensions must be multiples of {divisor}.")
+                log_warn(f"   Closest valid size: {new_w}x{new_h}")
                 
                 try:
                     choice = input(f"   🔄 Retry with {new_w}x{new_h}? [y/N]: ").lower().strip()
@@ -590,15 +638,15 @@ class ImageGenerator:
                 max_latent = 192
                 hard_limit = max_latent * 8  # 1536 (architectural limit)
                 quality_max = 1296  # Recommended max before noise artifacts
-                print(f"\n❌ SD 3.5 Resolution Limit Exceeded")
-                print(f"   Error: {e}")
-                print(f"\n   Explanation:")
-                print(f"   • SD 3.5 uses fixed positional embeddings (pos_embed_max_size = {max_latent}).")
-                print(f"   • Architectural hard limit: {hard_limit}x{hard_limit} pixels.")
-                print(f"   • Recommended max (before noise): {quality_max}x{quality_max} pixels.")
-                print(f"   • Your request ({width}x{height}) exceeds the hard limit.")
-                print(f"\n   💡 Solution: Generate at ≤{quality_max}x{quality_max} and upscale, or use a different model.")
-                print(f"      Example: python ai-media.py -i -p \"prompt\" -s 1024 --upscale -uf 5x\n")
+                log_warn(f"\n❌ SD 3.5 Resolution Limit Exceeded")
+                log_warn(f"   Error: {e}")
+                log_warn(f"\n   Explanation:")
+                log_warn(f"   • SD 3.5 uses fixed positional embeddings (pos_embed_max_size = {max_latent}).")
+                log_warn(f"   • Architectural hard limit: {hard_limit}x{hard_limit} pixels.")
+                log_warn(f"   • Recommended max (before noise): {quality_max}x{quality_max} pixels.")
+                log_warn(f"   • Your request ({width}x{height}) exceeds the hard limit.")
+                log_warn(f"\n   💡 Solution: Generate at ≤{quality_max}x{quality_max} and upscale, or use a different model.")
+                log_warn(f"      Example: python ai-media.py -i -p \"prompt\" -s 1024 --upscale -uf 5x\n")
                 
                 # Auto-Upscale Fallback
                 try:
@@ -619,49 +667,69 @@ class ImageGenerator:
                     final_w = int(base_w * upscale_factor)
                     final_h = int(base_h * upscale_factor)
                     
-                    print(f"   ✨ Alternative: Generate at {base_w}x{base_h} and Auto-Upscale {upscale_factor:.1f}x?")
-                    print(f"      This produces a {final_w}x{final_h} image using the Upscaler model.")
-                    choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
+                    log_warn(f"   ✨ Alternative: Generate at {base_w}x{base_h} and Auto-Upscale {upscale_factor:.1f}x?")
+                    log_warn(f"      This produces a {final_w}x{final_h} image using the Upscaler model.")
+                    if bypass_warning:
+                         log_warn(f"   🔄 Try Auto-Upscale workflow? [y/N]: y")
+                         choice = 'y'
+                    else:
+                         choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
                     if choice in ['y', 'yes']:
-                        print(f"\n📉 Switching to base resolution: {base_w}x{base_h}...")
+                        log_warn(f"\n📉 Switching to base resolution: {base_w}x{base_h}...")
                         # Import upscaler here to avoid circular import
                         from ..upscaling import upscale_image_file
                         # 1. Generate Base Image (recursive call to self)
                         output = self.generate(prompt, width=base_w, height=base_h, output_file=output_file, 
-                                             model_id=self.model_name, unsafe=unsafe)
+                                             model_id=self.model_name, unsafe=unsafe,
+                                             force=force, bypass_warning=bypass_warning,
+                                             progress_callback=progress_callback)
                         if output:
                             # 2. Upscale Result
                             print("")
-                            return upscale_image_file(output[0], output[0], strength=0.0, factor=upscale_factor)
+                            # 2. Upscale Result
+                            print("")
+                            return upscale_image_file(output[0], output[0], strength=0.0, factor=upscale_factor,
+                                                    progress_callback=self.progress_callback,
+                                                    check_cancelled=lambda: self._cancelled)
                 except KeyboardInterrupt:
                     pass
                 print("")
             elif "Invalid buffer size" in err_str:
-                print(f"\n❌ Hardware Limitation Reached (Single Buffer Limit)")
-                print(f"   Error: {e}")
-                print(f"\n   Explanation:")
-                print(f"   • Native {width}x{height} generation requires calculating a massive Attention Matrix.")
-                print(f"   • This exceeded the maximum allowed size for a single tensor (usually ~4GB on MPS/Metal).")
-                print(f"   • This is a hardware/driver limit, not a VRAM limit.")
-                print(f"\n   💡 Solution: Use a lower resolution (e.g. 4k or 2k).")
-                print(f"      (Native 5K generation requires 'MultiDiffusion' tiling which is not currently supported.)\n")
+                log_warn(f"\n❌ Hardware Limitation Reached (Single Buffer Limit)")
+                log_warn(f"   Error: {e}")
+                log_warn(f"\n   Explanation:")
+                log_warn(f"   • Native {width}x{height} generation requires calculating a massive Attention Matrix.")
+                log_warn(f"   • This exceeded the maximum allowed size for a single tensor (usually ~4GB on MPS/Metal).")
+                log_warn(f"   • This is a hardware/driver limit, not a VRAM limit.")
+                log_warn(f"\n   💡 Solution: Use a lower resolution (e.g. 4k or 2k).")
+                log_warn(f"      (Native 5K generation requires 'MultiDiffusion' tiling which is not currently supported.)\n")
                 
                 # Auto-Upscale Fallback
                 try:
-                    print(f"   ✨ Alternative: Generate at 1280x720 and Auto-Upscale x4?")
-                    print(f"      This produces a 5120x2880 (5K) image using the Upscaler model.")
-                    choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
+                    log_warn(f"   ✨ Alternative: Generate at 1280x720 and Auto-Upscale x4?")
+                    log_warn(f"      This produces a 5120x2880 (5K) image using the Upscaler model.")
+                    if bypass_warning:
+                         log_warn(f"   🔄 Try Auto-Upscale workflow? [y/N]: y")
+                         choice = 'y'
+                    else:
+                         choice = input(f"   🔄 Try Auto-Upscale workflow? [y/N]: ").lower().strip()
                     if choice in ['y', 'yes']:
-                        print("\n📉 Switching to base resolution: 1280x720...")
+                        log_warn("\n📉 Switching to base resolution: 1280x720...")
                         # Import upscaler here to avoid circular import
                         from ..upscaling import upscale_image_file
                         # 1. Generate Base Image
                         output = self.generate(prompt, width=1280, height=720, output_file=output_file, 
-                                             model_id=self.model_name, unsafe=unsafe)
+                                             model_id=self.model_name, unsafe=unsafe,
+                                             force=force, bypass_warning=bypass_warning,
+                                             progress_callback=progress_callback)
                         if output:
                             # 2. Upscale Result
                             print("")
-                            return upscale_image_file(output[0], output[0], strength=0.0, factor=4.0)
+                            # 2. Upscale Result
+                            print("")
+                            return upscale_image_file(output[0], output[0], strength=0.0, factor=4.0,
+                                                    progress_callback=self.progress_callback,
+                                                    check_cancelled=lambda: self._cancelled)
                 except KeyboardInterrupt:
                     pass
                 print("")

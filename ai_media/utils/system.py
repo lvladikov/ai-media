@@ -131,7 +131,7 @@ def get_system_resources():
     return ram_available, vram_available, ram_total
 
 
-def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None, bypass_warning=False):
+def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None, bypass_warning=False, callback=None):
     """
     Check if system resources are sufficient for the requested task.
     Returns True to proceed, False to abort.
@@ -144,6 +144,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         force: Skip confirmation prompts (overwrites and warnings)
         model_requirements: Dict of model requirements (from models.py)
         bypass_warning: Specifically skip resource warning prompts
+        callback: Optional function to emit warnings (e.g. to client)
     """
     if model_requirements is None:
         return True  # Can't check without requirements
@@ -208,25 +209,30 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     can_prompt = sys.stdin.isatty()
     should_bypass = force or bypass_warning or not can_prompt
 
+    # Helper to print and callback
+    def log_warn(msg):
+        print(msg)
+        if callback: callback(0, msg.strip())
+
     # Display warnings - use different style for zeroscope upscaling info
     if is_zeroscope and len(warnings) == 1 and "Dynamic Upscaling" in warnings[0]:
         # Zeroscope-specific informational message (not a scary warning)
         import torch
         is_mps = torch.backends.mps.is_available() and not torch.cuda.is_available()
         
-        print("\n📐 Dynamic Upscaling Pipeline:\n")
-        print(f"   Target:   {width}x{height}")
-        print(f"   Native:   {max_res[0]}x{max_res[1]}")
+        log_warn("\n📐 Dynamic Upscaling Pipeline:\n")
+        log_warn(f"   Target:   {width}x{height}")
+        log_warn(f"   Native:   {max_res[0]}x{max_res[1]}")
         if is_mps:
-            print(f"   Method:   Zeroscope 576w → Real-ESRGAN → Target (XL skipped on Mac)")
+            log_warn(f"   Method:   Zeroscope 576w → Real-ESRGAN → Target (XL skipped on Mac)")
         else:
-            print(f"   Method:   Zeroscope 576w → XL (1024x576) → Real-ESRGAN → Target")
-        print(f"\n   Model: {model_id}")
-        print(f"   ℹ️  This is the optimal workflow for high-res zeroscope output.\n")
+            log_warn(f"   Method:   Zeroscope 576w → XL (1024x576) → Real-ESRGAN → Target")
+        log_warn(f"\n   Model: {model_id}")
+        log_warn(f"   ℹ️  This is the optimal workflow for high-res zeroscope output.\n")
         
         if should_bypass:
             if not can_prompt and not (force or bypass_warning):
-                print("   (Non-interactive environment: Proceeding with dynamic upscaling...)\n")
+                log_warn("   (Non-interactive environment: Proceeding with dynamic upscaling...)\n")
             return True
         
         try:
@@ -241,10 +247,10 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
             sys.exit(0)
     
     # Standard warning display for other cases
-    print("\n⚠️  Resource Warning:\n")
+    log_warn("\n⚠️  Resource Warning:\n")
     for w in warnings:
-        print(f"   • {w}")
-    print(f"\n   Model: {model_id}")
+        log_warn(f"   • {w}")
+    log_warn(f"\n   Model: {model_id}")
     
     # Add dtype info
     import torch
@@ -254,20 +260,20 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         dtype_info = "float32"
     else:
         dtype_info = "float32"
-    print(f"   Dtype: {dtype_info}")
+    log_warn(f"   Dtype: {dtype_info}")
     
     # Check for VAE Tiling condition (Resolution > 1536x1536)
     if width and height:
         total_pixels = width * height
         if total_pixels > 3072 * 3072:  # ~9.4MP
-            print(f"\n   ⚠️  CRITICAL WARNING: Resolution {width}x{height} is extremely high.")
-            print(f"      Standard generation will likely fail with 'Invalid buffer size'.")
-            print(f"      Recommended: Generate at 2K/4K and use an external upscaler.")
-            print(f"      💡 Or try: -s 720p --upscale -uf 4x (to get 5K)\n")
+            log_warn(f"\n   ⚠️  CRITICAL WARNING: Resolution {width}x{height} is extremely high.")
+            log_warn(f"      Standard generation will likely fail with 'Invalid buffer size'.")
+            log_warn(f"      Recommended: Generate at 2K/4K and use an external upscaler.")
+            log_warn(f"      💡 Or try: -s 720p --upscale -uf 4x (to get 5K)\n")
         elif total_pixels > 1536 * 1536:
-            print(f"\n   ℹ️  Note: VAE Tiling will be enabled to reduce memory usage.\n")
+            log_warn(f"\n   ℹ️  Note: VAE Tiling will be enabled to reduce memory usage.\n")
         
-    print(f"   This job may cause slowdowns, swapping, or crashes.\n")
+    log_warn(f"   This job may cause slowdowns, swapping, or crashes.\n")
     
     if should_bypass:
         if force:
@@ -275,7 +281,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         elif bypass_warning:
             print("   (Proceeding due to --bypass-warning flag)\n")
         elif not can_prompt:
-            print("   (Non-interactive environment: Proceeding anyway...)\n")
+            log_warn("   (Non-interactive environment: Proceeding anyway...)\n")
         return True
     
     try:

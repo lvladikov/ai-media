@@ -215,3 +215,117 @@ def format_time(seconds):
             result.append(f"{current:.1f}s")
             
     return " ".join(result)
+
+
+def extract_prompt_parameters(prompt_text):
+    """
+    Extracts generation parameters from the prompt string.
+    Supports:
+    1. JSON style: "prompt {key: val}" (at end of string)
+    2. Pipe style: "prompt | key: val | key: val"
+    """
+    params = {}
+    clean_prompt = prompt_text.strip()
+    
+    # 1. JSON Extraction (Look for last {)
+    last_brace = clean_prompt.rfind('{')
+    if last_brace != -1:
+        potential_json = clean_prompt[last_brace:]
+        try:
+            # Try strict JSON first
+            import json
+            extracted = json.loads(potential_json)
+            if isinstance(extracted, dict):
+                params = extracted
+                clean_prompt = clean_prompt[:last_brace].strip()
+        except:
+            # Fallback: simple text parsing inside braces
+            # Remove braces
+            inner = potential_json.strip("{}").strip()
+            if inner:
+                # Use regex to split by comma ONLY if not inside quotes
+                import re
+                # Pattern matches comma not followed by an odd number of quotes
+                pairs = re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', inner)
+                
+                temp_params = {}
+                valid = True
+                for p in pairs:
+                    if ':' not in p:
+                        valid = False; break
+                    k, v = p.split(':', 1)
+                    k = k.strip()
+                    v = v.strip()
+                    # Remove surrounding quotes from value if present
+                    if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                        v = v[1:-1]
+                    temp_params[k] = v
+                if valid:
+                    params = temp_params
+                    clean_prompt = clean_prompt[:last_brace].strip()
+
+    # 2. Pipe Extraction (if no JSON found or prompt still has pipes)
+    if not params and '|' in clean_prompt:
+        parts = clean_prompt.split('|')
+        clean_prompt = parts[0].strip()
+        for part in parts[1:]:
+            if ':' in part:
+                k, v = part.split(':', 1)
+                params[k.strip()] = v.strip()
+    
+    # Normalize Keys and Values
+    normalized = {}
+    
+    # Map common aliases to internal arguments
+    key_map = {
+        'negative prompt': 'negative_prompt', 'negative_prompt': 'negative_prompt', 
+        'negative-prompt': 'negative_prompt', 'negativeprompt': 'negative_prompt',
+        'negative': 'negative_prompt', 'neg': 'negative_prompt', 'not': 'negative_prompt',
+        
+        'steps': 'steps', 'step': 'steps', 'inference steps': 'steps', 'num_inference_steps': 'steps',
+        'cfg': 'guidance_scale', 'guidance': 'guidance_scale', 'guidance_scale': 'guidance_scale',
+        'text guidance': 'guidance_scale', 'textguidance': 'guidance_scale',
+        
+        'width': 'width', 'w': 'width',
+        'height': 'height', 'h': 'height',
+        'resolution': 'resolution', 'size': 'resolution', 'res': 'resolution'
+    }
+
+    for k, v in params.items():
+        k_lower = k.lower().replace('_', ' ').strip() # spacing normalization
+        # Try exact match or spacing variant
+        matched_key = None
+        if k_lower in key_map:
+            matched_key = key_map[k_lower]
+        else:
+            # Try to match known aliases
+            for alias, target in key_map.items():
+                if k_lower == alias:
+                    matched_key = target
+                    break
+        
+        if matched_key:
+            # Value Conversion
+            try:
+                if matched_key == 'steps':
+                    normalized['steps'] = int(v)
+                elif matched_key == 'guidance_scale':
+                    normalized['guidance_scale'] = float(v)
+                elif matched_key in ['width', 'height']:
+                    # Remove 'px'
+                    v_clean = v.lower().replace('px', '').strip()
+                    normalized[matched_key] = int(v_clean)
+                elif matched_key == 'resolution':
+                    # Use robust parser which handles 5k, 1080p, 1024x1024, etc.
+                    w_val, h_val = parse_size(v)
+                    normalized['width'] = w_val
+                    normalized['height'] = h_val
+                else:
+                    # Strings (negative prompt)
+                    if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                        v = v[1:-1]
+                    normalized[matched_key] = v
+            except ValueError:
+                pass
+
+    return clean_prompt, normalized

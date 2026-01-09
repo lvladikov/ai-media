@@ -221,11 +221,18 @@ def _handle_memory_command(model_name, action, stream=False):
             "usage": None
         }
 
+
 async def _handle_image_generation(request: Request, prompt: str, model_name: str, stream: bool = False, response_prefix: str = None):
     """Handle image generation requests."""
     from ai_media.generators.image import ImageGenerator
     from ai_media.server.config import load_config
+    from ai_media.utils.parsers import extract_prompt_parameters
     
+    # 0. Extract Parameters from Prompt
+    prompt, extracted_params = extract_prompt_parameters(prompt)
+    if extracted_params:
+        print(f"Server: Extracted parameters: {extracted_params}")
+
     # 1. Clean prompt of URLs to avoid context pollution (CLIP token warnings)
     original_prompt = prompt
     # Remove http/https URLs
@@ -300,7 +307,8 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                         result = img_generator.generate(
                             prompt=prompt, 
                             progress_callback=on_progress,
-                            bypass_warning=True  # Skip resource confirmation prompts
+                            bypass_warning=True,  # Skip resource confirmation prompts
+                            **extracted_params
                         )
                     loop.call_soon_threadsafe(progress_queue.put_nowait, ("DONE", result, None))
                 except BaseException as e:

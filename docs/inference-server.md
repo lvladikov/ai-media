@@ -291,6 +291,76 @@ To generate an image in Continue:
 
 ---
 
+### Advanced: Prompt Parameter Extraction
+
+When using the Chat API for image generation, you can specify generation parameters (like steps, resolution, guidance scale) directly within your text prompt. The server supports two formats: **JSON-style** and **Pipe-style**.
+
+#### Supported Parameters
+
+> [!TIP]
+> **Flexible Key Names**: Parameter keys are normalized, so you can use various formats.
+> - **Case Insensitive**: `negativePrompt`, `NegativePrompt`, and `negativeprompt` all work.
+> - **Separators**: `negative_prompt`, `negative-prompt`, and `negative prompt` are treated the same.
+
+| Parameter | Aliases (Case Insensitive) | Type | Default |
+| :--- | :--- | :--- | :--- |
+| **Negative Prompt** | `negative prompt`, `negative-prompt`, `negative_prompt`, `negative`, `neg`, `not` | String | `""` |
+| **Steps** | `steps`, `step`, `inference steps`, `num_inference_steps` | Integer | Model Default (usually 30 or 4) |
+| **CFG** | `cfg`, `guidance`, `text guidance`, `guidance_scale` | Float | Model Default (usually 7.5 or 0) |
+| **Width** | `width`, `w` | Integer | 1024 |
+| **Height** | `height`, `h` | Integer | 1024 |
+| **Resolution** | `resolution`, `size`, `res` | String (e.g. "1024x1024", "4k", "5k", "1080p") | "1024x1024" |
+
+#### Format 1: JSON Style (Robust)
+Append a JSON-like object at the end of your prompt. Keys do not need strict quoting if simple.
+
+**Examples:**
+
+*   **Cyberpunk City (High Quality):**
+    ```
+    A futuristic cyberpunk city with neon rain {steps: 50, cfg: 8.0, width: 1280, height: 720}
+    ```
+
+*   **Negative Prompting:**
+    ```
+    Portrait of a wizard casting a spell {negative_prompt: "blurry, low quality, distortion", steps: 35}
+    ```
+
+*   **Resolution Shortcut:**
+    ```
+    A vast mountain landscape {size: "1920x1080"}
+    // or
+    A vast mountain landscape {size: "1080p"}
+    ```
+
+#### Format 2: Pipe Style (User Friendly)
+Use the pipe character `|` to separate the prompt from parameters. This is often faster to type.
+
+**Examples:**
+
+*   **Simple Steps adjustment:**
+    ```
+    A cute robot holding a flower | steps: 50
+    ```
+
+*   **Complex Configuration:**
+    ```
+    A dark fantasy castle | negative: bright, cheerful | cfg: 9.0 | res: 1024x1536
+    ```
+
+*   **Using Short Aliases:**
+    ```
+    Red sports car drifting | w: 1920 | h: 1080 | not: blue car
+    ```
+
+> [!NOTE]
+> The extracted parameters are removed from the prompt before generation, so they won't "leak" into the image content.
+
+> [!TIP]
+> **Safety Check**: The server automatically detects if the loaded model supports specific parameters (like `negative_prompt`). If a parameter is provided but not supported by the model, it is safely ignored to prevent errors.
+
+---
+
 ## Learn More
 
 For full documentation on available features and models, see:

@@ -599,7 +599,7 @@ def upscale_video_fast(video_path, output_path, factor=4.0, codec=None, force=Fa
         return False
 
 
-def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progress_callback=None, force=False, bypass_warning=False):
+def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progress_callback=None, force=False, bypass_warning=False, check_cancelled=None):
     """Upscale an image using smart multi-stage AI upscaling.
        
     Uses optimal combination of x4, x2 AI passes + final Lanczos resize.
@@ -639,7 +639,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
                 eta_str = "Calculating..."
                 
             percent = min(99, int((self.current_step / self.total_steps) * 100))
-            return percent, f"{model_desc}: {percent}% | Step {self.current_step}/{self.total_steps} | ETA: {eta_str}"
+            return percent, f"{model_desc}: {percent}%, Remaining Time: {eta_str}"
 
     try:
         start_time = time.time()
@@ -752,6 +752,9 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         
         # Define callback for Diffusers
         def diffusers_callback(step: int, timestep: int, latents: torch.FloatTensor):
+            if check_cancelled and check_cancelled():
+                raise KeyboardInterrupt("Generation cancelled by user.")
+
             progress_data = global_tracker.update(1, model_desc="Upscaling")
             if progress_data and progress_callback:
                 pct, msg = progress_data
@@ -812,10 +815,13 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         target_h = int(orig_h * factor)
         
         if current_image.size != (target_w, target_h):
-            print(f"\n   ↘️  Lanczos resize to exact target: {target_w}x{target_h}")
+            msg = f"Lanczos resize to exact target: {target_w}x{target_h}"
+            print(f"\n   ↘️  {msg}")
+            if progress_callback: progress_callback(99, msg)
             current_image = current_image.resize((target_w, target_h), Image.LANCZOS)
         
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        if progress_callback: progress_callback(100, "Saving Image...")
         current_image.save(output_path)
         print(f"\n✅ Upscaled image saved to {output_path}")
         
@@ -824,11 +830,11 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         print(f"   ✓ Processed in {duration:.1f}s (RAM: {ram_gb:.1f}GB | VRAM: {vram_gb:.1f}GB)")
         tracker.print_actual(duration, cpu_p, ram_gb, vram_gb, gpu_p)
         
-        return True
+        return [output_path]
         
     except Exception as e:
         print(f"❌ Upscaling failed: {e}")
-        return False
+        return []
 
 
 def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=False, bypass_warning=False):

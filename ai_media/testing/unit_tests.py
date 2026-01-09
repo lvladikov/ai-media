@@ -152,6 +152,7 @@ ai_media.parse_sampling_rate = parsers.parse_sampling_rate
 ai_media.parse_bitrate = parsers.parse_bitrate
 ai_media.parse_upscale_factor = parsers.parse_upscale_factor
 ai_media.format_time = parsers.format_time
+ai_media.extract_prompt_parameters = parsers.extract_prompt_parameters
 ai_media.get_video_encoding_params = ffmpeg.get_video_encoding_params
 ai_media.ensure_paths = system.ensure_paths
 ai_media.write_report_json = performance.write_report_json
@@ -3416,6 +3417,50 @@ class TestCleanupUtility(unittest.TestCase):
         # Should rmtree dir1
         found_rmtree = any("dir1" in call.args[0] for call in mock_rmtree.call_args_list)
         self.assertTrue(found_rmtree)
+
+
+# =============================================================================
+# Prompt Parsing Tests
+# =============================================================================
+
+class TestPromptParsing(unittest.TestCase):
+    """Tests for extract_prompt_parameters function."""
+    
+    def test_json_parsing(self):
+        prompt = 'A beautiful landscape {negative_prompt: "ugly", steps: 20}'
+        clean, params = ai_media.extract_prompt_parameters(prompt)
+        self.assertEqual(clean, 'A beautiful landscape')
+        self.assertEqual(params['negative_prompt'], 'ugly')
+        self.assertEqual(params['steps'], 20)
+
+    def test_pipe_parsing(self):
+        prompt = 'A beautiful landscape | negative prompt: ugly | steps: 20'
+        clean, params = ai_media.extract_prompt_parameters(prompt)
+        self.assertEqual(clean, 'A beautiful landscape')
+        self.assertEqual(params['negative_prompt'], 'ugly')
+        self.assertEqual(params['steps'], 20)
+
+    def test_mixed_case_and_aliases(self):
+        prompt = 'Cyberpunk city | cfg: 8.5 | Width: 1024 | Height: 512px'
+        clean, params = ai_media.extract_prompt_parameters(prompt)
+        self.assertEqual(clean, 'Cyberpunk city')
+        self.assertEqual(params['guidance_scale'], 8.5)
+        self.assertEqual(params['width'], 1024)
+        self.assertEqual(params['height'], 512)
+
+    def test_resolution_resolution_alias(self):
+        prompt = 'Portrait | Resolution: 1024x1024'
+        clean, params = ai_media.extract_prompt_parameters(prompt)
+        self.assertEqual(clean, 'Portrait')
+        self.assertEqual(params['width'], 1024)
+        self.assertEqual(params['height'], 1024)
+        
+    def test_no_params(self):
+        prompt = 'Just a simple prompt'
+        clean, params = ai_media.extract_prompt_parameters(prompt)
+        self.assertEqual(clean, 'Just a simple prompt')
+        self.assertEqual(params, {})
+
 
 if __name__ == '__main__':
     unittest.main()
