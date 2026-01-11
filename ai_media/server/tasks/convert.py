@@ -1,6 +1,7 @@
 """Convert background task."""
 
 import os
+import datetime
 from pathlib import Path
 from multiprocessing import Queue
 
@@ -48,7 +49,12 @@ def run_convert(
         else:
              msg = f"Converting {input_ext} to {target_format}..."
              
-        send_update(status="generating", phase="generating", progress=30, message=msg)
+        send_update(
+            status="generating", 
+            phase="generating", 
+            progress=30, 
+            message=msg
+        )
         
         from ai_media.conversion import (
             convert_image, convert_video, convert_audio, convert_document
@@ -63,6 +69,19 @@ def run_convert(
         
         translate_model = translation_model
         
+        # Callback to mark when actual translation work starts (after model loading)
+        generation_started = [False]  # Use list to allow modification in nested scope
+        def on_translation_ready():
+            if not generation_started[0] and translate:
+                generation_started[0] = True
+                send_update(
+                    status="generating",
+                    phase="translating",
+                    progress=50,
+                    message="Translating content...",
+                    generation_started_at=datetime.datetime.utcnow().isoformat()
+                )
+        
         # Speech-to-Speech (Seamless or Pipeline)
         input_is_av = input_ext in ['mp3', 'wav', 'aac', 'flac', 'm4a', 'ogg', 'webm', 'mp4', 'mov', 'avi', 'mkv']
         target_is_audio = target_format in ['mp3', 'wav', 'aac', 'flac']
@@ -75,6 +94,7 @@ def run_convert(
                 send_update(phase="generating", progress=30, message="Running SeamlessM4T (S2ST)...")
                 translator = TranslationGenerator()
                 translator.load_model(translate_model)
+                on_translation_ready()  # Model loaded, start timing
                 success = translator.run(
                     input_path=input_path, 
                     target_lang=kwargs.get("target_language", "eng_Latn"),
@@ -107,7 +127,15 @@ def run_convert(
                 # gen_text.translate_text might need updates to accept model_id if we want Qwen/NLLB choice here
                 # For now, it uses NLLB-200 by default. 
                 # TODO: Pass translate_model to translate_text if it's a text model
-                translated_text = gen_text.translate_text(clean_text, target_lang=target_lang, source_lang="auto", model_id=translate_model, keep_loaded=False)
+                text_gen = gen_text.ArticleGenerator()
+                translated_text = text_gen.translate_text(
+                    clean_text, 
+                    target_lang=target_lang, 
+                    source_lang="auto", 
+                    model_id=translate_model, 
+                    keep_loaded=False,
+                    on_ready=on_translation_ready
+                )
                 
                 if translated_text:
                     send_update(phase="synthesizing", progress=80, message=f"Synthesizing speech ({target_lang})...")
@@ -134,7 +162,8 @@ def run_convert(
                     translate=translate,
                     target_language=target_language,
                     translation_model=translation_model,
-                    render_method=render_method
+                    render_method=render_method,
+                    on_translation_ready=on_translation_ready
                 )
             else:
                 success = convert_image(input_path, output_path)
@@ -151,17 +180,21 @@ def run_convert(
                 translate=translate,
                 target_language=target_language,
                 translation_model=translation_model,
-                render_method=render_method
+                render_method=render_method,
+                on_translation_ready=on_translation_ready
             )
         else:
             raise ValueError(f"Unsupported target format: {target_format}")
 
         if success:
+            from . import get_relative_path
+            msg = "Translation completed successfully" if translate else "Conversion completed successfully"
             send_update(status="complete", phase="complete", progress=100,
-                       message="Conversion completed successfully", result_path=output_path)
+                       message=msg, result_path=get_relative_path(output_path))
         else:
+            msg = "Translation failed" if translate else "Conversion failed"
             send_update(status="failed", phase="failed", progress=100,
-                       message="Conversion failed", error="Conversion returned False")
+                       message=msg, error="Operation returned False")
     except Exception as e:
         send_update(status="failed", phase="failed", progress=100,
                    message=f"Error: {str(e)}", error=str(e))

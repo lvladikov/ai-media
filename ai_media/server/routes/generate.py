@@ -55,7 +55,8 @@ async def generate_image(request: ImageGenerateRequest):
         ),
     )
     
-    return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}
+    # Return filename (relative to media_output) for cleaner URLs
+    return {"job_id": job["job_id"], "status": "pending", "output_path": filename}
 
 
 @router.post("/api/generate/video")
@@ -96,7 +97,8 @@ async def generate_video(request: VideoGenerateRequest):
         ),
     )
     
-    return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}
+    # Return filename (relative to media_output) for cleaner URLs
+    return {"job_id": job["job_id"], "status": "pending", "output_path": filename}
 
 
 @router.post("/api/generate/audio")
@@ -127,5 +129,6 @@ async def generate_audio(request: AudioGenerateRequest):
         ),
     )
     
-    return {"job_id": job["job_id"], "status": "pending", "output_path": output_path}
+    # Return filename (relative to media_output) for cleaner URLs
+    return {"job_id": job["job_id"], "status": "pending", "output_path": filename}
 

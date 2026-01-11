@@ -7,11 +7,16 @@ from pydantic import BaseModel
 import time
 import uuid
 import json
+import os
 import asyncio
 
 import threading
 import re
 import torch
+import random
+from pathlib import Path
+
+PROMPTS_FILE = Path(__file__).parent.parent.parent / "data" / "prompts.json"
 
 
 from ..cache import model_cache
@@ -335,15 +340,15 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                 import re
                 prefix = None
                 if current_msg:
-                    # Detect prefix (e.g. "Loading: 50%" -> "Loading: ")
-                    match = re.search(r'^(.*?)\d+%$', current_msg.strip())
-                    if match:
-                        prefix = match.group(1)
-                    # Also detect non-percent headers like "Generating Image"
-                    elif ":" not in current_msg and "..." not in current_msg:
-                         # Treat as a new phase, clearing previous ones
-                         # But non-percent headers don't have a "prefix" to track 100% against
-                         pass
+                    # Detect ONLY simple progress bar lines like:
+                    #   "Loading: 50%" or "Generating: 75%"
+                    # NOT informational lines like:
+                    #   "⏱️ Estimated Resources: ... | GPU: 32.5%"
+                    stripped = current_msg.strip()
+                    if '|' not in stripped:  # Skip multi-value info lines
+                        match = re.match(r'^([A-Za-z\.\s]+[:\s]+)\d+%', stripped)
+                        if match:
+                            prefix = match.group(1)
                 
                 updates = []
                 for old_prefix, old_percent in list(last_progress.items()):
@@ -354,10 +359,11 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                 
                 # Update current prefix tracking
                 if prefix:
-                     match = re.search(r'(\d+)%$', current_msg)
+                     match = re.search(r'(\d+)%', current_msg)
                      if match:
                         last_progress[prefix] = int(match.group(1))
                 return updates
+
 
             try:
                 while True:
@@ -436,10 +442,10 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                         server_host = "ERROR_MISSING_CONFIG" 
                         server_port = "ERROR"
     
-                    # Construct URL using Config
+                    # Construct URL using Config - use just filename for cleaner URLs
                     scheme = request.url.scheme
-                    clean_path = str(abs_path).lstrip('/')
-                    image_url = f"{scheme}://{server_host}:{server_port}/api/files/{clean_path}"
+                    filename = os.path.basename(abs_path)
+                    image_url = f"{scheme}://{server_host}:{server_port}/api/files/{filename}"
                     
                     # Standard Markdown URL
                     final_content = f"\n![Generated Image]({image_url})"
@@ -492,11 +498,10 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
                 "usage": None
             }
             
-        # Construct URL
+        # Construct URL - use just filename for cleaner URLs
         scheme = request.url.scheme
-        # Strip leading slash for the route parameter
-        clean_path = str(abs_path).lstrip('/')
-        image_url = f"{scheme}://{server_host}:{server_port}/api/files/{clean_path}"
+        filename = os.path.basename(abs_path)
+        image_url = f"{scheme}://{server_host}:{server_port}/api/files/{filename}"
         
         response_content = f"![Generated Image]({image_url})"
         if response_prefix:
@@ -557,7 +562,7 @@ def log_response_with_reasoning(model_name, text):
         print() # spacing
 
 
-async def generate_response_stream(generator, prompt, model_name, request_id, chat_max_tokens, temperature, top_p):
+async def generate_response_stream(generator, prompt, model_name, request_id, chat_max_tokens, temperature, top_p, response_prefix=None):
     """Yields Server-Sent Events (SSE) for streaming responses."""
     from transformers import TextIteratorStreamer, StoppingCriteriaList
     from ai_media.generators.text import CancelStopCriteria
@@ -614,69 +619,6 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
             ]
         }
 
-    # Run generation in a separate thread
-    def thread_target():
-        with generator._lock:
-            # Load model
-            generator._load_model()
-            
-            if generator.pipeline and generator.tokenizer:
-                # Create streamer NOW with valid tokenizer
-                local_streamer = TextIteratorStreamer(generator.tokenizer, skip_prompt=True, skip_special_tokens=True)
-                streamer_queue.put(local_streamer)
-                
-                # Prepare Prompt
-                conversation = [{"role": m.role, "content": m.content} for m in thread_args['prompt_data']]
-                
-                # INJECT SYSTEM INSTRUCTION: Suppress proactive tool usage for standard chat.
-                # We specifically want to prevent "hello" triggering "read_file".
-                if conversation and conversation[0]['role'] == 'system':
-                    conversation[0]['content'] += (
-                        "\n\nIMPORTANT: Do not proactively use tools to read files or context (like 'read_currently_open_file') "
-                        "unless the user explicitly asks you to examine specific files or the codebase. "
-                        "For greetings and general questions, simply reply in text."
-                    )
-                
-                real_prompt = generator.tokenizer.apply_chat_template(
-                    conversation, 
-                    tokenize=False, 
-                    add_generation_prompt=True
-                )
-                
-                gen_kwargs = dict(
-                    text_inputs=real_prompt,
-                    max_new_tokens=thread_args['max_new_tokens'],
-                    do_sample=thread_args['temperature'] > 0,
-                    temperature=thread_args['temperature'],
-                    top_p=thread_args['top_p'],
-                    return_full_text=False, # Optimization: Only return new tokens
-                    streamer=local_streamer,
-                    stopping_criteria=StoppingCriteriaList([CancelStopCriteria(generator)])
-                )
-                
-                # Reset cancellation state before starting
-                generator.is_cancelled = False
-                
-                # IMPORTANT: Run inference in no_grad() context to avoid OOM
-                # This prevents PyTorch from building the computation graph
-                with torch.no_grad():
-                    generator.pipeline(**gen_kwargs)
-            else:
-                streamer_queue.put(None) # Signal failure
-
-            
-    thread = threading.Thread(target=thread_target)
-    
-    # 1. Start Thread
-    thread.start()
-    
-    # 2. Capture Loading Logs (Hack: Capture global stdout/stderr filtered by thread? 
-    # Or just yield a static message? User wants actual logs.)
-    # Since we can't easily capture only one thread's C-level stdout (from tqdm),
-    # we'll emit a "Thinking" block with a static loading message primarily, 
-    # or try to capture python print statements.
-    
-    # Send <think> start
     # Determine device for logging
     device_name = "CPU"
     if torch.cuda.is_available():
@@ -701,7 +643,7 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
 
     # 0. Set callback BEFORE starting thread to catch immediate "Checking resources" etc.
     generator.progress_callback = loading_callback
-    
+
     # Run generation in a separate thread
     def thread_target():
         with generator._lock:
@@ -762,28 +704,43 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
                  generator.progress_callback = None
 
             
+
+
+        
     thread = threading.Thread(target=thread_target)
-    
+
     # 1. Start Thread
     thread.start()
-    
+
     # Send <think> start and initial message
+    # IMPORTANT: Send response_prefix FIRST if we have one (e.g., random prompt info)
+    # This ensures clients like Continue see the expanded prompt
+    if response_prefix:
+        yield f"data: {json.dumps(make_chunk(response_prefix))}\n\n"
     yield f"data: {json.dumps(make_chunk('<think>\n'))}\n\n"
     yield f"data: {json.dumps(make_chunk(f'Server: Loading model {model_name}...\n\n'))}\n\n"
     yield f"data: {json.dumps(make_chunk(f'Moving to device ({device_name})...\n\n'))}\n\n"
-    
+
     # Loop while thread is alive AND streamer has no tokens yet
     last_progress = {} # prefix -> last_percent
-    
+
     def complete_progress(current_msg=None):
         """Helper to yield 100% for any previous prefixes if they finished abruptly."""
         import re
         prefix = None
         if current_msg:
-            # Detect prefix (e.g. "Loading: 50%" -> "Loading: ")
-            match = re.search(r'^(.*?)\d+%$', current_msg.strip())
-            if match:
-                prefix = match.group(1)
+            # Detect ONLY simple progress bar lines like:
+            #   "Loading: 50%" or "Generating: 75%"
+            # NOT informational lines like:
+            #   "⏱️ Estimated Resources: ... | GPU: 32.5%"
+            # Pattern: Must be a SHORT word/phrase followed by colon/space and ONLY a percentage.
+            #          e.g. "Loading: 50%", "Generating... 75%"
+            #          If the line contains multiple values (e.g. "| CPU: 13%"), skip it.
+            stripped = current_msg.strip()
+            if '|' not in stripped:  # Skip multi-value info lines
+                match = re.match(r'^([A-Za-z\.\s]+[:\s]+)\d+%$', stripped)
+                if match:
+                    prefix = match.group(1)
         
         updates = []
         for old_prefix, old_percent in list(last_progress.items()):
@@ -793,8 +750,11 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
         
         # Update current prefix
         if prefix:
-             last_progress[prefix] = int(re.search(r'(\d+)%$', current_msg).group(1))
+             match = re.search(r'(\d+)%$', current_msg)
+             if match:
+                 last_progress[prefix] = int(match.group(1))
         return updates
+
 
     while thread.is_alive() and not generator.pipeline:
         while logs_to_show:
@@ -826,9 +786,6 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
         yield f"data: {json.dumps(make_chunk('Failed to load model or tokenizer init failed.\n'))}\n\n"
         return
 
-    # Signal end of thinking
-
-        
     # If we exited loop, model is loaded (or thread died)
     if not generator.pipeline:
         yield f"data: {json.dumps(make_chunk('Failed to load model.\n'))}\n\n"
@@ -860,11 +817,8 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
         yield f"data: {json.dumps(final_chunk)}\n\n"
         yield "data: [DONE]\n\n"
         
-
-        
         # Log final response
         log_response_with_reasoning(model_name, ''.join(full_response))
-
         
     except Exception as e:
         print(f"Error during streaming: {e}")
@@ -873,6 +827,7 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
         # Signal generator to stop (interrupts the thread)
         generator.stop()
         generator._cleanup_memory()
+
 
 # Helper for non-streaming generation
 def run_generation_sync(generator, prompt, kwargs):
@@ -917,45 +872,52 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
             print(f"User requested Flush Memory.")
             return _handle_memory_command(model_name, "flush", request.stream)
 
-        # 4. RANDOM PROMPT COMMAND
-        from ai_media.utils.prompts import is_random_prompt_trigger, get_random_prompt
-        response_prefix = None
+        # 4. RANDOM PROMPT COMMAND (Unified)
+        # Use shared trigger utility from single source of truth
+        from ai_media.utils.prompts import is_random_prompt_trigger, RANDOM_PROMPT_TRIGGERS
         
+        response_prefix = None
         if is_random_prompt_trigger(last_msg_content):
-            # Determine prompt type based on model
-            is_image = model_name in IMAGE_MODELS or model_name in IMAGE_MODELS.values()
-            prompt_type = "image" if is_image else "code"
-            random_prompt = get_random_prompt(prompt_type)
-            print(f"Random Prompt ({prompt_type}): {random_prompt}")
-            
-            if is_image:
-                 # IF IMAGE MODEL: Don't return text, but PROCEED to generate image with this prompt
-                 last_msg = random_prompt
-                 response_prefix = f"🎲 **Random Prompt**\n\n{random_prompt}\n\n"
-                 # Fallthrough to IMAGE_GENERATION_HANDLING below...
-            else:
-                # IF TEXT/CODE: Return the random prompt (not execute it, just show it)
-                if request.stream:
-    
-                    async def random_stream():
-                        request_id = f"chatcmpl-{uuid.uuid4()}"
-                        created = int(time.time())
-                        content = f"🎲 **Random Prompt**\n\n{random_prompt}"
-                        chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created, 
-                                 "model": model_name, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]}
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                        final_chunk = {"id": request_id, "object": "chat.completion.chunk", "created": created,
-                                       "model": model_name, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
-                        yield f"data: {json.dumps(final_chunk)}\n\n"
-                        yield "data: [DONE]\n\n"
-                    return StreamingResponse(random_stream(), media_type="text/event-stream")
-                else:
-                    return {
-                        "id": f"chatcmpl-{uuid.uuid4()}", "object": "chat.completion", "created": int(time.time()),
-                        "model": model_name,
-                        "choices": [{"index": 0, "message": {"role": "assistant", "content": f"🎲 **Random Prompt**\n\n{random_prompt}"}, "finish_reason": "stop"}],
-                        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-                    }
+            try:
+                # Determine prompt type based on model
+                is_image = model_name in IMAGE_MODELS or model_name in IMAGE_MODELS.values()
+                
+                # Load prompts from single source of truth
+                if PROMPTS_FILE.exists():
+                     with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        
+                     prompt_text = ""
+                     
+                     if is_image:
+                         # Image models use 'image' category
+                         if "image" in data:
+                             prompt_text = random.choice(data["image"])
+                     else:
+                         # Text models get unified 'code' + 'article' pool
+                         pool = []
+                         if "code" in data: pool.extend(data["code"])
+                         if "article" in data: pool.extend(data["article"])
+                         if pool:
+                             prompt_text = random.choice(pool)
+                             
+                     if prompt_text:
+                         print(f"🎲 Random Prompt Selected ({'Image' if is_image else 'Unified'}): {prompt_text}")
+                         
+                         if is_image:
+                              # For image models, replace prompt and add prefix to response
+                              last_msg = prompt_text
+                              response_prefix = f"🎲 **Random Prompt**\n\n{prompt_text}\n\n"
+                         else:
+                              # For text models, replace user input and add prefix to response
+                              request.messages[-1].content = prompt_text
+                              print(f"Server: Replaced user input with random prompt.")
+                              response_prefix = f"🎲 **Random Prompt**\n\n{prompt_text}\n\n"
+                     else:
+                        print("⚠️ Prompts pool empty.")
+            except Exception as e:
+                print(f"❌ Error getting random prompt: {e}")
+
 
         # --- IMAGE GENERATION HANDLING ---
         if model_name in IMAGE_MODELS or model_name in IMAGE_MODELS.values():
@@ -1051,7 +1013,8 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
                     request_id, 
                     chat_max_tokens, 
                     request.temperature, 
-                    request.top_p
+                    request.top_p,
+                    response_prefix=response_prefix
                 ),
                 media_type="text/event-stream"
             )

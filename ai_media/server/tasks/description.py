@@ -89,13 +89,14 @@ def run_description(job_id, input_path, model_name, output_path=None, force=Fals
                 except Exception as e:
                     print(f"Error saving analysis result to {output_path}: {e}")
 
+            from . import get_relative_path
             send_update(
                 status="complete",
                 progress=100,
                 phase="Complete",
                 message="Description generated successfully",
                 result=caption,
-                result_path=output_path
+                result_path=get_relative_path(output_path) if output_path else None
             )
         else:
             send_update(

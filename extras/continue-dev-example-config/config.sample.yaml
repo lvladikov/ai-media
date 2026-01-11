@@ -4,79 +4,79 @@ schema: v1
 
 models:
   # AI Media Local Text Models
-  - name: AI Media (Llama 3.1)
+  - name: AI Media (Text/Llama 3.1)
     provider: openai
     model: llama-3.1-8b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Mistral Nemo 12B)
+  - name: AI Media (Text/Mistral Nemo 12B)
     provider: openai
     model: mistral-nemo-12b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 2.5 Coder 7B)
+  - name: AI Media (Text/Qwen 2.5 Coder 7B)
     provider: openai
     model: qwen-coder-7b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 2.5 Coder 14B)
+  - name: AI Media (Text/Qwen 2.5 Coder 14B)
     provider: openai
     model: qwen-coder-14b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 2.5 Coder 32B)
+  - name: AI Media (Text/Qwen 2.5 Coder 32B)
     provider: openai
     model: qwen-coder-32b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 3 Coder 30B)
+  - name: AI Media (Text/Qwen 3 Coder 30B)
     provider: openai
     model: qwen3-coder-30b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 3 8B Reasoning)
+  - name: AI Media (Text/Qwen 3 8B Reasoning)
     provider: openai
     model: qwen3-8b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (Qwen 3 14B Reasoning)
+  - name: AI Media (Text/Qwen 3 14B Reasoning)
     provider: openai
     model: qwen3-14b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (DeepSeek R1 Qwen 7B)
+  - name: AI Media (Text/DeepSeek R1 Qwen 7B)
     provider: openai
     model: deepseek-r1-qwen-7b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (DeepSeek R1 Qwen 14B)
+  - name: AI Media (Text/DeepSeek R1 Qwen 14B)
     provider: openai
     model: deepseek-r1-qwen-14b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (DeepSeek R1 Qwen 32B)
+  - name: AI Media (Text/DeepSeek R1 Qwen 32B)
     provider: openai
     model: deepseek-r1-qwen-32b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (DeepSeek R1 Llama 8B)
+  - name: AI Media (Text/DeepSeek R1 Llama 8B)
     provider: openai
     model: deepseek-r1-llama-8b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
-  - name: AI Media (DeepSeek R1 Llama 70B)
+  - name: AI Media (Text/DeepSeek R1 Llama 70B)
     provider: openai
     model: deepseek-r1-llama-70b
     apiKey: local

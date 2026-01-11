@@ -58,8 +58,9 @@ def run_transform(
             )
         
         if success:
+            from . import get_relative_path
             send_update(status="complete", phase="complete", progress=100,
-                       message="Transform completed successfully", result_path=output_path)
+                       message="Transform completed successfully", result_path=get_relative_path(output_path))
         else:
             send_update(status="failed", phase="failed", progress=100,
                        message="Transform failed", error="Transform returned False")

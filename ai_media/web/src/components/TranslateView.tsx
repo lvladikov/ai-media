@@ -7,6 +7,7 @@ import { JobProgressModal } from './common/JobProgressModal';
 import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { ModelHelpLink } from './common/ModelHelpLink';
+import { formatDuration } from '../utils/formatTime';
 
 // Check if a file extension can't be previewed in browsers
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -45,6 +46,7 @@ export function TranslateView() {
     const [error, setError] = useState<string | null>(null);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [result, setResult] = useState<string | null>(null);
+    const [duration, setDuration] = useState<number | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [inputPreviewUrl, setInputPreviewUrl] = useState<string | null>(null);
 
@@ -222,6 +224,7 @@ export function TranslateView() {
         setIsSubmitting(true);
         setError(null);
         setResult(null);
+        setDuration(null);
 
         // Determine target format
         let targetFormat = 'txt';
@@ -298,6 +301,19 @@ export function TranslateView() {
                 if (job.status === 'complete') {
                     setResult(job.result_path);
                     setIsSubmitting(false);
+                    
+                    // Calculate duration
+                    if (job.generation_started_at && job.updated_at) {
+                        const start = new Date(job.generation_started_at).getTime();
+                        const end = new Date(job.updated_at).getTime();
+                        const seconds = Math.round((end - start) / 1000);
+                        setDuration(seconds > 0 ? seconds : 1);
+                    } else if (job.created_at && job.updated_at) {
+                        // Fallback to full job time
+                        const start = new Date(job.created_at).getTime();
+                        const end = new Date(job.updated_at).getTime();
+                        setDuration(Math.round((end - start) / 1000));
+                    }
                 } else if (job.status === 'failed') {
                     setIsSubmitting(false);
                     setError(job.error || job.message || "Translation failed");
@@ -662,6 +678,7 @@ export function TranslateView() {
 
                             <div className="absolute top-2 left-2 bg-blue-600 px-2 py-1 rounded text-xs text-white shadow-lg flex flex-col items-start leading-none gap-0.5">
                                 <span className="font-bold uppercase tracking-wider">Translated</span>
+                                {duration && <span className="text-blue-200 text-[10px]">in {formatDuration(duration * 1000)}</span>}
                             </div>
 
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">

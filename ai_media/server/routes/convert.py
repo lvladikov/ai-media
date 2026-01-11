@@ -18,10 +18,13 @@ router = APIRouter(tags=["Convert"])
 @router.post("/api/convert")
 async def convert_media(request: ConvertRequest):
     """Start a media conversion job."""
+    # Use "translate" job type when translation is enabled
+    job_type = "translate" if request.translate else "convert"
+    
     job = create_job(
-        "convert",
+        job_type,
         prompt=None,
-        model=None,
+        model=request.translation_model if request.translate else None,
         params={
             "input_path": request.input_path, 
             "target_format": request.target_format,

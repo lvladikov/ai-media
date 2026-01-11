@@ -6,9 +6,11 @@ import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRig
 import domToImage from 'dom-to-image';
 import { NumberInput } from './common/NumberInput';
 import { MarkdownWithAnsi, MarkdownWithAnsiNoHtml } from './common/AnsiRenderer';
+import { usePromptTriggers } from '../hooks/usePromptTriggers';
 import { SaveModal } from './SaveModal';
 import type { SaveOptions } from './SaveModal';
 import { formatDuration } from '../utils/formatTime';
+import { PROMPTS } from '../data/prompts';
 
 // Clipboard CSS mapping for rich-text copy (inline styles for external apps)
 const TAILWIND_TO_CSS: Record<string, string> = {
@@ -562,6 +564,7 @@ const FilePreviewModal = ({ isOpen, onClose, file, onConfirm }: { isOpen: boolea
 };
 
 export function ChatInterface() {
+  const { triggers: randomPromptTriggers } = usePromptTriggers();
   const { chatSessionId, chatMessages, setChatSessionId, addChatMessage, updateLastUserMessage, clearChat } = useAppStore();
   const [model, setModel] = useState(''); // Initial value empty, set after fetch
   const [defaultModelId, setDefaultModelId] = useState(''); // Store default model ID from backend
@@ -702,8 +705,27 @@ export function ChatInterface() {
   };
 
   const sendMessage = (overrideContent?: string) => {
-    const contentToSend = overrideContent || input;
+    let contentToSend = overrideContent || input;
     if (!contentToSend.trim() || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN || !isModelReady) return;
+
+    // Client-side expansion of Random Prompt command (rndPr)
+    // This allows the user bubble to show the ACTUAL prompt instead of the command.
+    const normalized = contentToSend.trim().toLowerCase();
+    
+    // Check against dynamic triggers from backend
+    if (randomPromptTriggers.includes(normalized)) {
+       // Combine text-relevant prompts (Article + Code)
+       // We can iterate PROMPTS keys if we want, or stick to 'code'/'article' default for text models
+       // Note: PROMPTS is imported from data/prompts
+       const pool: string[] = [];
+       if (PROMPTS.article) pool.push(...PROMPTS.article);
+       if (PROMPTS.code) pool.push(...PROMPTS.code);
+       
+       if (pool.length > 0) {
+          const randomPrompt = pool[Math.floor(Math.random() * pool.length)];
+          contentToSend = randomPrompt;
+       }
+    }
 
     // If already processing, add to queue instead of sending
     if (isProcessing) {

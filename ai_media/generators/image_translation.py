@@ -17,7 +17,7 @@ class ImageTranslationGenerator:
         from ai_media.generators.text import ArticleGenerator
         self.translator = ArticleGenerator()
 
-    def run(self, input_path: str, target_lang: str, render_method: str = "smart", translate_model: str = "nllb-200-3.3b", ocr_model: str = "florence", output_path: str = None):
+    def run(self, input_path: str, target_lang: str, render_method: str = "smart", translate_model: str = "nllb-200-3.3b", ocr_model: str = "florence", output_path: str = None, on_ready: callable = None):
         """
         Run Image-to-Image translation.
         
@@ -28,6 +28,7 @@ class ImageTranslationGenerator:
             translate_model: Model ID for text translation step.
             ocr_model: OCR model to use (florence/qwen-vl).
             output_path: Output file path.
+            on_ready: Optional callback called when translation model is ready.
         """
         logger.info(f"Running Image Translation (Smart Logic) -> {target_lang}")
 
@@ -35,7 +36,7 @@ class ImageTranslationGenerator:
         from ai_media.conversion.ocr import image_to_text_with_coords, unload_ocr_model
         
         try:
-            ocr_data = image_to_text_with_coords(input_path, model_type=ocr_model)
+            ocr_data = image_to_text_with_coords(input_path, model_type=ocr_model, on_ready=on_ready)
         finally:
             unload_ocr_model()
         
@@ -56,8 +57,14 @@ class ImageTranslationGenerator:
                     target_lang=target_lang, 
                     source_lang="auto",
                     model_id=translate_model,
-                    keep_loaded=True  # optimization
+                    keep_loaded=True,  # optimization
                 )
+                    
+                if not translated_text:
+                    translated_text = original_text
+            except Exception as e:
+                logger.warning(f"Translation failed for '{original_text}': {e}")
+                translated_text = original_text  # Fallback
                 if not translated_text:
                     translated_text = original_text
             except Exception as e:

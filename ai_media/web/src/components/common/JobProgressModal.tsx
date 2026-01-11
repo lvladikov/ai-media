@@ -42,7 +42,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
       setDots(prev => prev.length >= 3 ? '' : prev + '.');
 
       const job = jobs.find(j => j.job_id === jobId);
-      if (job && job.phase === 'generating' && job.generation_started_at) {
+      if (job && job.status === 'generating' && job.generation_started_at) {
         const startTime = new Date(job.generation_started_at).getTime();
         const now = new Date().getTime();
         setElapsed(Math.max(0, Math.round((now - startTime) / 1000)));
@@ -109,8 +109,8 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
                   isFailed ? 'Generation Failed' :
                     isCancelled ? 'Generation Cancelled' :
                       (job.type === 'analysis' ? 'Analysis' : job.type) + ' Generation'
-              )}{elapsed > 0 && job.phase === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
-            </span>
+              )}{elapsed > 0 && job.status === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
+              </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}
           {(isComplete || isFailed || isCancelled) && onClose && (
@@ -167,7 +167,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
           {!isComplete && !isFailed && (
             <div className="space-y-2">
               <div className="h-2 w-full bg-tertiary rounded-full overflow-hidden relative">
-                {(job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (
+                {(job.type === 'translate' || job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (
                   <div className="h-full bg-brand-500 w-1/3 absolute rounded-full animate-progress-bounce" />
                 ) : (
                   <div
@@ -179,9 +179,17 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
                 )}
               </div>
               <div className="flex justify-between text-xs text-secondary">
-                <span>{(job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
-                {percent < 100 && <span>Please wait...</span>}
+                <span>{(job.type === 'translate' || job.type === 'code' || job.type === 'article' || job.type === 'analysis' || (job.type === 'upscale' && job.model !== 'ai') || (job.type === 'transform' && job.model === 'remove-bg') || (job.type === 'convert' && (job.params?.translate || (job.target_format !== 'mp3' && job.target_format !== 'wav' && job.target_format !== 'mp4' && job.target_format !== 'mov')))) ? (job.phase === 'queued' ? 'Queued' : 'Processing...') : `${percent}%`}</span>
+                {percent < 100 && (
+                  <span>
+                    {/* Extract remaining time from message like "Generating: 50%, Remaining Time: 00:15" */}
+                    {job.message?.match(/Remaining Time:\s*(\d+:\d+)/)?.[1] 
+                      ? `Remaining: ${job.message.match(/Remaining Time:\s*(\d+:\d+)/)?.[1]}`
+                      : 'Please wait...'}
+                  </span>
+                )}
               </div>
+
             </div>
           )}
 

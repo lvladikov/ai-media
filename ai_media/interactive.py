@@ -460,7 +460,9 @@ def run_interactive(jump_point=None):
         
         # Prompt
         print()
-        print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise Image prompt!\n")
+        from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+        triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+        print(f"🎲 Tip: Enter {triggers_str} for a surprise Image prompt!\n")
         prompt = prompt_text("📝 Enter prompt")
         if prompt is None:
             return
@@ -1278,7 +1280,9 @@ def run_interactive(jump_point=None):
             
             # Topic/Prompt
             print("✏️  Enter your topic or prompt:\n")
-            print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise topic!\n")
+            from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+            triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+            print(f"🎲 Tip: Enter {triggers_str} for a surprise topic!\n")
             topic = prompt_text("Topic")
             if not topic:
                 return
@@ -1383,7 +1387,9 @@ def run_interactive(jump_point=None):
             print("   (be more specific for better results)\n")
             print("💡 Tip: Include folder name for multi-file projects, e.g.:")
             print('   "Create React example in folder react-example"\n')
-            print("🎲 Tip: Enter 'rndPr', 'randomPrompt', or 'random prompt' for a surprise Coding prompt!\n")
+            from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+            triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+            print(f"🎲 Tip: Enter {triggers_str} for a surprise Coding prompt!\n")
             print("(Leave empty to go back)\n")
             description = prompt_text("Description", required=False)
             if not description:

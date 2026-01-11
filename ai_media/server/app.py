@@ -74,12 +74,13 @@ def create_app(include_inference_api: bool = False) -> FastAPI:
     )
     
     # Register routes
-    from .routes import system, files, generate, text, transform, convert, upscale, analysis
+    from .routes import system, files, generate, text, transform, convert, upscale, analysis, config
     from .websockets import jobs as jobs_ws, chat as chat_ws, code as code_ws
     from . import sse
     from . import jobs as jobs_api
     
     app.include_router(system.router)
+    app.include_router(config.router)
     app.include_router(files.router)
     app.include_router(generate.router)
     app.include_router(text.router)

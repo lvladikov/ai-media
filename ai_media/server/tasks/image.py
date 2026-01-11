@@ -62,12 +62,13 @@ def run_image_generation(
         )
         
         if success:
+            from . import get_relative_path
             send_update(
                 status="complete",
                 phase="complete",
                 progress=100,
                 message="Image generated successfully",
-                result_path=output_path,
+                result_path=get_relative_path(output_path),
             )
         else:
             send_update(

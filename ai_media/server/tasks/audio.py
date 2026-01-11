@@ -45,8 +45,9 @@ def run_audio_generation(
         )
         
         if success:
+            from . import get_relative_path
             send_update(status="complete", phase="complete", progress=100,
-                       message="Audio generated successfully", result_path=output_path)
+                       message="Audio generated successfully", result_path=get_relative_path(output_path))
         else:
             send_update(status="failed", phase="failed", progress=100,
                        message="Generation failed", error="Audio generation returned False")

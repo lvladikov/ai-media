@@ -6,7 +6,7 @@ AI-Media provides **four ways to interact** with these powerful local models:
 - **CLI** — Direct command-line execution for scripting and automation
 - **Interactive Mode** — Guided Python menus with arrow key navigation (and mouse support on some terminals)
 - **Web Client & Desktop App** — Full-featured React Web Client running in browser or as an Electron app, with real-time resource monitoring and job management
-- **Inference Server** — OpenAI-compatible API for using local models with external tools like VS Code (Continue) and LM Studio
+- **Inference Server** — OpenAI-compatible API for using local models with external tools like VS Code (Continue) and LM Studio. Fow now only limited set of models are supported - text and image generation related - as they are best suited for IDEs like VS Code and plugins like Continue
 
 Under the hood, it wraps libraries like `diffusers`, `transformers`, and `FFmpeg` into a unified Python wrapper. Unit and integration tests verify all functionality.
 
@@ -330,7 +330,7 @@ This project uses the following open-source libraries:
 | [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | FFmpeg bindings for video export | [imageio/imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | High-performance speech recognition | [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) |
 | [langdetect](https://github.com/Mimino666/langdetect) | Automatic language detection | [Mimino666/langdetect](https://github.com/Mimino666/langdetect) |
-| [pycountry](https://github.com/flyerhzm/pycountry) | ISO language standard library | [flyerhzm/pycountry](https://github.com/flyerhzm/pycountry) |
+| [pycountry](https://github.com/pycountry/pycountry) | ISO language standard library | [pycountry/pycountry](https://github.com/pycountry/pycountry) |
 | [rich](https://github.com/Textualize/rich) | Beautiful terminal formatting & syntax highlighting | [Textualize/rich](https://github.com/Textualize/rich) |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) | Interactive CLI history and navigation | [prompt-toolkit/python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) |
 | [ddgs](https://github.com/deedy5/duckduckgo_search) | Internet search for Deep Research | [deedy5/duckduckgo_search](https://github.com/deedy5/duckduckgo_search) |
@@ -355,7 +355,7 @@ This project uses the following open-source libraries:
 - **Flux** by Black Forest Labs - [black-forest-labs/flux](https://github.com/black-forest-labs/flux)
 - **FLUX.2** by Black Forest Labs - [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)
 - **Stable Diffusion XL** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)
-- **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion](https://github.com/runwayml/stable-diffusion)
+- **Stable Diffusion 1.5** by RunwayML - [runwayml/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)
 - **Stable Diffusion 3.5 Medium** by Stability AI - [stabilityai/stable-diffusion-3.5-medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
 - **Stable Diffusion 3.5 Large** by Stability AI - [stabilityai/stable-diffusion-3.5-large](https://huggingface.co/stabilityai/stable-diffusion-3.5-large)
 - **Stable Diffusion 3.5 Large Turbo** by Stability AI - [stabilityai/stable-diffusion-3.5-large-turbo](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo)
@@ -372,7 +372,7 @@ This project uses the following open-source libraries:
 - **ModelScope** by Alibaba - [modelscope/modelscope](https://github.com/modelscope/modelscope)
 - **Zeroscope** by Cerspense - [cerspense/zeroscope](https://huggingface.co/cerspense/zeroscope_v2_576w)
 - **CogVideoX** by THUDM - [THUDM/CogVideo](https://github.com/THUDM/CogVideo)
-- **Wan 2.2** by Alibaba PAI - [Alibaba-PAI/Wan-2.2-T2V-14B](https://huggingface.co/Alibaba-PAI/Wan-2.2-T2V-14B)
+- **Wan 2.2** by Alibaba PAI - [Wan-AI/Wan2.2-T2V-A14B-Diffusers](https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B-Diffusers)
 - **LTX-Video** by Lightricks - [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)
 - **Mochi 1** by Genmo - [genmo/mochi-1-preview](https://huggingface.co/genmo/mochi-1-preview)
 - **HunyuanVideo** by Tencent - [Tencent/HunyuanVideo](https://github.com/Tencent/HunyuanVideo)

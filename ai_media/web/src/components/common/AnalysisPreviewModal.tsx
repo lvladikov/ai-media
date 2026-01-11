@@ -124,7 +124,7 @@ export function AnalysisPreviewModal({
                     <div className="flex items-center justify-center h-full text-tertiary">Loading...</div>
                 ) : (
                     <div
-                        className={`text-sm text-secondary leading-relaxed prose prose-sm dark:prose-invert max-w-none ${wordWrap ? '' : 'whitespace-pre overflow-x-auto'}`}
+                        className={`text-sm text-secondary leading-relaxed prose prose-sm dark:prose-invert max-w-none ${wordWrap ? 'break-all' : 'whitespace-pre overflow-x-auto'}`}
                         style={{ minWidth: wordWrap ? undefined : 'max-content' }}
                     >
                         <MarkdownWithAnsi>{content || ''}</MarkdownWithAnsi>

@@ -79,6 +79,34 @@ async def get_file(file_path: str, download: bool = Query(False, description="Fo
     return FileResponse(full_path)
 
 
+@router.get("/api/media_output/{filename:path}")
+async def get_media_output_file(filename: str, download: bool = Query(False, description="Force download instead of inline preview")):
+    """Serve files from the configured media_output directory with cleaner URLs.
+    
+    Instead of exposing the full file system path like:
+        /api/files/Volumes/.../media-output/image.png
+    
+    This route allows accessing files with just:
+        /api/media_output/image.png
+    """
+    # Always resolve relative to the configured media_output directory
+    full_path = os.path.join(CONFIG["paths"]["media_output"], filename)
+    
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="File not found in media output directory")
+    
+    file_basename = os.path.basename(full_path)
+    
+    if download:
+        return FileResponse(
+            full_path,
+            headers={"Content-Disposition": f"attachment; filename={file_basename}"}
+        )
+    
+    return FileResponse(full_path)
+
+
+
 @router.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Upload a file for use in generation (e.g., img2vid, transform)."""

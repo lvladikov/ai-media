@@ -74,10 +74,11 @@ def run_article_generation(
         )
         
         if result_path:
+            from . import get_relative_path
             # Normalize path to fix mixed slashes
             final_path = os.path.normpath(result_path)
             send_update(status="complete", phase="complete", progress=100,
-                       message="Article generated successfully", result_path=final_path,
+                       message="Article generated successfully", result_path=get_relative_path(final_path),
                        reasoning=generator.last_reasoning)
         else:
             error_msg = getattr(generator, 'last_error', None) or "Article generation returned False"
@@ -204,9 +205,10 @@ def run_code_generation(
                     except ValueError:
                         file_list.append(Path(f).name)
             
+            from . import get_relative_path
             send_update(status="complete", phase="complete", progress=100,
                        message=f"Generated {len(generated_files)} file(s)" if is_multi_file else "Code generated successfully",
-                       result_path=output_path, is_multi_file=is_multi_file, generated_files=file_list if is_multi_file else [],
+                       result_path=get_relative_path(output_path), is_multi_file=is_multi_file, generated_files=file_list if is_multi_file else [],
                        reasoning=generator.last_reasoning)
         else:
             send_update(status="failed", phase="failed", progress=100,

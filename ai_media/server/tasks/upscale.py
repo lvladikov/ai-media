@@ -67,8 +67,9 @@ def run_upscale(
                                              progress_callback=on_progress, force=force, bypass_warning=bypass_warning)
 
         if success:
+            from . import get_relative_path
             send_update(status="complete", phase="complete", progress=100,
-                       message="Upscale completed successfully", result_path=output_path)
+                       message="Upscale completed successfully", result_path=get_relative_path(output_path))
         else:
             send_update(status="failed", phase="failed", progress=100,
                        message="Upscale failed", error="Upscale returned False")

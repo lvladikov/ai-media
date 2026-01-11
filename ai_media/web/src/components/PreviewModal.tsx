@@ -316,7 +316,7 @@ function MarkdownPreview({ url, onLoad, onError }: { url: string; onLoad: () => 
   if (!content) return null;
 
   return (
-    <div ref={containerRef} className="flex-1 h-full overflow-y-auto scrollbar-themed p-8 prose dark:prose-invert prose-slate max-w-none prose-headings:text-primary prose-p:text-secondary prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-primary prose-code:text-primary-300 prose-code:bg-secondary/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-primary prose-pre:border prose-pre:border-border [&_pre>code]:bg-transparent [&_pre>code]:p-0 [&_pre>code]:text-inherit">
+    <div ref={containerRef} className="flex-1 h-full overflow-y-auto scrollbar-themed p-8 prose dark:prose-invert prose-slate max-w-none break-all prose-headings:text-primary prose-p:text-secondary prose-a:text-primary-400 hover:prose-a:text-primary-300 prose-strong:text-primary prose-code:text-primary-300 prose-code:bg-secondary/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-primary prose-pre:border prose-pre:border-border [&_pre>code]:bg-transparent [&_pre>code]:p-0 [&_pre>code]:text-inherit">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
@@ -455,10 +455,25 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
         className="flex-1 overflow-x-auto overflow-y-auto scrollbar-themed w-full h-full relative"
       >
         <pre
-          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm ${wordWrap ? '!whitespace-pre-wrap !break-words w-full' : '!whitespace-pre min-w-full'}`}
-          style={{ fontFamily: 'JetBrains Mono, monospace' }}
+          className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm`}
+          style={{ 
+            fontFamily: 'JetBrains Mono, monospace',
+            whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+            wordBreak: wordWrap ? 'break-all' : 'normal',
+            overflowWrap: wordWrap ? 'anywhere' : 'normal',
+            width: wordWrap ? '100%' : undefined,
+            minWidth: wordWrap ? undefined : '100%',
+          }}
         >
-          <code ref={codeRef} className={`language-${language} block`}>
+          <code 
+            ref={codeRef} 
+            className={`language-${language} block`}
+            style={{
+              whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+              wordBreak: wordWrap ? 'break-all' : 'normal',
+              overflowWrap: wordWrap ? 'anywhere' : 'normal',
+            }}
+          >
             {content}
           </code>
         </pre>

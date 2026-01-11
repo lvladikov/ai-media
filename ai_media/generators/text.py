@@ -58,6 +58,8 @@ COLOR_REFERENCE = (
 
 
 
+
+
 class CancelStopCriteria(StoppingCriteria):
     """Criteria to stop HuggingFace generation when is_cancelled is True."""
     def __init__(self, generator):
@@ -122,7 +124,7 @@ class ArticleGenerator:
         self.is_cancelled = True
         print(f"🛑 Interruption requested for {self.model_name}")
 
-    def translate_text(self, content: str, target_lang: str, source_lang: str = "eng_Latn", model_id: str = "nllb-200-3.3b", keep_loaded: bool = False, is_chat: bool = False):
+    def translate_text(self, content: str, target_lang: str, source_lang: str = "eng_Latn", model_id: str = "nllb-200-3.3b", keep_loaded: bool = False, is_chat: bool = False, on_ready: callable = None):
         """Translate content using selected translation model with intelligent memory management.
         
         Args:
@@ -132,6 +134,7 @@ class ArticleGenerator:
             model_id: Translation model ID (nllb-200-3.3b, alma-13b, qwen3-8b, etc.)
             keep_loaded: If True, keep model in memory after translation (for chat). Default: False
             is_chat: If True, preserves <think> tags in output for chat UI. Default: False (strips reasoning)
+            on_ready: Optional callback called when model is loaded and ready to translate
             
         Returns:
             Translated text or None on failure
@@ -232,6 +235,13 @@ class ArticleGenerator:
                     self.translation_pipeline = translator
                     self.translation_model_id = model_id
                     print(f"   ✅ Model loaded")
+                
+                # Call on_ready callback now that model is loaded
+                if on_ready:
+                    try:
+                        on_ready()
+                    except Exception as e:
+                        print(f"   ⚠️ on_ready callback failed: {e}")
                 
                 # Translate line-by-line to preserve formatting (headers, lists, etc)
                 lines = content.split('\n')
@@ -547,8 +557,10 @@ Provide ONLY the translation, no explanations or additional text.
                 self.progress_callback(status, progress, clean_ui_msg)
             except Exception as e:
                 print(f"⚠️ Progress callback error: {e}")
+            # Skip terminal printing when callback is active to avoid duplicate logs in web UI
+            return
         
-        # Also print to terminal for server logs (with different icon if needed)
+        # Only print to terminal when no progress callback (CLI mode)
         if terminal:
             # Avoid double emojis if message already has one
             if not any(emoji in message for emoji in ["📚", "⏳", "⚠️", "✅", "🛑"]):

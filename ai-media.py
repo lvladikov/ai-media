@@ -854,13 +854,36 @@ Supported Models (Code : Download Size | Description):
                 print(f"   • Models:   Auto-detected from ai-media text models")
                 print(f"   ---------------------------------------------------")
 
-            # Watch specific subdirectories to avoid triggering reloads on output files
-            valid_server_dirs = [
-                "ai_media/server/routes",
-                "ai_media/server/websockets",
-            ]
+            # Watch configuration
+            # Only ignore generating outputs and specific system dirs
+            media_output_dir = CONFIG["paths"].get("media_output", "output")
+            
+            # Uvicorn requires relative paths for excludes.
+            # Convert absolute config path to relative if possible.
+            try:
+                if os.path.isabs(media_output_dir):
+                    media_output_dir = os.path.relpath(media_output_dir, os.getcwd())
+            except ValueError:
+                # If path is on different drive or cannot be relativized, fallback to just the name 
+                # (though this means it might not match if outside cwd, but we only watch cwd anyway)
+                media_output_dir = "output"
 
-            # Print newline before server starts to separate it from any background thread output
+            # Use glob patterns for excludes
+            reload_excludes = [
+                "*.log", 
+                "*.json", # Ignore JSON config/data changes to prevent infinite loops (generated stats etc)
+                ".git/*",
+                ".gemini/*",
+                "**/__pycache__/*",
+                "**/node_modules/*",
+                "ai_media/testing/data/outputs/*",
+                f"{media_output_dir}/*"
+            ]
+            
+            # Watch the entire root directory (current dir) to catch ai-media.py and ai_media/ changes
+            reload_dirs = ["."] if reload_enabled else None
+
+            # Print newline before server starts
             print() 
             
             # Set verbose flag appropriately
@@ -878,7 +901,7 @@ Supported Models (Code : Download Size | Description):
                 print("💡 To stop the server at any time press CTRL+C or send a message through chat 'stop inference server'")
             
             from ai_media.server.app import main as server_main
-            server_main(host=host, port=server_port, reload=reload_enabled, reload_excludes=["*.log", "*.json", "output/*"], reload_dirs=valid_server_dirs if reload_enabled else None)
+            server_main(host=host, port=server_port, reload=reload_enabled, reload_excludes=reload_excludes, reload_dirs=reload_dirs)
             
         finally:
             # Cleanup background processes

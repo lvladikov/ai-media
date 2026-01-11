@@ -209,13 +209,14 @@ def unload_ocr_model():
         gc.collect()
         print("✅ OCR Model unloaded.")
 
-def image_to_text_with_coords(image_path, model_type="florence"):
+def image_to_text_with_coords(image_path, model_type="florence", on_ready=None):
     """
     Extract text AND coordinates using Florence-2 (<OCR_WITH_REGION>).
     
     Args:
         image_path: Input image
         model_type: Must be 'florence' (Qwen-VL doesn't support easy coords)
+        on_ready: Optional callback to trigger when model is loaded.
         
     Returns:
         List of dicts: [{'text': str, 'box': [x1, y1, x2, y2]}, ...]
@@ -226,6 +227,12 @@ def image_to_text_with_coords(image_path, model_type="florence"):
     processor, model = load_ocr_model(model_type)
     if not model:
         raise RuntimeError("OCR model failed to load")
+        
+    if on_ready:
+        try:
+            on_ready()
+        except Exception as e:
+            print(f"⚠️  on_ready callback failed: {e}")
 
     try:
         image = load_image(image_path).convert("RGB")

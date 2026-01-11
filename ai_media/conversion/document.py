@@ -425,7 +425,8 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
                         render_method=render_method,
                         translate_model=kwargs.get("translation_model", "nllb-200-3.3b"),
                         ocr_model=ocr_model,
-                        output_path=output_path
+                        output_path=output_path,
+                        on_ready=kwargs.get("on_translation_ready")
                     )
                     print(f"✅ Saved to {os.path.normpath(output_path)}")
                     return True
@@ -497,7 +498,15 @@ def convert_document(input_path, output_path, target_format=None, ocr_enabled=Fa
             # It loads nothing by default.
             
             gen = ArticleGenerator()
-            translated_content = gen.translate_text(markdown_content, target_lang=kwargs.get("target_language"), source_lang="auto", model_id=kwargs.get("translation_model", "nllb-200-3.3b"), keep_loaded=False)
+            on_ready_callback = kwargs.get("on_translation_ready")
+            translated_content = gen.translate_text(
+                markdown_content, 
+                target_lang=kwargs.get("target_language"), 
+                source_lang="auto", 
+                model_id=kwargs.get("translation_model", "nllb-200-3.3b"), 
+                keep_loaded=False,
+                on_ready=on_ready_callback
+            )
             
             if translated_content:
                 markdown_content = translated_content
