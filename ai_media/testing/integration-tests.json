@@ -165,6 +165,16 @@
       "description": "Generate image with explicit --image-model sdxl flag"
     },
     {
+      "name": "Image - SDXL MLX Fallback to PyTorch",
+      "runOn": "mlx",
+      "command": "-i -p \"Fallback test\" -o ai_media/testing/data/outputs/img_sdxl_mlx_fallback.jpg -s 64x64 --image-model sdxl -mf mlx --bypass-warning --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_sdxl_mlx_fallback.jpg"
+      ],
+      "description": "Test MLX-to-PyTorch auto-fallback when SDXL is requested with MLX framework (SDXL not supported on MLX)"
+    },
+    {
       "name": "Image - SDXL Random Prompt (rndPr)",
       "command": "-i -p \"rndPr\" -o ai_media/testing/data/outputs/img_sdxl_rndpr.jpg -s 64x64 --image-model sdxl --force --unsafe",
       "expectedInputItems": [],
@@ -199,6 +209,16 @@
         "ai_media/testing/data/outputs/img_sdxl_random_prompt.jpg"
       ],
       "description": "Generate image using random prompt trigger 'random prompt'"
+    },
+    {
+      "name": "Image - Z-Image",
+      "timeout": 3600,
+      "command": "-i -p \"A fantasy landscape\" -o ai_media/testing/data/outputs/img_zimage.jpg -s 64x64 --image-model z-image --force --unsafe",
+      "expectedInputItems": [],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/img_zimage.jpg"
+      ],
+      "description": "Generate image using Z-Image Turbo model"
     },
     {
       "name": "Image - SD 3.5 Medium",
@@ -853,6 +873,18 @@
         "ai_media/testing/data/outputs/qwen_edit_lightning.png"
       ],
       "description": "Transform image using Qwen-Image-Edit-Lightning (4-step LoRA model)"
+    },
+    {
+      "name": "Transform - Edit (Z-Image)",
+      "timeout": 3600,
+      "command": "-ti ai_media/testing/data/inputs/sample.jpg -tp \"Make it cybernetic\" -o ai_media/testing/data/outputs/z_edit.jpg -em z-image --force --unsafe",
+      "expectedInputItems": [
+        "ai_media/testing/data/inputs/sample.jpg"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/z_edit.jpg"
+      ],
+      "description": "Transform image using Z-Image Turbo model"
     },
     {
       "name": "Transform - Edit + Remove BG",
@@ -1938,6 +1970,122 @@
         "ai_media/testing/data/outputs/sample_qwen.txt"
       ],
       "description": "Extract text from image using Qwen-VL (High Precision)"
+    },
+    {
+      "name": "Text - Article MPS bfloat16 Precision",
+      "runOn": "mps",
+      "timeout": 600,
+      "command": "-ga -p \"Say hello in exactly 5 words\" --precision-force bfloat16 -o ai_media/testing/data/outputs/article_mps_bf16.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mps_bf16.md"
+      ],
+      "description": "Test article generation with forced bfloat16 precision on MPS"
+    },
+    {
+      "name": "Text - Article MPS float16 Precision",
+      "runOn": "mps",
+      "timeout": 600,
+      "command": "-ga -p \"Say world in exactly 5 words\" --precision-force float16 -o ai_media/testing/data/outputs/article_mps_f16.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mps_f16.md"
+      ],
+      "description": "Test article generation with forced float16 precision on MPS"
+    },
+    {
+      "name": "Text - Article MLX int4 Precision",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-ga -p \"Count from 1 to 5\" --ml-framework mlx --precision-force int4 -o ai_media/testing/data/outputs/article_mlx_int4.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mlx_int4.md"
+      ],
+      "description": "Test article generation using MLX framework with int4 quantization"
+    },
+    {
+      "name": "Text - Article MLX bfloat16 Precision",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-ga -p \"Say the word testing\" --ml-framework mlx --precision-force bfloat16 -o ai_media/testing/data/outputs/article_mlx_bf16.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mlx_bf16.md"
+      ],
+      "description": "Test article generation using MLX framework with bfloat16 precision"
+    },
+    {
+      "name": "Text - Code Gen MLX int4",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-gc \"Python hello world\" --ml-framework mlx --precision-force int4 --force",
+      "expectedStdoutItems": [
+        "print"
+      ],
+      "description": "Test code generation using MLX with int4 quantization"
+    },
+    {
+      "name": "Text - Article CUDA int8 Precision",
+      "runOn": "cuda",
+      "timeout": 600,
+      "command": "-ga -p \"Brief history of AI in 50 words\" --precision-force int8 -o ai_media/testing/data/outputs/article_int8.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_int8.md"
+      ],
+      "description": "Test article generation with int8 quantization on CUDA"
+    },
+    {
+      "name": "Text - Default Framework Check (Mac)",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-ga -p \"Repeat the word: Apple\" -o ai_media/testing/data/outputs/check_mlx.md --force",
+      "expectedStdoutItems": [
+        "MLX Model loaded"
+      ],
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/check_mlx.md"
+      ],
+      "description": "Verify default framework on Mac is MLX (int4) for text models"
+    },
+    {
+      "name": "Text - Forced Torch Check (Mac)",
+      "runOn": "mps",
+      "timeout": 600,
+      "command": "-ga -p \"Repeat the word: Apple\" -mf torch -o ai_media/testing/data/outputs/check_mps.md --force",
+      "expectedStdoutItems": [
+        "Platform: MPS"
+      ],
+      "expectedOutputItems": [
+         "ai_media/testing/data/outputs/check_mps.md"
+      ],
+      "description": "Verify forcing torch (-mf torch) uses MPS"
+    },
+    {
+      "name": "Text - Article MLX int6 Precision",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-ga -p \"Count to 5\" --ml-framework mlx --precision-force int6 -o ai_media/testing/data/outputs/article_mlx_int6.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mlx_int6.md"
+      ],
+      "description": "Test article generation using MLX framework with int6 precision"
+    },
+    {
+      "name": "Text - Article MLX int8 Precision",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-ga -p \"Count to 5\" --ml-framework mlx --precision-force int8 -o ai_media/testing/data/outputs/article_mlx_int8.md --force",
+      "expectedOutputItems": [
+        "ai_media/testing/data/outputs/article_mlx_int8.md"
+      ],
+      "description": "Test article generation using MLX framework with int8 precision"
+    },
+    {
+      "name": "Text - Chat MLX int6",
+      "runOn": "mlx",
+      "timeout": 600,
+      "command": "-c -p \"Say hi\" -pf int6 -mf mlx --force",
+      "expectedStdoutItems": [
+        "MLX Model loaded"
+      ],
+      "description": "Test chat using MLX with int6 precision"
     }
   ]
 }

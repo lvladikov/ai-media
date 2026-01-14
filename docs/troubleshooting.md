@@ -74,3 +74,26 @@ After reinstalling, you should see:
 ```
 🚀 Detected NVIDIA GPU: Using CUDA
 ```
+
+### ❌ Transformers v5 Compatibility (SDXL / MT5Tokenizer)
+**Error**: `ImportError: cannot import name 'MT5Tokenizer' from 'transformers'`
+**Cause**:
+- In `transformers>=5.0.0rc1`, the `MT5Tokenizer` class was removed.
+- However, `diffusers` (and specifically SDXL pipelines like `StableDiffusionXLPipeline`) still relies on this class for text encoding.
+- This creates a hard crash when using recent versions of `transformers` (often pulled in by dependencies like `mlx-lm`).
+
+**Feature: Self-Healing Ephemeral Patch**
+To solve this without forcing users to downgrade dependencies, AI-Media implements an automated, invisible workaround:
+
+1.  **Detection**: On startup, the app checks if `MT5Tokenizer` is missing from your installed `transformers`.
+2.  **Versioning-Safe**: This patch **only** activates if the class is genuinely missing. If a future `transformers` update restores it, the patch does nothing.
+3.  **Ephemeral Shim**:
+    - The app creates a temporary file `tokenization_mt5.py` inside `site-packages/transformers/models/mt5/`.
+    - This file aliases the compatible `T5Tokenizer` to `MT5Tokenizer`.
+4.  **Runtime Cleanliness**:
+    - Immediately after the `diffusers` library imports it, the app **deletes this file** from disk.
+    - An `atexit` handler serves as a backup to ensure cleanup.
+    - **Result**: Your `venv` remains clean and unmodified for standard usage, but the SDXL pipeline works perfectly.
+
+> [!NOTE]
+> You may see a log message: `[System] Transformers v5 detected. applying ephemeral patch...`. This is normal successful operation.

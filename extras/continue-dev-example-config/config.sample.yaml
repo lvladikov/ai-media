@@ -4,6 +4,9 @@ schema: v1
 
 models:
   # AI Media Local Text Models
+  # AI Media - note that quantized models can be used by appending :int4,
+  # :int6, :int8, :float16, :bfloat16, or :float32 the model name
+  # for example: model: qwen-coder-7b:int4
   - name: AI Media (Text/Llama 3.1)
     provider: openai
     model: llama-3.1-8b
@@ -49,6 +52,30 @@ models:
   - name: AI Media (Text/Qwen 3 14B Reasoning)
     provider: openai
     model: qwen3-14b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Text/Qwen 3 Opus 4.5 Distill 8B)
+    provider: openai
+    model: qwen3-opus-4.5-8b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Text/Qwen 3 Opus 4.5 Distill 14B)
+    provider: openai
+    model: qwen3-opus-4.5-14b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Text/Qwen 3 GPT-5.2 Distill 8B)
+    provider: openai
+    model: qwen3-gpt-5.2-8b
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Text/Qwen 3 GPT-5.2 Distill 14B)
+    provider: openai
+    model: qwen3-gpt-5.2-14b
     apiKey: local
     apiBase: http://localhost:8000/v1
 
@@ -158,6 +185,12 @@ models:
   - name: AI Media (Image/FLUX.2 Full)
     provider: openai
     model: flux2-full
+    apiKey: local
+    apiBase: http://localhost:8000/v1
+
+  - name: AI Media (Image/Z-Image)
+    provider: openai
+    model: z-image
     apiKey: local
     apiBase: http://localhost:8000/v1
 

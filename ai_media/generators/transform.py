@@ -13,59 +13,162 @@ from ..utils.system import get_optimal_device_and_dtype, check_resources_and_war
 
 def generate_edit(input_path, prompt, output_path, model_name="default", 
                   guidance_scale=7.5, image_guidance_scale=1.5, steps=50, unsafe=False, 
-                  force=False, bypass_warning=False, progress_callback=None):
+                  force=False, bypass_warning=False, progress_callback=None,
+                  use_mlx=None, precision=None):
     """
-    Edit an existing image based on instructions using InstructPix2Pix.
+    Edit an existing image based on instructions.
     Args:
         input_path: Path to source image
         prompt: Edit instruction (e.g., "make it a watercolor painting")
         output_path: Path to save edited image
-        model_name: 'instruct-pix2pix' or 'instruct-pix2pix-sdxl'
+        model_name: 'instruct-pix2pix', 'qwen-image-edit', or 'z-image-edit'
         guidance_scale: Text guidance strength
         image_guidance_scale: Image guidance strength
         steps: Number of inference steps
         unsafe: Disable NSFW safety checker
         force: Skip confirmation prompts (overwrites and warnings)
         bypass_warning: Specifically skip resource warning prompts
+        use_mlx: Force usage of MLX backend (macOS only)
+        precision: Force specific precision/quantization (e.g., 'int4', 'float16')
         
     Returns:
         True on success, False on failure
     """
+    import os
+    import sys
     import time
+    import numpy as np
+    from PIL import Image
 
+    # Determine framework
+    is_mac = sys.platform == "darwin"
+    if use_mlx is None:
+        use_mlx = is_mac  # Default to MLX on Mac for Z-Image/Flux if supported
+    
+    # Resolve Model ID
+    model_id = get_model_id(model_name, EDIT_MODELS)
+    
+    # MLX Branch
+    if use_mlx and is_mac and ("z-image" in model_name.lower() or "zimage" in model_name.lower()):
+        try:
+            from mflux.models.z_image.variants.turbo.z_image_turbo import ZImageTurbo
+            # from mflux.utils.optimal_device import get_optimal_device # Not needed/doesn't exist
+            from ..models import get_mlx_model_id
+            
+            print(f"🍎 Using MLX Backend for Z-Image Edit")
+            
+            # Setup precision
+            if precision is None:
+                precision = "int4"  # Default for MLX
+                
+            quantize = None
+            if precision == "int4": quantize = 4
+            elif precision == "int8": quantize = 8
+            
+            # Resolve ID (e.g. use filipstrand repo for 4-bit)
+            mlx_model_id = get_mlx_model_id(model_id, precision)
+            
+            # Load Model
+            print(f"⏳ Loading Z-Image Turbo (MLX)...")
+            mlx_model = ZImageTurbo(model_path=mlx_model_id, quantize=quantize)
+            
+            # Load and Resize Image
+            img = Image.open(input_path).convert("RGB")
+            # MLX models often prefer multiples of 16
+            w, h = img.size
+            new_w, new_h = (w // 16) * 16, (h // 16) * 16
+            if (new_w, new_h) != (w, h):
+                print(f"   ℹ️  Resizing input to {new_w}x{new_h} (multiple of 16)")
+                img = img.resize((new_w, new_h), Image.LANCZOS)
+
+            # Patch Tqdm for progress
+            from tqdm import tqdm as real_tqdm
+            outer_progress_callback = progress_callback
+            
+            # Re-use the TqdmWrapper logic from image.py if possible, but here we define it inline for simplicity
+            class TqdmWrapper:
+                def __init__(self, iterable=None, desc=None, total=None, *args, **kwargs):
+                    self.iterable = iterable
+                    self.n = 0
+                    self.total = total or (len(iterable) if iterable else None)
+                    self._start_time = time.time()
+                    self._tqdm = real_tqdm(iterable, desc=desc, total=total, *args, **kwargs)
+                def _report(self):
+                    if outer_progress_callback and self.total:
+                        pct = min(100, int((self.n / self.total) * 100))
+                        elapsed = time.time() - self._start_time
+                        eta_str = ""
+                        if self.n > 0:
+                            eta_secs = int((self.total - self.n) * (elapsed / self.n))
+                            eta_str = f", ETA: {eta_secs//60:02d}:{eta_secs%60:02d}"
+                        outer_progress_callback(pct, f"Editing: {pct}%{eta_str}")
+                def update(self, n=1):
+                    self.n += n
+                    self._tqdm.update(n)
+                    self._report()
+                def __iter__(self):
+                    for item in self._tqdm:
+                        yield item
+                        self.n += 1
+                        self._report()
+                def __enter__(self): return self
+                def __exit__(self, *args): self._tqdm.close()
+                def close(self): self._tqdm.close()
+                def __getattr__(self, name): return getattr(self._tqdm, name)
+
+            # Apply patch
+            import mflux.models.z_image.variants.turbo.z_image_turbo
+            mflux.models.z_image.variants.turbo.z_image_turbo.tqdm = TqdmWrapper
+
+            # Generate (Image-to-Image / Editing)
+            # mflux ZImageTurbo uses img2img if image_path is provided
+            print(f"✨ Applying edits with Z-Image (MLX)...")
+            zimage_steps = steps if steps != 50 else 9
+            
+            output_image = mlx_model.generate_image(
+                prompt=prompt,
+                image_path=input_path, # Pass path directly
+                num_inference_steps=zimage_steps,
+                seed=int(time.time() % 1000000)
+            )
+            
+            output_image.image.save(output_path)
+            print(f"✅ Edited image saved to {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ MLX Z-Image Edit failed: {e}")
+            print(f"   Falling back to PyTorch...")
+            use_mlx = False
+    elif use_mlx and is_mac:
+        print(f"⚠️  Model '{model_name}' not supported on MLX (or not implemented). Falling back to PyTorch.")
+
+    # PyTorch Branch
+    import torch
+    from diffusers import StableDiffusionInstructPix2PixPipeline, StableDiffusionXLInstructPix2PixPipeline
+    from diffusers.utils import load_image
+    
+    # Helper for progress tracking
     class GlobalProgressTracker:
         def __init__(self, total_steps, start_time=None):
             self.total_steps = total_steps
             self.current_step = 0
             self.start_time = start_time or time.time()
-            self.last_update_ts = 0
             
-        def update(self, step_increment=1, model_desc=""):
-            self.current_step += step_increment
+        def update(self, n=1, model_desc="Processing"):
+            self.current_step += n
+            percent = min(100, int((self.current_step / self.total_steps) * 100))
             
-            # Throttle updates to ~2 times per second to avoid flooding logs
-            now = time.time()
-            if now - self.last_update_ts < 0.5 and self.current_step < self.total_steps:
-                return None
-            self.last_update_ts = now
-            
-            elapsed = now - self.start_time
+            # Simple ETA
+            elapsed = time.time() - self.start_time
             if self.current_step > 0:
-                avg_time_per_step = elapsed / self.current_step
-                remaining_steps = self.total_steps - self.current_step
-                eta_seconds = int(remaining_steps * avg_time_per_step)
-                eta_str = f"{eta_seconds//60}m {eta_seconds%60}s" if eta_seconds > 60 else f"{eta_seconds}s"
-            else:
-                eta_str = "Calculating..."
-                
-            percent = min(99, int((self.current_step / self.total_steps) * 100))
-            return percent, f"{model_desc}: {percent}% | Step {self.current_step}/{self.total_steps} | ETA: {eta_str}"
-    import torch
-    from diffusers import StableDiffusionInstructPix2PixPipeline, StableDiffusionXLInstructPix2PixPipeline
-    from diffusers.utils import load_image
-    
-    # Resolve Model ID
-    model_id = get_model_id(model_name, EDIT_MODELS)
+                avg_time = elapsed / self.current_step
+                remaining = max(0, self.total_steps - self.current_step)
+                eta_secs = int(remaining * avg_time)
+                mins, secs = divmod(eta_secs, 60)
+                msg = f"{model_desc}: {percent}%, ETA: {mins:02d}:{secs:02d}"
+                return percent, msg
+            return percent, f"{model_desc}: {percent}%"
     
     print(f"🎨 Editing Image")
     print(f"   Model:     {model_id}")
@@ -109,7 +212,50 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 progress_callback(pct, msg)
 
         # Initialize Pipeline
-        if "qwen-image-edit-lightning" in model_name.lower():
+        if "z-image-edit" in model_name.lower():
+            # ----------------------------------------------------------------
+            # Z-Image Turbo (PyTorch) - Dedicated Img2Img Pipeline
+            # ----------------------------------------------------------------
+            from diffusers import ZImageImg2ImgPipeline
+            zimage_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
+            
+            print(f"   ℹ️  Loading Z-Image Turbo Img2Img Pipeline (PyTorch)...")
+            if progress_callback: progress_callback(0, "Loading Z-Image Img2Img Pipeline...")
+            
+            pipe = ZImageImg2ImgPipeline.from_pretrained(
+                model_id,
+                torch_dtype=zimage_dtype
+            )
+            
+            if device.type == "cuda" or device.type == "mps":
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe = pipe.to(device)
+            
+            # Z-Image optimal steps
+            zimage_steps = steps if steps != 50 else 9
+            global_tracker = GlobalProgressTracker(zimage_steps, start_time=time.time())
+            
+            start_msg = f"✨ Applying edits with Z-Image... (Steps: {zimage_steps})"
+            print(start_msg)
+            if progress_callback: progress_callback(0, start_msg)
+            
+            with torch.inference_mode():
+                output = pipe(
+                    prompt=prompt,
+                    image=image,
+                    num_inference_steps=zimage_steps,
+                    guidance_scale=guidance_scale if guidance_scale != 7.5 else 3.5,
+                    callback=diffusers_callback,
+                    callback_steps=1
+                )
+            
+            result = output.images[0]
+            result.save(output_path)
+            print(f"✅ Edited image saved to {output_path}")
+            return True
+
+        elif "qwen-image-edit-lightning" in model_name.lower():
             # ----------------------------------------------------------------
             # Qwen-Image-Edit-2512-Lightning (LoRA-based 4-step model)
             # This is a distilled LoRA model that loads on top of base 2511

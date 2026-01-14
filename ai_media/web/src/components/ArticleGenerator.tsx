@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { generateArticle, useModels } from '../hooks/useApi';
 import { API_BASE_URL } from '../config';
-import { FileText, Loader2, Globe, AlertTriangle } from 'lucide-react';
+import { FileText, Loader2, Globe, AlertTriangle, HelpCircle } from 'lucide-react';
+import { getDynamicRam } from '../utils/modelResources';
 import { TranslateOptions } from './common/TranslateOptions';
 
 import { ValidationTooltip } from './common/ValidationTooltip';
@@ -18,24 +19,32 @@ import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
 
 // Display names matching CLI
-const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
-  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)', vram: '~7GB' },
-  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)', vram: '~14GB' },
-  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
-  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
-  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
-  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)', vram: '~8GB' },
-  'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
-  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning - 16GB VRAM)', vram: '~16GB' },
-  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning - 28GB VRAM)', vram: '~28GB' },
-  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
-  'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
+// Display names matching CLI (vram removed, calculated dynamically)
+// Display names matching CLI (vram removed, calculated dynamically)
+const MODEL_DISPLAY_INFO: Record<string, { label: string }> = {
+  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)' },
+  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)' },
+  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)' },
+  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)' },
+  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)' },
+  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable, 🔒 Gated)' },
+  'mistral-nemo-12b': { label: 'Mistral Nemo 12B' },
+  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning)' },
+  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning)' },
+  'qwen3-opus-4.5-8b': { label: 'Qwen 3 Opus 4.5 Distill (8B)' },
+  'qwen3-opus-4.5-14b': { label: 'Qwen 3 Opus 4.5 Distill (14B)' },
+  'qwen3-gpt-5.2-8b': { label: 'Qwen 3 GPT-5.2 Distill (8B)' },
+  'qwen3-gpt-5.2-14b': { label: 'Qwen 3 GPT-5.2 Distill (14B)' },
+  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)' },
+  'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B' },
 };
 
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
-  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b', 'qwen3-coder-30b', 'qwen-coder-32b'
+  'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b',
+  'qwen3-opus-4.5-14b', 'qwen3-opus-4.5-8b', 'qwen3-gpt-5.2-14b', 'qwen3-gpt-5.2-8b',
+  'qwen3-coder-30b', 'qwen-coder-32b'
 ];
 
 
@@ -44,6 +53,8 @@ export function ArticleGenerator() {
   const { addJob } = useAppStore();
   const [topic, setTopic] = useState('');
   const [model, setModel] = useState('');
+  const [precision, setPrecision] = useState('auto');
+  const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
   const [format, setFormat] = useState('md');
   const [length, setLength] = useState("quick");
   const [online, setOnline] = useState(false);
@@ -237,32 +248,93 @@ export function ArticleGenerator() {
         </div>
 
         {/* Model Selector */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-secondary flex items-center">
-            Model
-            <ModelHelpLink section="text" />
-          </label>
-          <select
-            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            {!model && <option value="">Loading...</option>}
-            {sortedModels.map((name) => {
-              const info = MODEL_DISPLAY_INFO[name];
-              return (
-                <option key={name} value={name}>
-                  {info ? `${info.label} ${info.vram}` : name}
-                </option>
-              );
-            })}
-          </select>
-          {model === 'deepseek-r1-llama-70b' && (
-            <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
-              <AlertTriangle size={12} />
-              <span>Requires 40GB+ VRAM</span>
+        {/* Model Selector Section */}
+        <div className="space-y-4">
+          
+            {/* 1. Framework Selector (First on list, hidden if not Mac) */}
+          <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
+             <label className="text-sm font-medium text-secondary block">Platform</label>
+            <select
+              className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+              value={framework}
+              onChange={(e) => setFramework(e.target.value)}
+              disabled={isLoading}
+              title="Inference Framework - Use MLX for best performance on Mac"
+            >
+              <option value="mlx">MLX (Native Mac)</option>
+              <option value="torch">PyTorch (MPS)</option>
+            </select>
+          </div>
+
+          {/* 2. Precision Selector */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-secondary">Precision</label>
+              <button
+                onClick={() => useAppStore.getState().openHelpSection('precision')}
+                className="text-tertiary hover:text-brand-500 transition-colors"
+                title="Learn about precision options"
+              >
+                <HelpCircle size={14} />
+              </button>
             </div>
-          )}
+            <select
+              className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+              value={precision}
+              onChange={(e) => setPrecision(e.target.value)}
+              disabled={isLoading}
+              title="Model precision - affects speed and memory usage"
+            >
+              <option value="auto">
+                {/* Dynamic default label based on Framework */}
+                {(() => {
+                  const isMac = navigator.userAgent.toLowerCase().includes('mac');
+                  const isMlx = framework === 'mlx' || (framework === 'auto' && isMac);
+                  return `Auto (${isMlx ? 'int4 - MLX Default' : 'bfloat16 - Default'})`;
+                })()}
+              </option>
+              <option value="int4">int4 (4-bit, Fast)</option>
+              <option value="int6">int6 (6-bit, Balanced Speed)</option>
+              <option value="int8">int8 (8-bit, Balanced Quality)</option>
+              <option value="float16">float16 (Half)</option>
+              <option value="bfloat16">bfloat16 (Brain Float)</option>
+              <option value="float32">float32 (Full)</option>
+            </select>
+          </div>
+
+          {/* 3. Model Selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-secondary flex items-center">
+              Model
+              <ModelHelpLink section="article" />
+            </label>
+            <select
+              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isLoading}
+            >
+              {!model && <option value="">Loading...</option>}
+              {sortedModels.map((name) => {
+                const info = MODEL_DISPLAY_INFO[name];
+                // Use shared utility with current precision/framework state
+                const vram = getDynamicRam(name, precision, framework);
+                // Add warning if RAM is very high (e.g. > 32GB)
+                const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
+                return (
+                  <option key={name} value={name}>
+                    {info ? `${isHighRam ? '⚠️ ' : ''}${info.label} (${vram})` : name}
+                  </option>
+                );
+              })}
+            </select>
+            {model === 'deepseek-r1-llama-70b' && (
+              <div className="flex items-center gap-2 text-amber-400 text-xs mt-1">
+                <AlertTriangle size={12} />
+                <span>Requires 40GB+ VRAM</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Format & Length */}
@@ -289,9 +361,10 @@ export function ArticleGenerator() {
               value={length}
               onChange={(e) => setLength(e.target.value)}
             >
-              <option value="quick">Quick</option>
-              <option value="standard">Standard</option>
-              <option value="detailed">Detailed</option>
+              <option value="quick">Quick (~500 words)</option>
+              <option value="standard">Standard (~1500 words)</option>
+              <option value="detailed">Detailed (~3000 words)</option>
+              <option value="exhaustive">Exhaustive (~10000 words)</option>
             </select>
           </div>
         </div>

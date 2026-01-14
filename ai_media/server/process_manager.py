@@ -59,6 +59,13 @@ def _child_wrapper(target: Callable, args: Tuple, progress_queue: Queue, job_id:
     """Wrapper that runs in child process with signal handling."""
     _init_child()
     
+    # Apply Transformers v5 patch early, before any job imports diffusers
+    # This is critical for SDXL and other models that need MT5Tokenizer
+    try:
+        from ai_media.utils.transformers_patch import ensure_patch_applied
+        ensure_patch_applied()
+    except Exception:
+        pass  # Don't fail if patch unavailable
     
     # Redirect stdout/stderr to capture logs
     if progress_queue:

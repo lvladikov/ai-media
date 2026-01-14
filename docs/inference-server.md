@@ -230,9 +230,83 @@ To see the exact model IDs to use in your configuration, you can:
 **Recommended Models for Image Generation:**
 - `flux`: FLUX.1 (Schnell) - Fast and high quality
 - `sdxl`: SDXL Turbo - Very fast
+- `z-image`: Z-Image Turbo (Alibaba) - Fast (9 steps), MLX-native
 - `sd3.5-large`: Stable Diffusion 3.5 Large
 
 ---
+
+## Precision & Framework Control
+
+You can control the model precision (quantization level) directly in the model name using the `model:precision` syntax. This is useful for optimizing memory usage and speed.
+
+### Model:Precision Syntax
+
+Append a colon and precision suffix to any model name:
+
+```
+model_name:precision
+```
+
+**Available Precisions:**
+- `int4` - 4-bit quantization (fastest, ~95% quality, lowest memory)
+- `int6` - 6-bit quantization (balanced speed, ~97% quality, MLX only)
+- `int8` - 8-bit quantization (balanced quality, ~98% quality)
+- `float16` - Half precision (full quality, standard)
+- `bfloat16` - Brain floating point (full quality, recommended for LLMs)
+- `float32` - Full precision (reference quality, highest memory)
+
+### Examples
+
+**Continue config.yaml:**
+```yaml
+models:
+  - name: AI Media (Llama 8B - 4bit Fast)
+    provider: openai
+    model: llama-3.1-8b:int4
+    apiBase: http://localhost:8000/v1
+    apiKey: local
+    
+  - name: AI Media (Qwen Coder - High Quality)
+    provider: openai
+    model: qwen-coder-14b:bfloat16
+    apiBase: http://localhost:8000/v1
+    apiKey: local
+```
+
+**cURL:**
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "deepseek-r1-qwen-7b:int8", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+### Platform Support
+
+| Precision | CUDA | MPS (PyTorch) | MLX (Mac) |
+|-----------|------|---------------|-----------|
+| `float32` | ✅ | ✅ | ✅ |
+| `bfloat16` | ✅ (Ampere+) | ✅ | ✅ |
+| `float16` | ✅ | ✅ | ✅ |
+| `int8` | ✅ | ⚠️ Experimental | ✅ |
+| `int6` | ❌ | ❌ | ✅ |
+| `int4` | ✅ | ❌ (use MLX) | ✅ |
+
+> [!TIP]
+> [!TIP]
+> **Mac Users**: 
+> *   **For Maximum Performance (Recommended)**: Use MLX for quantized models to get the fastest tokens/sec.
+>     ```bash
+>     python ai-media.py --inference-server --ml-framework mlx
+>     ```
+> *   **For Compatibility**: Use PyTorch (MPS) if you encounter specific model issues or need float16 precision.
+>     ```bash
+>     python ai-media.py --inference-server --ml-framework torch
+>     ```
+>
+> **Windows / Linux Users**: The server will always use **PyTorch (CUDA/CPU)**. The `--ml-framework` flag is ignored on these platforms as MLX is Apple Silicon exclusive.
+
+---
+
 
 ## Image Generation via Chat
 
@@ -310,6 +384,10 @@ When using the Chat API for image generation, you can specify generation paramet
 | **Width** | `width`, `w` | Integer | 1024 |
 | **Height** | `height`, `h` | Integer | 1024 |
 | **Resolution** | `resolution`, `size`, `res` | String (e.g. "1024x1024", "4k", "5k", "1080p") | "1024x1024" |
+
+
+> [!NOTE]
+> **Z-Image ignores negative prompts and CFG.** Use "without" or "avoid" phrases in your positive prompt instead (e.g., "a landscape without people"). CFG is always 0 internally.
 
 #### Format 1: JSON Style (Robust)
 Append a JSON-like object at the end of your prompt. Keys do not need strict quoting if simple.

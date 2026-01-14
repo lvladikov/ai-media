@@ -38,7 +38,6 @@ export function useResourceMonitor() {
       }
 
       // Determine correct SSE URL
-      // Determine correct SSE URL
       let sseBaseUrl = API_BASE();
       if (!sseBaseUrl) {
         console.error("API_BASE is empty despite init check!");
@@ -115,7 +114,6 @@ export function useJobSocket() {
         reconnectTimeoutRef.current = null;
       }
 
-      // Create WebSocket connection
       // Create WebSocket connection
       // Use string cast to avoid TS getting confused if API_BASE is empty literal
       const baseStr = API_BASE();
@@ -210,6 +208,8 @@ export async function generateImage(params: {
   steps?: number;
   guidance_scale?: number;
   negative_prompt?: string;
+  framework?: string;
+  precision?: string;
   force?: boolean;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/image`, {
@@ -260,8 +260,11 @@ export async function generateArticle(params: {
   max_images?: number;
   translate?: boolean;
   target_language?: string;
+
   translation_model?: string;
   output_filename?: string;
+  precision?: string;
+  framework?: string;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/article`, {
     method: 'POST',
@@ -274,7 +277,10 @@ export async function generateArticle(params: {
 export async function generateCode(params: {
   prompt: string;
   output_name?: string;
+
   model?: string;
+  precision?: string;
+  framework?: string;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/code`, {
     method: 'POST',

@@ -34,7 +34,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - Flexible resolution parsing (strings like "720p", "4k", "1920x1080", or objects like `{w:1920, h:1080}`)
     - Smart time parsing ("1h50m", "15s", `{m:2, s:30}`)
 - 🚀 **Hardware Accelerated** - Auto-detects and optimizes for:
-    - 🍏 **Apple Silicon** (MPS / Metal)
+    - 🍏 **Apple Silicon** (MPS / Metal + **MLX** for native acceleration)
     - 🟢 **NVIDIA GPUs** (CUDA + BFloat16 on RTX 30xx+ / Float16 on older)
     - 🟡 **Codec Analysis Tool** - Verify your system's hardware and software encoding limits. See [Codec Analysis Tool](docs/testing.md#codec-analysis-tool).
     - 💻 **Performance Tracking** - To improve estimation accuracy, the script creates a `performance.json` file in its directory. This file is **local only**. See [Performance Tracking](docs/performance-tracking.md).
@@ -44,7 +44,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
 
 
 > [!NOTE]
-> **Performance Reality (2025):** NVIDIA GPUs with CUDA currently deliver the fastest AI processing due to a mature ecosystem refined since 2006. However, **with optimizations in this script, all operations run successfully on Apple Silicon/MPS—just behind NVIDIA performance**. See Mac-specific tweaks in [Image Models](docs/image-generation.md#models), [Video Models](docs/video-generation.md#models), and [Upscaling](docs/upscaling.md#options). Currently, bfloat16 support on MPS is incomplete (causes hangs), so this script enforces float32 precision—doubling memory usage but ensuring stability. Future bfloat16 improvements in PyTorch and Apple Silicon are expected, which would mean less RAM usage while maintaining great precision. Apple's unified memory architecture already provides advantages for memory-heavy tasks and energy efficiency.
+> **Performance Reality (2026):** NVIDIA GPUs with CUDA currently deliver the fastest AI processing due to a mature ecosystem refined since 2006. However, **Apple Silicon now has two acceleration paths**: PyTorch/MPS (universal compatibility) and **MLX** (native Apple Silicon, 2-4x faster for text/audio/image). See [Precisions Explained](docs/precisions-explained.md) for details. MLX 4-bit models run 7B LLMs in <5GB RAM at 65+ tokens/sec. Apple's unified memory architecture provides advantages for memory-heavy tasks and energy efficiency. See Mac-specific tweaks in [Image Models](docs/image-generation.md#models), [Video Models](docs/video-generation.md#models), and [Upscaling](docs/upscaling.md#options).
 
 
 ## Prerequisites
@@ -60,6 +60,7 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **diffusers**: State-of-the-art Image & Video generation pipelines
     - **transformers**: Audio generation & text processing models
     - **torch**: Core deep learning framework & hardware acceleration (CUDA/MPS)
+    - **mlx**: Native Apple Silicon ML framework - `mlx`, `mlx-lm`, `mlx-vlm`, `mlx-whisper`, `mflux`, `soundfile` for native MLX acceleration
     - **accelerate**: Optimization for efficient large model loading
     - **bitsandbytes**: 4-bit quantization for reducing VRAM usage (FLUX.2, LTX)
     - **opencv-python**: Video frame processing & manipulation
@@ -265,7 +266,14 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | `-npt, --no-performance-tracking` | Disable creating/updating `performance.json` and time estimates. [Read more](docs/performance-tracking.md). |
 | `--clear-data-output` | Clear `testing/data/outputs` folder. |
 | `--clear-media-output` | Clear configured `media_output` folder. |
-| `--clear-all` | Clear both `testing/data/outputs` and configured `media_output` folders. |
+| `--clear-all-outputs` | Clear both `testing/data/outputs` and configured `media_output` folders. |
+
+### Advanced Core Options
+
+| Option | Description |
+| :--- | :--- |
+| `-pf, --precision-force` | Force specific precision density. Options: `int4`, `int6` (MLX only), `int8`, `float16`, `bfloat16`, `float32`. Useful for testing quality/RAM trade-offs or forcing higher precision on capable hardware. |
+| `-mf, --ml-framework` | Force the specific ML backend (Apple Silicon Only). Options: `mlx` (Native Apple Silicon, faster for Text/Whisper) or `torch` (PyTorch MPS, faster for Images/Video). |
 
 ## Quick Examples per Feature
 
@@ -275,7 +283,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | **Video** | `python ai-media.py -v -p "Ocean waves" -l 5s` |
 | **Audio** | `python ai-media.py -a -p "Lo-fi beat" -l 30s` |
 | **Article** | `python ai-media.py -ga -p "Future of AI"` |
-| **Research** | `python ai-media.py -gr -p "SpaceX news 2025"` |
+| **Research** | `python ai-media.py -gr -p "SpaceX news 2026"` |
 | **Chat** | `python ai-media.py -c -chm deepseek-r1-llama-8b` |
 | **Code** | `python ai-media.py -gc "Python script to resize images"` |
 | **Describe** | `python ai-media.py -gd -ii photo.jpg` |
@@ -349,6 +357,12 @@ This project uses the following open-source libraries:
 | [sse-starlette](https://github.com/sysid/sse-starlette) | Server-Sent Events (SSE) for real-time monitoring | [sysid/sse-starlette](https://github.com/sysid/sse-starlette) |
 | [websockets](https://github.com/python-websockets/websockets) | WebSocket protocol implementation for Chat | [python-websockets/websockets](https://github.com/python-websockets/websockets) |
 | [peft](https://github.com/huggingface/peft) | Parameter-Efficient Fine-Tuning for LoRA loading | [huggingface/peft](https://github.com/huggingface/peft) |
+| [mlx](https://github.com/ml-explore/mlx) | Apple Silicon ML framework (macOS only) | [ml-explore/mlx](https://github.com/ml-explore/mlx) |
+| [mlx-lm](https://github.com/ml-explore/mlx-examples) | MLX text model loading & generation | [ml-explore/mlx-examples](https://github.com/ml-explore/mlx-examples) |
+| [mlx-vlm](https://github.com/Blaizzy/mlx-vlm) | MLX vision-language models | [Blaizzy/mlx-vlm](https://github.com/Blaizzy/mlx-vlm) |
+| [mlx-whisper](https://github.com/ml-explore/mlx-examples) | MLX Whisper implementation | [ml-explore/mlx-examples](https://github.com/ml-explore/mlx-examples) |
+| [mflux](https://github.com/filipstrand/mflux) | MLX Flux image generation | [filipstrand/mflux](https://github.com/filipstrand/mflux) |
+| [soundfile](https://github.com/bastibe/python-soundfile) | Audio file I/O for Whisper | [bastibe/python-soundfile](https://github.com/bastibe/python-soundfile) |
 
 **AI Models used:**
 
@@ -362,6 +376,7 @@ This project uses the following open-source libraries:
 - **Qwen-Image** (Text-to-Image, best text rendering) - [Qwen/Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) (v2512)
 - **Qwen-Image-Lightning** (Fast 8-step Image Gen) - [lightx2v/Qwen-Image-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-2512-Lightning)
 - **Qwen-Image-4bit** (CUDA 4-bit Image Gen) - [ovedrive/qwen-image-4bit](https://huggingface.co/ovedrive/qwen-image-4bit)
+- **Z-Image Turbo** (Alibaba, Fast 9-step Image Gen) - [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
 - **Qwen-Image-Edit** (Image editing) - [Qwen/Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)
 - **Qwen-Image-Edit-Lightning** (Fast 2512 Edit) - [lightx2v/Qwen-Image-Edit-2512-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2512-Lightning)
 - **Qwen-Coder** (Code Generation) - [Qwen/Qwen2.5-Coder-32B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct)

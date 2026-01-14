@@ -13,26 +13,29 @@ import { PreviewModal } from './PreviewModal';
 import { ErrorAlert } from './common/ErrorAlert';
 import { ModelHelpLink } from './common/ModelHelpLink';
 import { formatDuration } from '../utils/formatTime';
+import { getDynamicRam } from '../utils/modelResources';
+import { HelpCircle } from 'lucide-react';
 
 // Display names and info matching CLI exactly
-const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string; note?: string }> = {
-  'sd3.5-turbo': { label: 'SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated)', vram: '~19GB' },
-  'sdxl': { label: 'SDXL Turbo (Fast, no login)', vram: '~8GB' },
-  'sd-1.5': { label: 'SD 1.5 (Lightweight, Negative Prompt)', vram: '~4GB' },
-  'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, Negative Prompt, 🔒 Gated)', vram: '~10GB' },
-  'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, Negative Prompt, 🔒 Gated)', vram: '~19GB' },
+const MODEL_DISPLAY_INFO: Record<string, { label: string }> = {
+  'sd3.5-turbo': { label: 'SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated)' },
+  'sdxl': { label: 'SDXL Turbo (Fast, no login)' },
+  'z-image': { label: 'Z-Image Turbo (Alibaba, Fast 9 Steps)' },
+  'sd-1.5': { label: 'SD 1.5 (Lightweight, Negative Prompt)' },
+  'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, Negative Prompt, 🔒 Gated)' },
+  'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, Negative Prompt, 🔒 Gated)' },
 
-  'qwen-image-auto': { label: 'Qwen 2.5 Image (High Quality, Negative Prompt)', vram: '~20-40GB' },
-  'qwen-image-lightning': { label: 'Qwen 2.5 Image (Lightning, Fast)', vram: '~40GB' },
-  'qwen-image-4bit': { label: 'Qwen 2.5 Image (4-bit Lite, Negative Prompt, CUDA only)', vram: '~20GB' },
-  'flux': { label: 'Flux Schnell (High Quality, Slow on Mac, 🔒 Gated)', vram: '~12GB' },
-  'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac, 🔒 Gated)', vram: '~16GB' },
-  'flux2': { label: 'FLUX.2 (4-bit quantized, CUDA only, 🔒 Gated)', vram: '~12GB' },
-  'flux2-full': { label: 'FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!, 🔒 Gated)', vram: '~65GB' },
+  'qwen-image-auto': { label: 'Qwen 2.5 Image (High Quality, Negative Prompt)' },
+  'qwen-image-lightning': { label: 'Qwen 2.5 Image (Lightning, Fast)' },
+  'qwen-image-4bit': { label: 'Qwen 2.5 Image (4-bit Lite, Negative Prompt, CUDA only)' },
+  'flux': { label: 'Flux Schnell (High Quality, 🔒 Gated)' },
+  'flux-dev': { label: 'Flux Dev (Professional, Very Slow on Mac, 🔒 Gated)' },
+  'flux2': { label: 'FLUX.2 (4-bit quantized, CUDA only, 🔒 Gated)' },
+  'flux2-full': { label: 'FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!, 🔒 Gated)' },
 };
 
 const MODEL_ORDER = [
-  'sd3.5-turbo', 'sdxl', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
+  'sd3.5-turbo', 'sdxl', 'z-image', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
   'qwen-image-auto', 'qwen-image-lightning', 'qwen-image-4bit', 'flux', 'flux-dev', 'flux2', 'flux2-full'
 ];
 
@@ -45,6 +48,9 @@ export function ImageGenerator() {
   const [steps, setSteps] = useState(4); // SD 3.5 Turbo uses 4 steps by default
   const [guidanceScale, setGuidanceScale] = useState(0); // SD 3.5 Turbo uses 0
   const [negativePrompt, setNegativePrompt] = useState("");
+  const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
+  const [precision, setPrecision] = useState("auto");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -130,6 +136,8 @@ export function ImageGenerator() {
         steps,
         guidance_scale: guidanceScale,
         negative_prompt: negativePrompt,
+        framework: framework === 'auto' ? undefined : framework,
+        precision: precision === 'auto' ? undefined : precision,
         force,
       });
 
@@ -158,7 +166,6 @@ export function ImageGenerator() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    // Check for High Resource models that block the CLI
     // Check for High Resource models that block the CLI
     // "qwen-image-auto" (resolves to heavy models), "flux2-full", "flux-dev" often trigger high-RAM/VRAM warnings
     const highResourceModels = ['qwen-image-auto', 'qwen-image-4bit', 'qwen-image-lightning', 'flux2-full'];
@@ -331,39 +338,102 @@ export function ImageGenerator() {
         </div>
 
         {/* Model Selector */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-secondary flex items-center">
-            Model
-            <ModelHelpLink section="image" />
-          </label>
-          <select
-            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            {sortedModels.map((name) => {
-              const info = MODEL_DISPLAY_INFO[name];
-              return (
-                <option key={name} value={name}>
-                  {info ? `${info.label} ${info.vram}` : name}
-                </option>
-              );
-            })}
-          </select>
+        {/* Model Selector Section */}
+        <div className="space-y-4">
+          
+          {/* 1. Framework Selector (First on list, hidden if not Mac) */}
+          <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
+             <label className="text-sm font-medium text-secondary block">Platform</label>
+            <select
+              className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+              value={framework}
+              onChange={(e) => setFramework(e.target.value)}
+              disabled={isLoading}
+              title="Inference Framework - Use MLX for best performance on Mac"
+            >
+              <option value="mlx">MLX (Native Mac)</option>
+              <option value="torch">PyTorch (MPS)</option>
+            </select>
+          </div>
 
-          {/* Warnings */}
-          {(model.includes('sd3.5') || model === 'stable-audio') && (
-            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-1">
-              <AlertTriangle size={12} />
-              <span>Requires HF Login</span>
+          {/* 2. Precision Selector */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-secondary">Precision</label>
+              <button
+                onClick={() => useAppStore.getState().openHelpSection('precision')}
+                className="text-tertiary hover:text-brand-500 transition-colors"
+                title="Learn about precision options"
+              >
+                <HelpCircle size={14} />
+              </button>
             </div>
-          )}
-          {model === 'flux2-full' && (
-            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-xs mt-1">
-              <AlertTriangle size={12} />
-              <span>Requires 128GB+ RAM</span>
-            </div>
-          )}
+            <select
+              className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+              value={precision}
+              onChange={(e) => setPrecision(e.target.value)}
+              disabled={isLoading}
+              title="Model precision - affects speed and memory usage"
+            >
+              <option value="auto">
+                {/* Dynamic default label based on Framework */}
+                {(() => {
+                  const isMac = navigator.userAgent.toLowerCase().includes('mac');
+                  const isMlx = framework === 'mlx' || (framework === 'auto' && isMac);
+                  return `Auto (${isMlx ? 'int4 - MLX Default' : 'bfloat16 - Default'})`;
+                })()}
+              </option>
+              <option value="int4">int4 (4-bit, Fast)</option>
+              <option value="int6">int6 (6-bit, Balanced Speed)</option>
+              <option value="int8">int8 (8-bit, Balanced Quality)</option>
+              <option value="float16">float16 (Standard)</option>
+              <option value="bfloat16">bfloat16 (Brain Float)</option>
+              <option value="float32">float32 (Slow, Max Quality)</option>
+            </select>
+          </div>
+
+          {/* 3. Model Selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-secondary flex items-center">
+              Model
+              <ModelHelpLink section="image" />
+            </label>
+            <select
+              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isLoading}
+            >
+              {sortedModels
+                .map((name) => {
+                  const info = MODEL_DISPLAY_INFO[name];
+                  // Use shared utility with current precision/framework state
+                  const vram = getDynamicRam(name, precision, framework);
+                  // Add warning if RAM is very high (e.g. > 32GB)
+                  const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
+
+                  return (
+                    <option key={name} value={name}>
+                      {info ? `${isHighRam ? '⚠️ ' : ''}${info.label} (${vram})` : name}
+                    </option>
+                  );
+                })}
+            </select>
+
+            {/* Warnings */}
+            {(model.includes('sd3.5') || model === 'stable-audio') && (
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-1">
+                <AlertTriangle size={12} />
+                <span>Requires HF Login</span>
+              </div>
+            )}
+            {model === 'flux2-full' && (
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-xs mt-1">
+                <AlertTriangle size={12} />
+                <span>Requires 128GB+ RAM</span>
+              </div>
+            )}
+          </div>
         </div>
 
 
@@ -416,6 +486,21 @@ export function ImageGenerator() {
 
 
         </div>
+
+        {/* Advanced Toggle */}
+        <button 
+           className="text-xs text-tertiary hover:text-secondary flex items-center gap-1 w-fit"
+           onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+           {showAdvanced ? "Hide" : "Show"} Advanced Settings
+        </button>
+
+         {showAdvanced && (
+           <div className="space-y-4 pt-2 border-t border-border animate-in fade-in slide-in-from-top-2">
+              {/* Other advanced content for future usage */}
+              <p className="text-xs text-tertiary">More advanced settings coming soon.</p>
+           </div>
+         )}
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 

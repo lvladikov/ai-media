@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { useModels } from '../hooks/useApi';
 import { API_BASE_URL as API_BASE } from '../config';
-import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Trash2, Image, AlertCircle, RefreshCw } from 'lucide-react';
+import { MessageSquare, Send, Loader2, LogOut, FileText, Save, Globe, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Trash2, Image, AlertCircle, RefreshCw, HelpCircle } from 'lucide-react';
 import domToImage from 'dom-to-image';
 import { NumberInput } from './common/NumberInput';
 import { MarkdownWithAnsi, MarkdownWithAnsiNoHtml } from './common/AnsiRenderer';
@@ -11,6 +11,7 @@ import { SaveModal } from './SaveModal';
 import type { SaveOptions } from './SaveModal';
 import { formatDuration } from '../utils/formatTime';
 import { PROMPTS } from '../data/prompts';
+import { getDynamicRam } from '../utils/modelResources';
 
 // Clipboard CSS mapping for rich-text copy (inline styles for external apps)
 const TAILWIND_TO_CSS: Record<string, string> = {
@@ -57,30 +58,37 @@ const TAILWIND_TO_CSS: Record<string, string> = {
 
 
 
-// Display names matching CLI
-const MODEL_DISPLAY_INFO: Record<string, { label: string; vram: string }> = {
-  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)', vram: '~7GB' },
-  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)', vram: '~14GB' },
-  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)', vram: '~24GB' },
-  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)', vram: '~8GB' },
-  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)', vram: '~40GB' },
-  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)', vram: '~8GB' },
-  'mistral-nemo-12b': { label: 'Mistral Nemo 12B', vram: '~12GB' },
-  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning - 16GB VRAM)', vram: '~16GB' },
-  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning - 28GB VRAM)', vram: '~28GB' },
-  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)', vram: '~10GB' },
-  'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B (⚠️ 120GB RAM)', vram: '~24GB' },
-  'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B', vram: '~12GB' },
-  'qwen-coder-7b': { label: 'Qwen 2.5 Coder 7B', vram: '~6GB' },
-  'qwen-vl': { label: 'Qwen3-VL 8B (Vision)', vram: '~16GB' },
-  'qwen3-vl-4b': { label: 'Qwen3-VL 4B (Vision)', vram: '~8GB' },
-  'qwen3-vl-2b': { label: 'Qwen3-VL 2B (Vision)', vram: '~4GB' },
+// Local RAM constant removed - using shared utility
+
+// Display names matching CLI (vram field removed, now calculated dynamically)
+const MODEL_DISPLAY_INFO: Record<string, { label: string }> = {
+  'deepseek-r1-qwen-7b': { label: 'DeepSeek R1 Qwen 7B (Reasoning)' },
+  'deepseek-r1-qwen-14b': { label: 'DeepSeek R1 Qwen 14B (Reasoning)' },
+  'deepseek-r1-qwen-32b': { label: 'DeepSeek R1 Qwen 32B (Reasoning)' },
+  'deepseek-r1-llama-8b': { label: 'DeepSeek R1 Llama 8B (Reasoning)' },
+  'deepseek-r1-llama-70b': { label: 'DeepSeek R1 Llama 70B (Reasoning)' },
+  'llama-3.1-8b': { label: 'Llama 3.1 8B (Fast & Stable)' },
+  'mistral-nemo-12b': { label: 'Mistral Nemo 12B' },
+  'qwen3-8b': { label: 'Qwen 3 8B (Reasoning)' },
+  'qwen3-14b': { label: 'Qwen 3 14B (Reasoning)' },
+  'qwen3-opus-4.5-8b': { label: 'Qwen 3 Opus 4.5 Distill (8B)' },
+  'qwen3-opus-4.5-14b': { label: 'Qwen 3 Opus 4.5 Distill (14B)' },
+  'qwen3-gpt-5.2-8b': { label: 'Qwen 3 GPT-5.2 Distill (8B)' },
+  'qwen3-gpt-5.2-14b': { label: 'Qwen 3 GPT-5.2 Distill (14B)' },
+  'qwen3-coder-30b': { label: 'Qwen3 Coder 30B (MoE, 3.3B active)' },
+  'qwen-coder-32b': { label: 'Qwen 2.5 Coder 32B' },
+  'qwen-coder-14b': { label: 'Qwen 2.5 Coder 14B' },
+  'qwen-coder-7b': { label: 'Qwen 2.5 Coder 7B' },
+  'qwen-vl': { label: 'Qwen3-VL 8B (Vision)' },
+  'qwen3-vl-4b': { label: 'Qwen3-VL 4B (Vision)' },
+  'qwen3-vl-2b': { label: 'Qwen3-VL 2B (Vision)' },
 };
 
 const MODEL_ORDER = [
   'deepseek-r1-qwen-7b', 'deepseek-r1-qwen-14b', 'deepseek-r1-qwen-32b',
   'deepseek-r1-llama-8b', 'deepseek-r1-llama-70b',
   'llama-3.1-8b', 'mistral-nemo-12b', 'qwen3-14b', 'qwen3-8b',
+  'qwen3-opus-4.5-14b', 'qwen3-opus-4.5-8b', 'qwen3-gpt-5.2-14b', 'qwen3-gpt-5.2-8b',
   'qwen3-coder-30b', 'qwen-coder-32b', 'qwen-coder-14b', 'qwen-coder-7b',
   'qwen-vl', 'qwen3-vl-4b', 'qwen3-vl-2b'
 ];
@@ -567,6 +575,8 @@ export function ChatInterface() {
   const { triggers: randomPromptTriggers } = usePromptTriggers();
   const { chatSessionId, chatMessages, setChatSessionId, addChatMessage, updateLastUserMessage, clearChat } = useAppStore();
   const [model, setModel] = useState(''); // Initial value empty, set after fetch
+  const [precision, setPrecision] = useState('auto'); // Precision override: auto, int4, int8, float16, bfloat16, float32
+  const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto'); // Platform override: auto, torch, mlx
   const [defaultModelId, setDefaultModelId] = useState(''); // Store default model ID from backend
   const [input, setInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
@@ -696,6 +706,8 @@ export function ChatInterface() {
       translation_model: translationModel,
       input_translation_model: inputTranslationModel,
       input_source_language: inputSourceLanguage,  // Source language for input translation
+      precision: precision !== 'auto' ? precision : undefined,
+      framework: framework !== 'auto' ? framework : undefined,
     }));
 
     // Only clear input if we sent from the text area
@@ -770,10 +782,17 @@ export function ChatInterface() {
     }
 
     // Ensure correct protocol (http->ws, https->wss)
-    socketRef.current = new WebSocket(`${wsBaseUrl.replace(/^http/, 'ws')}/ws/chat?model=${model}`); // Pass model param!
+    const precisionParam = precision !== 'auto' ? `&precision=${precision}` : '';
+    const frameworkParam = framework !== 'auto' ? `&framework=${framework}` : '';
+    socketRef.current = new WebSocket(`${wsBaseUrl.replace(/^http/, 'ws')}/ws/chat?model=${model}${precisionParam}${frameworkParam}`);
     socketRef.current.onopen = () => {
-      // Trigger model loading immediately
-      socketRef.current?.send(JSON.stringify({ type: 'load', model }));
+      // Trigger model loading immediately with precision and framework
+      socketRef.current?.send(JSON.stringify({ 
+        type: 'load', 
+        model, 
+        precision: precision !== 'auto' ? precision : undefined,
+        framework: framework !== 'auto' ? framework : undefined
+      }));
       // Don't set isConnecting(false) here - wait for model to be ready
     };
 
@@ -1156,23 +1175,95 @@ export function ChatInterface() {
           </div>
 
           {/* Model Selector with Connect/Disconnect */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-secondary">Model</label>
-            <select
-              className="select w-full bg-primary border-border text-sm focus:border-brand-500"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={!!chatSessionId}
-            >
-              {sortedModels.map((name) => {
-                const info = MODEL_DISPLAY_INFO[name];
-                return (
-                  <option key={name} value={name}>
-                    {info ? `${info.label} ${info.vram}` : name}
-                  </option>
-                );
-              })}
-            </select>
+          <div className="space-y-4"> {/* Increased spacing for visual separation */}
+            
+            {/* 1. Framework Selector (First on list, hidden if not Mac) */}
+            <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
+              <label className="text-sm font-medium text-secondary block">Platform</label>
+              <select
+                className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+                value={framework}
+                onChange={(e) => setFramework(e.target.value)}
+                disabled={!!chatSessionId}
+                title="Inference Framework - Use MLX for best performance on Mac"
+              >
+                <option value="mlx">MLX (Native Mac)</option>
+                <option value="torch">PyTorch (MPS)</option>
+              </select>
+            </div>
+
+            {/* 2. Precision Selector */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-secondary">Precision</label>
+                <button
+                  onClick={() => useAppStore.getState().openHelpSection('precision')}
+                  className="text-tertiary hover:text-brand-500 transition-colors"
+                  title="Learn about precision options"
+                >
+                  <HelpCircle size={14} />
+                </button>
+              </div>
+              <select
+                className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+                value={precision}
+                onChange={(e) => setPrecision(e.target.value)}
+                disabled={!!chatSessionId}
+                title="Model precision - affects speed and memory usage"
+              >
+                <option value="auto">
+                  {/* Dynamic default label based on Framework */}
+                  {(() => {
+                    const isMac = navigator.userAgent.toLowerCase().includes('mac');
+                    // On Mac, effective framework is MLX unless explicit 'torch'. On others, it's 'torch'.
+                    // Our state 'framework' defaults to 'mlx' on Mac in previous steps.
+                    const isMlx = framework === 'mlx' || (framework === 'auto' && isMac);
+                    
+                    return `Auto (${isMlx ? 'int4 - MLX Default' : 'bfloat16 - Default'})`;
+                  })()}
+                </option>
+                <option value="int4">int4 (4-bit, Fast)</option>
+                <option value="int6">int6 (6-bit, Balanced Speed)</option>
+                <option value="int8">int8 (8-bit, Balanced Quality)</option>
+                <option value="float16">float16 (Half)</option>
+                <option value="bfloat16">bfloat16 (Brain Float)</option>
+                <option value="float32">float32 (Full)</option>
+              </select>
+            </div>
+
+            {/* 3. Model Selector */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-secondary">Model</label>
+                <button
+                  onClick={() => useAppStore.getState().openHelpSection('chat')}
+                  className="text-tertiary hover:text-brand-500 transition-colors"
+                  title="Need help choosing your model?"
+                >
+                  <HelpCircle size={14} />
+                </button>
+              </div>
+              <select
+                className="select w-full bg-primary border-border text-sm focus:border-brand-500"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={!!chatSessionId}
+              >
+                {sortedModels.map((name) => {
+                  const info = MODEL_DISPLAY_INFO[name];
+                  // Use shared utility with current precision/framework state
+                  const vram = getDynamicRam(name, precision, framework);
+                  // Add warning if RAM is very high (e.g. > 32GB)
+                  const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
+                  return (
+                    <option key={name} value={name}>
+                      {info ? `${isHighRam ? '⚠️ ' : ''}${info.label} (${vram})` : name}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
             {(!chatSessionId || isConnecting) ? (
               <button
                 className="w-full btn-primary py-2.5 flex items-center justify-center gap-2"

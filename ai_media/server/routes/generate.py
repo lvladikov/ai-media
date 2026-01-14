@@ -30,6 +30,8 @@ async def generate_image(request: ImageGenerateRequest):
             "guidance_scale": request.guidance_scale,
             "negative_prompt": request.negative_prompt,
             "bypass_warning": request.bypass_warning,
+            "framework": request.framework,
+            "precision": request.precision
         }
     )
     
@@ -52,6 +54,8 @@ async def generate_image(request: ImageGenerateRequest):
             request.negative_prompt,
             request.force,
             True, # Always bypass warning in server mode
+            request.framework,
+            request.precision
         ),
     )
     
@@ -72,6 +76,8 @@ async def generate_video(request: VideoGenerateRequest):
             "duration": request.duration,
             "fps": request.fps,
             "bypass_warning": request.bypass_warning,
+            "framework": request.framework,
+            "precision": request.precision
         }
     )
     
@@ -94,6 +100,8 @@ async def generate_video(request: VideoGenerateRequest):
             request.input_image,
             request.force,
             True, # Always bypass warning in server mode
+            request.framework,
+            request.precision
         ),
     )
     

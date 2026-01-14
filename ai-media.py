@@ -16,7 +16,31 @@ import warnings
 import signal
 import sys
 import os
+import platform
 import time
+
+# Suppress harmless macOS memory debug and Malloc noise
+for key in ["MallocStackLogging", "MallocStackLoggingNoCompact", "MallocStackLoggingDirectory"]:
+    os.environ.pop(key, None)
+os.environ["MallocNano"] = "0"  # Also suppress Nano Malloc noise/bugs on older macOS
+
+# --- Rich Console Initialization ---
+try:
+    from rich.console import Console
+    from rich.theme import Theme
+    custom_theme = Theme({
+        "info": "dim cyan",
+        "warning": "magenta",
+        "danger": "bold red"
+    })
+    console = Console(theme=custom_theme)
+except ImportError:
+    # Fallback for environments without rich (though it should be installed)
+    class MockConsole:
+        def print(self, *args, **kwargs):
+            if "style" in kwargs: del kwargs["style"]
+            print(*args, **kwargs)
+    console = MockConsole()
 
 # --- Loading Message Timer (must start BEFORE heavy imports) ---
 # This shows "Loading..." message after 1 second if still loading modules.
@@ -28,7 +52,7 @@ _loading_shown = False
 def _show_loading_message():
     global _loading_shown
     _loading_shown = True
-    print("⏳ Loading... (May take a moment while modules initialize and cache)", flush=True)
+    console.print("⏳ Loading... (May take a moment while modules initialize and cache)", flush=True)
 
 # Only start timer if likely interactive mode (no args or just --interactive)
 # We do this early so it can run while heavy modules load
@@ -141,7 +165,7 @@ def load_ai_modules():
     global pkg_run_tests, pkg_run_unit_tests, HAS_AI_MEDIA_PKG
     
     if not HAS_AI_MEDIA_PKG:
-         print("❌ Error: ai_media package not found.")
+         console.print("❌ Error: ai_media package not found.", style="danger")
          sys.exit(1)
 
     # Check if already loaded
@@ -259,7 +283,7 @@ def load_ai_modules():
 
         HAS_AI_MEDIA_PKG = True # Should be true already
     except ImportError as e:
-        print(f"❌ Error: Failed to load ai_media lazy modules: {e}")
+        console.print(f"❌ Error: Failed to load ai_media lazy modules: {e}")
         sys.exit(1)
 # ---------------------------------------------------
 
@@ -275,7 +299,6 @@ import re
 import argparse
 import time
 
-from datetime import datetime
 from datetime import datetime
 import shutil
 import subprocess
@@ -333,11 +356,11 @@ except ImportError:
 
 # --- Interactive Mode ---
 # -------------------------------------------------------------------
-def run_interactive(jump_point=None):
+def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
     """Run interactive mode. Uses ai_media.interactive."""
     if HAS_AI_MEDIA_PKG:
-        return pkg_run_interactive(jump_point)
-    print("❌ ai_media package not available.")
+        return pkg_run_interactive(jump_point, ml_framework=ml_framework, precision_force=precision_force)
+    console.print("❌ ai_media package not available.")
     return
 
 
@@ -350,14 +373,14 @@ def run_tests(**kwargs):
         if 'test_type' not in kwargs:
             kwargs['test_type'] = 'integration'
         return pkg_run_tests(**kwargs)
-    print("❌ ai_media package not available.")
+    console.print("❌ ai_media package not available.")
 
 
 def run_unit_tests(**kwargs):
     """Run unit tests via package."""
     if HAS_AI_MEDIA_PKG:
         return pkg_run_unit_tests(**kwargs)
-    print("❌ ai_media package not available.")
+    console.print("❌ ai_media package not available.")
 
 
 class CleanHelpFormatter(argparse.RawTextHelpFormatter):
@@ -417,6 +440,9 @@ Examples:
   python ai-media.py -c --chat-model llama-3.1-8b (Interactive Chat)
   python ai-media.py -gc 'Write a Snake game in Python' (Code Gen)
   python ai-media.py -ga -p "Story about a cat" -o story.docx -atm mistral-nemo-12b
+  python ai-media.py -c -chm qwen3-8b --precision-force bfloat16 (Force Precision)
+  python ai-media.py -c -mf mlx -pf int4 (MLX 4-bit - Mac, Fastest)
+  python ai-media.py -gc "Task" -pf int8 (CUDA 8-bit Quantization)
 
   -- Analysis --
   python ai-media.py -gd -ii video.mp4
@@ -453,6 +479,7 @@ Supported Models (Code : Download Size | Description):
   Images:
     - sd3.5-turbo (default)      : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
     - sdxl                       : ~8GB  | Fast, high quality.
+    - z-image                    : ~31GB | Alibaba Z-Image Turbo. Fast (9 steps). MLX/CUDA/MPS.
     - sd-1.5                     : ~4GB  | Lightweight, lower VRAM.
     - sd3.5-medium               : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
     - sd3.5-large                : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)
@@ -493,6 +520,10 @@ Supported Models (Code : Download Size | Description):
     - mistral-nemo-12b           : ~24GB | Powerful 12B model. Large context and reasoning.
     - qwen3-8b                   : ~16GB | Qwen 3 8B (Reasoning). Strong instruction-following.
     - qwen3-14b                  : ~28GB | Qwen 3 14B (Reasoning). Great at detailed formatting.
+    - qwen3-opus-4.5-8b          : ~16GB | TeichAI Qwen 3 Opus (4.5) 8B.
+    - qwen3-opus-4.5-14b         : ~28GB | TeichAI Qwen 3 Opus (4.5) 14B.
+    - qwen3-gpt-5.2-8b           : ~16GB | TeichAI Qwen 3 GPT (5.2) 8B.
+    - qwen3-gpt-5.2-14b          : ~28GB | TeichAI Qwen 3 GPT (5.2) 14B.
     - qwen-coder-32b             : ~24GB | Qwen 2.5 SOTA Code Gen. (⚠️ 120GB+ RAM!)
     - qwen-coder-14b             : ~12GB | Qwen 2.5 Fast & Capable Code Gen.
     - qwen-coder-7b              : ~6GB  | Qwen 2.5 Lightweight Code Gen.
@@ -587,8 +618,8 @@ Supported Models (Code : Download Size | Description):
                             help="Article/research output format. Default: md")
     text_group.add_argument("-ri", "--research-iter", type=int, default=3, 
                             help="Deep research: number of sources to read. Default: 3")
-    text_group.add_argument("-al", "--article-length", choices=["quick", "standard", "detailed"], default="quick",
-                            help="Article length: quick (fast, ~500 words, default), standard (~1500 words), detailed (comprehensive, ~3000 words).")
+    text_group.add_argument("-al", "--article-length", choices=["quick", "standard", "detailed", "exhaustive"], default="quick",
+                            help="Article length: quick (fast, ~500 words, default), standard (~1500 words), detailed (~3000 words), exhaustive (~10000 words).")
 
     # Translation Options
     trans_group = parser.add_argument_group("Translation Options")
@@ -698,11 +729,26 @@ Supported Models (Code : Download Size | Description):
     server_group.add_argument("--host", default=None, help="Host for the web server (Overrides config)")
     server_group.add_argument("--port", type=int, default=None, help="Port for the backend server (Overrides config)")
     
+    # Advanced Options (Precision & Framework Control)
+    advanced_group = parser.add_argument_group("Advanced Options")
+    advanced_group.add_argument("--precision-force", "-pf",
+        choices=["int4", "int6", "int8", "float16", "bfloat16", "float32"],
+        help="Force precision. CUDA: int4/int8. MLX: int4/int6/int8. MPS: float16/bfloat16/float32. Overrides auto-detection.")
+    # Determine platform-specific framework default
+    framework_default = None
+    if platform.system() == "Darwin":
+        framework_default = "mlx"
+        
+    advanced_group.add_argument("--ml-framework", "-mf",
+        choices=["torch", "mlx"],
+        default=framework_default,
+        help="Force ML framework (Mac only). 'mlx' for native Apple Silicon (Default on Mac), 'torch' for PyTorch/MPS. Ignored on CUDA/CPU.")
+    
     # Maintenance / Cleanup
     cleanup_group = parser.add_argument_group("Maintenance / Cleanup Options")
     cleanup_group.add_argument("--clear-data-output", action="store_true", help="Clear testing/data/outputs folder.")
     cleanup_group.add_argument("--clear-media-output", action="store_true", help="Clear configured media_output folder.")
-    cleanup_group.add_argument("--clear-all", action="store_true", help="Clear both testing/data/outputs and configured media_output folders.")
+    cleanup_group.add_argument("--clear-all-outputs", action="store_true", help="Clear both testing/data/outputs and configured media_output folders.")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
     parser.add_argument("--list-models", action="store_true", help="List all available models and exit.")
@@ -711,7 +757,7 @@ Supported Models (Code : Download Size | Description):
     args = parser.parse_args()
     
     # Handle Cleanup Commands
-    if args.clear_data_output or args.clear_media_output or args.clear_all:
+    if args.clear_data_output or args.clear_media_output or args.clear_all_outputs:
         from ai_media.utils.cleanup import clear_directory
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
@@ -719,31 +765,31 @@ Supported Models (Code : Download Size | Description):
         # CONFIG is module-level global
         media_output_dir = CONFIG["paths"]["media_output"]
         
-        if args.clear_data_output or args.clear_all:
-            print(f"🧹 Clearing {data_output_dir}...")
+        if args.clear_data_output or args.clear_all_outputs:
+            console.print(f"🧹 Clearing {data_output_dir}...")
             deleted = clear_directory(data_output_dir)
             if deleted:
-                print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
+                console.print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
             else:
-                print("   ✅ Directory already empty.")
+                console.print("   ✅ Directory already empty.")
             
-        if args.clear_media_output or args.clear_all:
-            print(f"🧹 Clearing {media_output_dir}...")
+        if args.clear_media_output or args.clear_all_outputs:
+            console.print(f"🧹 Clearing {media_output_dir}...")
             deleted = clear_directory(media_output_dir)
             if deleted:
-                print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
+                console.print(f"   ✅ Deleted {len(deleted)} items: {', '.join(deleted)}")
             else:
-                print("   ✅ Directory already empty.")
+                console.print("   ✅ Directory already empty.")
             
         sys.exit(0)
     
     # List Models
     if args.list_models:
-        print("🤖 Available AI Models:")
-        print("="*60)
+        console.print("🤖 Available AI Models:")
+        console.print("="*60)
         
         def print_category(name, models_dict):
-            print(f"\n[{name}]")
+            console.print(f"\n[{name}]")
             # Filter aliases to avoid clutter
             hidden_aliases = [
                 "qwen-image-edit-mps",
@@ -753,7 +799,7 @@ Supported Models (Code : Download Size | Description):
                 if short_code in hidden_aliases:
                     continue
                 desc = " (Default)" if short_code == "default" else ""
-                print(f"  • {short_code:<25}: {hf_id}{desc}")
+                console.print(f"  • {short_code:<25}: {hf_id}{desc}")
                 
         print_category("Image Generation", IMAGE_MODELS)
         print_category("Video Generation", VIDEO_MODELS)
@@ -763,11 +809,30 @@ Supported Models (Code : Download Size | Description):
         print_category("Image Editing", EDIT_MODELS)
         sys.exit(0)
     
+    # Define all primary action flags that should prevent auto-entering interactive mode
+    primary_actions = [
+        args.generate_image, args.generate_video, args.generate_audio,
+        args.generate_article, args.generate_research, args.chat,
+        args.generate_code, args.generate_subtitles, args.transcribe,
+        args.generate_description, args.transform_image, args.translate,
+        args.convert_image, args.convert_video, args.convert_audio,
+        args.convert_document, args.upscale_image, args.upscale_video,
+        args.test, args.test_verbose, args.unittests, args.unittests_verbose,
+        args.serve, args.serve_web_only_client, args.serve_no_client,
+        args.inference_server, args.inference_server_verbose,
+        args.remove_background # Also check specific sub-flags that can be used alone
+    ]
+    
     # Interactive Mode Trigger - handled BEFORE heavy module loading for instant startup
-    if args.interactive or len(sys.argv) == 1:
+    # Trigger if explicitly requested (-I) OR if no other primary action is specified
+    if args.interactive or not any(primary_actions):
         # Only import lightweight interactive module, skip heavy AI generators
         from ai_media.interactive import run_interactive
-        run_interactive(jump_point=args.interactive if args.interactive != "menu" else None)
+        run_interactive(
+            jump_point=args.interactive if args.interactive != "menu" else None,
+            ml_framework=args.ml_framework,
+            precision_force=args.precision_force
+        )
         sys.exit(0)
     
     # Server Mode - start web server
@@ -793,7 +858,7 @@ Supported Models (Code : Download Size | Description):
             # Helper to launch clients
             import subprocess
             def start_client(cmd, name, env=None):
-                print(f"🚀 Launching {name} client...")
+                console.print(f"🚀 Launching {name} client...")
                 web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_media", "web")
                 return subprocess.Popen(cmd, shell=True, cwd=web_dir, env=env)
 
@@ -807,7 +872,7 @@ Supported Models (Code : Download Size | Description):
                     import socket
                     
                     def wait_for_port(check_host, check_port, label, retries=30):
-                        print(f"⏳ Waiting for {label} to start...", end="", flush=True)
+                        console.print(f"⏳ Waiting for {label} to start...", end="")
                         ready = False
                         while retries > 0:
                             try:
@@ -816,9 +881,12 @@ Supported Models (Code : Download Size | Description):
                                     break
                             except (OSError, ConnectionRefusedError):
                                 time.sleep(1)
-                                print(".", end="", flush=True)
+                                console.print(".", end="")
                                 retries -= 1
-                        print(f"\n{'✅ ' + label + ' ready!' if ready else '⚠️ ' + label + ' wait timed out (proceeding anyway)'}")
+                        if ready:
+                            console.print(f"\n✅ {label} ready!", style="bold green")
+                        else:
+                            console.print(f"\n⚠️ {label} wait timed out (proceeding anyway)", style="warning")
                         return ready
 
                     # Wait for server to be ready
@@ -826,7 +894,7 @@ Supported Models (Code : Download Size | Description):
                     
                     # Helper nested here to capture procs list
                     def start_client(cmd, name, env=None):
-                        print(f"🚀 Launching {name} client...")
+                        console.print(f"🚀 Launching {name} client...")
                         web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_media", "web")
                         return subprocess.Popen(cmd, shell=True, cwd=web_dir, env=env)
 
@@ -847,12 +915,12 @@ Supported Models (Code : Download Size | Description):
                 wait_thread.start()
         
             if args.inference_server:
-                print(f"\n🤖 Inference Server Ready!")
-                print(f"   Shape your existing tools to use Custom OpenAI API:")
-                print(f"   • Base URL: http://{host}:{server_port}/v1")
-                print(f"   • API Key:  (Any string, e.g. 'local')")
-                print(f"   • Models:   Auto-detected from ai-media text models")
-                print(f"   ---------------------------------------------------")
+                console.print(f"\n🤖 Inference Server Ready!")
+                console.print(f"   Shape your existing tools to use Custom OpenAI API:")
+                console.print(f"   • Base URL: http://{host}:{server_port}/v1")
+                console.print(f"   • API Key:  (Any string, e.g. 'local')")
+                console.print(f"   • Models:   Auto-detected from ai-media text models")
+                console.print(f"   ---------------------------------------------------")
 
             # Watch configuration
             # Only ignore generating outputs and specific system dirs
@@ -869,36 +937,65 @@ Supported Models (Code : Download Size | Description):
                 media_output_dir = "output"
 
             # Use glob patterns for excludes
+            # Define explicit reload directories and exclusions to prevent loops
+            # Use absolute path to ai_media to ensure correct watching regardless of CWD context
+            reload_dirs = [os.path.abspath(os.path.join(os.path.dirname(__file__), "ai_media"))] if reload_enabled else None
+            
+            # Robust excludes filtering
             reload_excludes = [
                 "*.log", 
-                "*.json", # Ignore JSON config/data changes to prevent infinite loops (generated stats etc)
-                ".git/*",
-                ".gemini/*",
-                "**/__pycache__/*",
-                "**/node_modules/*",
+                "*.json", 
+                ".git", 
+                "venv", 
+                "node_modules", 
+                "__pycache__", 
+                "*.pyc",
                 "ai_media/testing/data/outputs/*",
                 f"{media_output_dir}/*"
-            ]
-            
-            # Watch the entire root directory (current dir) to catch ai-media.py and ai_media/ changes
-            reload_dirs = ["."] if reload_enabled else None
+            ] if reload_enabled else None
 
             # Print newline before server starts
-            print() 
+            console.print() 
             
             # Set verbose flag appropriately
             if args.inference_server_verbose:
                 CONFIG["server"]["verbose_inference"] = True
+
+            # Set global generation preferences from CLI
+            if "generation" not in CONFIG:
+                CONFIG["generation"] = {}
+                
+            if hasattr(args, 'ml_framework') and args.ml_framework:
+                CONFIG["generation"]["ml_framework"] = args.ml_framework
+            
+            if hasattr(args, 'precision_force') and args.precision_force:
+                CONFIG["generation"]["precision_force"] = args.precision_force
                 
             # Inference Server message
             if args.inference_server or args.inference_server_verbose:
-                print("\n🚀 Starting AI-Media Inference Server (OpenAI Compatible)...")
-                print(f"👉 Compatible with Continue, LM Studio, etc.")
-                if args.inference_server_verbose:
-                    print("📝 Verbose Logging: Enabled (Requests/Responses will be printed)")
+                
+                # Determine Framework Status for Display
+                framework_msg = "👉 Framework: "
+                if platform.system() == "Darwin":
+                    if hasattr(args, 'ml_framework') and args.ml_framework:
+                         framework_msg += f"{'MLX' if args.ml_framework == 'mlx' else 'PyTorch'} (Forced via CLI)"
+                    else:
+                         framework_msg += "Auto (MLX Preferred)"
                 else:
-                    print("📝 Verbose Logging: Disabled (Use --inference-server-verbose to enable)")
-                print("💡 To stop the server at any time press CTRL+C or send a message through chat 'stop inference server'")
+                    framework_msg += "PyTorch (Standard)"
+                    if hasattr(args, 'ml_framework') and args.ml_framework:
+                         framework_msg += " (Note: --ml-framework is ignored on non-Mac systems)"
+
+                console.print("\n[bold green]🚀 Starting AI-Media Inference Server (OpenAI Compatible)...[/bold green]")
+                console.print("[dim]💡 Tip: Please await until you see 'AI-Media Server Ready' message before using the server.[/dim]\n")
+                console.print(f"👉 Compatible with Continue, LM Studio, etc.")
+                console.print(framework_msg)
+                
+                if args.inference_server_verbose:
+                    console.print("📝 Verbose Logging: Enabled (Requests/Responses will be printed)")
+                else:
+                    console.print("📝 Verbose Logging: Disabled (Use --inference-server-verbose to enable)")
+                console.print("💡 To stop the server at any time press CTRL+C or send a message through chat 'stop inference server'")
             
             from ai_media.server.app import main as server_main
             server_main(host=host, port=server_port, reload=reload_enabled, reload_excludes=reload_excludes, reload_dirs=reload_dirs)
@@ -907,7 +1004,7 @@ Supported Models (Code : Download Size | Description):
             # Cleanup background processes
             for p in procs:
                 try:
-                    print(f"🛑 Stopping client process {p.pid}...")
+                    console.print(f"🛑 Stopping client process {p.pid}...")
                     p.terminate()
                 except Exception:
                     pass
@@ -947,34 +1044,47 @@ Supported Models (Code : Download Size | Description):
     # Prompt Check (Required for non-chat modes, but not for I2V with input_image)
     if not args.chat and not args.prompt and not args.input_image and not any([args.generate_description, args.transform_image, args.convert_image, args.convert_video, args.convert_audio, args.convert_document, args.upscale_image, args.upscale_video, args.generate_code]):
         from ai_media.utils.interaction import emoji
-        print(f"{emoji('❌', '[X]')} Error: Prompt is required (use -p 'Your prompt')")
+        console.print(f"{emoji('❌', '[X]')} Error: Prompt is required (use -p 'Your prompt')")
         sys.exit(1)
         
     # --- Dispatch ---
     
     # Article Generation Dispatch
     if args.chat:
-        gen = PkgArticleGenerator(model_name=args.chat_model)
+        # Respect explicit framework force
+        prefer_mlx = True
+        if hasattr(args, 'ml_framework') and args.ml_framework:
+            os.environ["AI_MEDIA_ML_FRAMEWORK"] = args.ml_framework
+            if args.ml_framework == 'torch':
+                prefer_mlx = False
+        
+        if hasattr(args, 'precision_force') and args.precision_force:
+            os.environ["AI_MEDIA_PRECISION_FORCE"] = args.precision_force
+        gen = PkgArticleGenerator(model_name=args.chat_model, args=args, prefer_mlx=prefer_mlx)
         gen.chat_session()
         sys.exit(0)
         
         sys.exit(0)
 
     elif args.generate_code:
-        gen = PkgArticleGenerator(model_name=args.code_model)
+        # Respect explicit framework force
+        prefer_mlx = True
+        if hasattr(args, 'ml_framework') and args.ml_framework == 'torch':
+            prefer_mlx = False
+        gen = PkgArticleGenerator(model_name=args.code_model, args=args, prefer_mlx=prefer_mlx)
         
         # Determine prompt: use -gc value if string, else use main prompt
         prompt = args.generate_code if isinstance(args.generate_code, str) else args.prompt
         
         if not prompt:
-            print("❌ Error: Code generation code requires a prompt (e.g. -gc 'Write a script...' or -gc -p '...')")
+            console.print("❌ Error: Code generation code requires a prompt (e.g. -gc 'Write a script...' or -gc -p '...')")
             sys.exit(1)
         
         # Handle random prompt trigger
         from ai_media.utils.prompts import maybe_replace_with_random
         prompt, was_random = maybe_replace_with_random(prompt, "code")
         if was_random:
-            print(f"🎲 Using random prompt: {prompt}")
+            console.print(f"🎲 Using random prompt: {prompt}")
             
         # Default to media output dir if no output specified
         code_output = args.output
@@ -986,7 +1096,13 @@ Supported Models (Code : Download Size | Description):
 
     elif args.generate_article or args.generate_research:
         online = args.generate_research
-        gen = PkgArticleGenerator(model_name=args.article_model)
+        # Respect explicit framework force. prefer_mlx is True by default on Mac, 
+        # but should be False if user explicitly requests 'torch'.
+        prefer_mlx = True
+        if hasattr(args, 'ml_framework') and args.ml_framework == 'torch':
+            prefer_mlx = False
+            
+        gen = PkgArticleGenerator(model_name=args.article_model, args=args, prefer_mlx=prefer_mlx)
         
         # Determine output format - prefer extension from -o, then --output-format
         output_format = args.output_format  # Default from --output-format flag
@@ -1020,14 +1136,14 @@ Supported Models (Code : Download Size | Description):
         if not args.force:
             should_write, outfile, _, _ = pkg_check_overwrite(outfile)
             if not should_write:
-                print("⏭️  Skipped.")
+                console.print("⏭️  Skipped.")
                 sys.exit(0)
         
         # Handle random prompt trigger
         from ai_media.utils.prompts import maybe_replace_with_random
         topic, was_random = maybe_replace_with_random(args.prompt, "article")
         if was_random:
-            print(f"🎲 Using random topic: {topic}")
+            console.print(f"🎲 Using random topic: {topic}")
         
         gen.generate_article(
             topic=topic, 
@@ -1051,20 +1167,20 @@ Supported Models (Code : Download Size | Description):
                 words = re.findall(r'[a-zA-Z0-9]+', args.prompt.lower())[:2]
                 if words:
                     args.output = "-".join(words)
-                    print(f"ℹ️  No output specified. Using: {args.output}")
+                    console.print(f"ℹ️  No output specified. Using: {args.output}")
                 else:
-                    print("⚠️  Cannot auto-generate filename: prompt contains no valid words.")
+                    console.print("⚠️  Cannot auto-generate filename: prompt contains no valid words.", style="warning")
                     args.output = f"output_{int(time.time())}"
             elif args.input_image:
                 # Use input filename as base
                 base = os.path.splitext(os.path.basename(args.input_image))[0]
                 args.output = f"audio_{base}" if args.generate_audio else f"video_{base}"
-                print(f"ℹ️  No output specified. Using input basename: {args.output}")
+                console.print(f"ℹ️  No output specified. Using input basename: {args.output}")
             elif args.transform_image:
                 # Use transform input filename as base
                 base = os.path.splitext(os.path.basename(args.transform_image))[0]
                 args.output = f"{base}_transformed"
-                print(f"ℹ️  No output specified. Using transform basename: {args.output}")
+                console.print(f"ℹ️  No output specified. Using transform basename: {args.output}")
             else:
                 args.output = f"output_{int(time.time())}"
         
@@ -1077,7 +1193,7 @@ Supported Models (Code : Download Size | Description):
             ext = f".{args.format.lower().lstrip('.')}"
             if not args.output.lower().endswith(ext):
                 args.output += ext
-                print(f"ℹ️  Appended extension '{ext}' to output path.")
+                console.print(f"ℹ️  Appended extension '{ext}' to output path.")
         else:
             # No format specified - check if output has an extension
             _, existing_ext = os.path.splitext(args.output)
@@ -1113,9 +1229,9 @@ Supported Models (Code : Download Size | Description):
         from ai_media.utils.prompts import maybe_replace_with_random
         prompt, was_random = maybe_replace_with_random(args.prompt, "image")
         if was_random:
-            print(f"🎲 Using random prompt: {prompt}")
+            console.print(f"🎲 Using random prompt: {prompt}")
             
-        success = pkg_generate_image(prompt, outfile, w, h, model_id, negative_prompt=args.negative_prompt, unsafe=args.unsafe, force=args.force, report_json=args.report_json)
+        success = pkg_generate_image(prompt, outfile, w, h, model_id, negative_prompt=args.negative_prompt, unsafe=args.unsafe, force=args.force, bypass_warning=args.bypass_warning, report_json=args.report_json, use_mlx=args.ml_framework, precision=args.precision_force)
         if not success:
             sys.exit(1)
         
@@ -1141,22 +1257,22 @@ Supported Models (Code : Download Size | Description):
              
         if args.input_image:
              if not os.path.exists(args.input_image):
-                 print(f"❌ Error: Input file not found: {args.input_image}")
+                 console.print(f"❌ Error: Input file not found: {args.input_image}")
                  sys.exit(1)
              
-             print(f"👁️  Analyzing image: {args.input_image}...")
-             device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+             console.print(f"👁️  Analyzing image: {args.input_image}...")
+             device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
              caption = pkg_generate_caption(args.input_image, device, model_type=args.caption_model)
              if not caption:
-                 print("   Failed to generate description.")
+                 console.print("   Failed to generate description.")
                  sys.exit(1)
-             print(f"   📝 Caption: '{caption}'")
+             console.print(f"   📝 Caption: '{caption}'")
              
              full_prompt = caption
              if args.prompt:
                  full_prompt = f"{args.prompt}. {caption}"
              
-             print(f"   🎶 Generating audio for: '{full_prompt}'")
+             console.print(f"   🎶 Generating audio for: '{full_prompt}'")
              success = pkg_generate_audio(full_prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
              if not success:
                  sys.exit(1)
@@ -1187,7 +1303,7 @@ Supported Models (Code : Download Size | Description):
         from ai_media.utils.prompts import maybe_replace_with_random
         prompt, was_random = maybe_replace_with_random(args.prompt, "video")
         if was_random:
-            print(f"🎲 Using random prompt: {prompt}")
+            console.print(f"🎲 Using random prompt: {prompt}")
 
         success = pkg_generate_video(
             prompt=prompt, 
@@ -1215,7 +1331,7 @@ Supported Models (Code : Download Size | Description):
                     pkg_upscale_video_fast(outfile, upscale_out, factor=args.upscale_factor)
                 else:
                    # Standard diffusion based (slower)
-                   print("⚠️  Warning: Full diffusion video upscaling is very slow. Consider using --simple-upscale or realsrgan.")
+                   console.print("⚠️  Warning: Full diffusion video upscaling is very slow. Consider using --simple-upscale or realsrgan.")
                    # There is no direct video file upscaler in upscaling.py yet besides fast, maybe add todo
                    pkg_upscale_video_fast(outfile, upscale_out, factor=args.upscale_factor)
 
@@ -1223,7 +1339,7 @@ Supported Models (Code : Download Size | Description):
     # Translate Mode
     elif args.translate:
         if not args.target_language:
-            print("❌ Error: --target-language is required for translation.")
+            console.print("❌ Error: --target-language is required for translation.")
             sys.exit(1)
         
         load_ai_modules()
@@ -1235,7 +1351,7 @@ Supported Models (Code : Download Size | Description):
         # Let's use args.input_image as the file input (since -ii is common param).
         
         if not args.prompt and not args.input_image:
-            print("❌ Error: --prompt (text) or -ii (file) required.")
+            console.print("❌ Error: --prompt (text) or -ii (file) required.")
             sys.exit(1)
             
         data = args.prompt if args.prompt else args.input_image
@@ -1246,7 +1362,7 @@ Supported Models (Code : Download Size | Description):
              ext = os.path.splitext(data)[1].lower()
              if ext in ['.wav', '.mp3', '.m4a', '.flac']:
                  task = "s2st" if args.format in ['wav', 'mp3'] else "s2tt"
-                 print(f"🎤 Translating Audio ({task}): {data} -> {args.target_language}")
+                 console.print(f"🎤 Translating Audio ({task}): {data} -> {args.target_language}")
              else:
                  # Assume text file?
                  # TranslationGenerator t2tt supports text string. If file, read it?
@@ -1254,15 +1370,15 @@ Supported Models (Code : Download Size | Description):
                      try:
                         with open(data, 'r', encoding='utf-8') as f:
                             data = f.read()
-                        print(f"📄 Translating Text File: {args.input_image} -> {args.target_language}")
+                        console.print(f"📄 Translating Text File: {args.input_image} -> {args.target_language}")
                      except:
-                        print("❌ Error: Could not read input file (binary?). Translation currently supports text/audio.")
+                        console.print("❌ Error: Could not read input file (binary?). Translation currently supports text/audio.")
                         sys.exit(1)
                  else:
-                     print(f"❌ Error: File not found: {data}")
+                     console.print(f"❌ Error: File not found: {data}")
                      sys.exit(1)
         else:
-             print(f"📝 Translating Text: \"{data[:50]}...\" -> {args.target_language}")
+             console.print(f"📝 Translating Text: \"{data[:50]}...\" -> {args.target_language}")
 
         try:
              model = args.translation_model
@@ -1271,9 +1387,7 @@ Supported Models (Code : Download Size | Description):
              if task in ["s2st", "s2tt"]:
                  # Speech translation - use Seamless (TranslationGenerator)
                  res = pkg_generate_translation(data, args.target_language, task=task, output_path=args.output)
-             else:
-                 # Text translation - use NLLB/LLM via translate_text
-                 # Text translation - use NLLB/LLM via ArticleGenerator
+                # Text translation - use NLLB/LLM via ArticleGenerator
                  from ai_media.generators.text import ArticleGenerator
                  # Instantiate generator (bypass warnings for cleaner CLI output if needed)
                  gen = ArticleGenerator(model_name=model, bypass_warning=args.bypass_warning, args=args)
@@ -1285,11 +1399,11 @@ Supported Models (Code : Download Size | Description):
                  )
              
              if res:
-                  print(f"✅ Translation Complete: {res if args.output else 'Output to console'}")
+                  console.print(f"✅ Translation Complete: {res if args.output else 'Output to console'}")
                   if not args.output and task == "t2tt":
-                      print(f"\n{res}\n")
+                      console.print(f"\n{res}\n")
         except Exception as e:
-             print(f"❌ Translation Failed: {e}")
+             console.print(f"❌ Translation Failed: {e}")
              sys.exit(1)
 
     # Subtitle Generation
@@ -1297,11 +1411,11 @@ Supported Models (Code : Download Size | Description):
         input_file = args.input_image
         if not input_file:
              # Try prompt as input file if it looks like a file? No, standard is -ii.
-             print("❌ Error: Please provide input video/audio with -ii / --input-image")
+             console.print("❌ Error: Please provide input video/audio with -ii / --input-image")
              sys.exit(1)
             
         if not os.path.exists(input_file):
-             print(f"❌ Error: Input file not found: {input_file}")
+             console.print(f"❌ Error: Input file not found: {input_file}")
              sys.exit(1)
 
         # Resolve VAD preset to params
@@ -1352,11 +1466,11 @@ Supported Models (Code : Download Size | Description):
     elif args.transcribe:
         input_file = args.input_image
         if not input_file:
-             print("❌ Error: Please provide input file with -ii / --input-image")
+             console.print("❌ Error: Please provide input file with -ii / --input-image", style="danger")
              sys.exit(1)
              
         if not os.path.exists(input_file):
-             print(f"❌ Error: Input file not found: {input_file}")
+             console.print(f"❌ Error: Input file not found: {input_file}", style="danger")
              sys.exit(1)
              
         # Use output format from text options if standard, or infer from extension
@@ -1380,9 +1494,9 @@ Supported Models (Code : Download Size | Description):
             
             with open(outfile, 'w', encoding='utf-8') as f:
                 f.write(result)
-            print(f"✅ Transcription saved to {outfile}")
+            console.print(f"✅ Transcription saved to {outfile}")
         else:
-            print(result)
+            console.print(result)
         sys.exit(0)
 
     elif args.generate_description:
@@ -1392,14 +1506,14 @@ Supported Models (Code : Download Size | Description):
             input_file = args.input_image
              
         if not input_file:
-             print("❌ Error: Input image/video required (-gd FILE or -gd -ii FILE)")
+             console.print("❌ Error: Input image/video required (-gd FILE or -gd -ii FILE)")
              sys.exit(1)
              
-        print(f"👁️  Analyzing image: {input_file}...")
-        device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        console.print(f"👁️  Analyzing image: {input_file}...")
+        device, _ = pkg_system.get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
         desc = pkg_generate_caption(input_file, device, model_type=args.caption_model)
         if desc:
-            print(f"📝 Description: {desc}")
+            console.print(f"📝 Description: {desc}")
             # Save to output file if specified
             if args.output:
                 outfile = args.output
@@ -1410,7 +1524,7 @@ Supported Models (Code : Download Size | Description):
                 
                 with open(outfile, 'w') as f:
                     f.write(desc)
-                print(f"✅ Caption saved to {outfile}")
+                console.print(f"✅ Caption saved to {outfile}")
             
     elif args.upscale_image:
         outfile = args.upscaled_output_file or args.output

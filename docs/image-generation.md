@@ -16,14 +16,14 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image-auto`, `qwen-image-lightning`, `qwen-image-4bit`. See [Models](#models) below. |
+| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `z-image`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image-auto`, `qwen-image-lightning`, `qwen-image-4bit`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
 | `-o, --output` | Output filename/path. **Optional**: auto-generated from first 2 words of prompt if omitted. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
 | `-f, --format` | File format: jpg, png (default: jpg). |
 | `-s, --size` | Resolution. Supports "720p", "1080p", "4k", "8k", "HD", "1280x720", "1536" (square), `{w:1280, h:720}`. Default: 720p. |
-| `--negative-prompt` | Negative prompt (what to avoid). Only supported by standard models (SD 1.5, SD 3.5, Qwen). Ignored by Turbo/Flux. |
+| `--negative-prompt` | Negative prompt (what to avoid). Only supported by standard models (SD 1.5, SD 3.5, Qwen). **Ignored by Turbo/Flux/Z-Image** (along with CFG) — use "without" or "avoid" phrases in your prompt instead. |
 
 See [Image Generation Examples](#examples) and [Models](#models).
 
@@ -64,6 +64,7 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. Uses float32 on Apple Silicon. |
+| **Z-Image Turbo** | `z-image` | ~31GB | ~31GB | Alibaba model. Fast (9 steps). MLX-native on Mac, also CUDA/MPS. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. Older model. |
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
@@ -115,6 +116,32 @@ Both models share the same **8.1B parameter** architecture but differ in speed a
 | **Parameters** | 20B |
 | **Speed** | ~8-15 steps |
 
+
+## Precision & Framework Control
+
+AI-Media supports fine-grained control over model precision and ML framework. For a deep dive into precision types and their trade-offs, see **[Precisions Explained](precisions-explained.md)**.
+
+### Quick Reference
+
+| Option | Description |
+|--------|-------------|
+| `--precision-force`, `-pf` | Force precision: `int4`, `int6`, `int8`, `float16`, `bfloat16`, `float32` |
+| `--ml-framework`, `-mf` | Force framework (Mac): `mlx` (native) or `torch` (PyTorch MPS) |
+
+### Platform Defaults (Image Models)
+
+When no precision is specified, AI-Media automatically selects optimal settings:
+
+| Platform | Default Precision | Default Framework | Notes |
+|----------|------------------|-------------------|-------|
+| **CUDA (NVIDIA)** | `float16` | PyTorch | Standard standard half-precision |
+| **MPS (Mac PyTorch)** | `float16` | PyTorch | Stable, no quantization on MPS |
+| **MLX (Mac Native)** | `int4` | MLX | **Default**. Fastest inference on Apple Silicon (Flux/SDXL). |
+
+> [!NOTE]
+> **Flux on MLX**: By default, Flux/SDXL models on MLX use **4-bit quantization** (`int4`) to ensure they run fast and fit in memory. You can use `flux-dev:int8` or `-pf int8` to use 8-bit quantization for slightly higher quality (at the cost of double RAM usage).
+
+
 ## Examples
 
 ### Basic Usage (Quick Start)
@@ -131,6 +158,15 @@ python ai-media.py -i -p rndPr
 
 # Explicit output filename
 python ai-media.py --generate-image --prompt "A cute robot holding a flower" --output robot.png
+
+# Flux Dev with 8-bit quantization on MLX (Higher quality, ~30GB RAM)
+python ai-media.py -i -p "Prompt" -im flux-dev:int8
+
+# Force MLX framework explicitly
+python ai-media.py -i -p "Prompt" -im flux-dev -mf mlx
+
+# Force PyTorch on Mac (Slower, uses float16)
+python ai-media.py -i -p "Prompt" -im flux-dev -mf torch
 ```
 
 ### Model Comparison & Resources

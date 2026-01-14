@@ -21,7 +21,12 @@ async def transform_image(request: TransformRequest):
         "transform",
         prompt=request.instruction,
         model=request.model,
-        params={"input_path": request.input_path, "bypass_warning": request.bypass_warning}
+        params={
+            "input_path": request.input_path, 
+            "bypass_warning": request.bypass_warning,
+            "framework": request.framework,
+            "precision": request.precision
+        }
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -41,6 +46,10 @@ async def transform_image(request: TransformRequest):
             request.image_guidance_scale,
             request.silhouette,
             True, # Always bypass warning in server mode
+            False, # force
+            None, # progress_queue (handled by spawn_job_process)
+            request.framework == "mlx" if request.framework else None,
+            request.precision,
         ),
     )
     

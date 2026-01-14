@@ -138,6 +138,20 @@ def should_run_test(test_config, current_platform=None):
     # Check for 'gpu' shorthand (cuda or mps)
     if "gpu" in allowed_platforms:
         allowed_platforms.extend(["cuda", "mps"])
+
+    # Check for 'mlx' - allow if on Mac and mlx is importable
+    if "mlx" in allowed_platforms:
+        try:
+            import mlx.core
+            allowed_platforms.append(current_platform) # Allow current if valid
+            # Or better: check if we are on mac
+            if sys.platform != 'darwin':
+                 return False, f"runOn={run_on} (MLX requires macOS)"
+            # If on mac, we can run it, assuming current_platform is 'mps' or 'cpu'
+            # We just need to return True if we are on Mac
+            return True, None
+        except ImportError:
+            return False, f"runOn={run_on} (mlx module not found)"
     
     # Check for OS-specific filters first
     current_os = sys.platform  # 'darwin', 'win32', 'linux'

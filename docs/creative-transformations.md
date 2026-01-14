@@ -38,6 +38,7 @@ See [Creative Transformation Examples](#examples) and [Models](#models).
 | **InstructPix2Pix** | `instruct-pix2pix` | ~4GB | ~8GB (High Precision) | Instructional image editing (e.g., "Make it anime"). |
 | **[Qwen-Image-Edit (2511)](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)** | `qwen-image-edit` | ~20GB | ~40GB | **Best for:** text editing, precision. 40 steps. |
 | **[Qwen-Edit-Lightning (2512)](https://huggingface.co/lightx2v/Qwen-Image-Edit-2512-Lightning)** | `qwen-image-edit-lightning` | ~16GB | ~32GB | **4-step** distilled LoRA. ⚠️ Slow on MPS, fast on CUDA! |
+| **[Z-Image-Edit (Turbo)](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)** | `z-image-edit` | ~6B params | ~12GB | **Hyper-fast (9 steps)**. |
 | **RMBG-1.4** | `remove-bg` | ~0.2GB | ~2GB | Background removal and silhouette creation. |
 
 > [!IMPORTANT]

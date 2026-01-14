@@ -41,7 +41,7 @@ This module is your all-in-one text intelligence hub. It uses local Large Langua
 | `-chm, --chat-model` | Model for chat. Default: `default`. |
 | `--output-format` | Output format: `md` (default), `pdf`, `docx`, `html`, `json`. |
 | `-ri, --research-iter` | Deep Research iterations (number of sources to read). Default: `3`. |
-| `-al, --article-length` | Article length: `quick` (~500 words, fast, default), `standard` (~1500), `detailed` (~3000). |
+| `-al, --article-length` | Article length: `quick` (~500 words, fast, default), `standard` (~1500), `detailed` (~3000), `exhaustive` (~10000). **Tip**: Qwen models follow length instructions most reliably. |
 | `-p, --prompt` | Text description/topic for article generation. |
 | `-o, --output` | Output filename/path. **Optional**: auto-generated if omitted (the folder where files are generated is configured in `config.json` under `paths.media_output`). |
 
@@ -101,13 +101,59 @@ See [Code Generation Examples](#examples) and [Models](#text-models).
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Llama 3.1 8B** | `llama-3.1-8b` | ~5GB | ~16GB | 128k | 🔒 **Gated**. Open SOTA 8B. General writing, chat, reasoning. |
 | **Mistral Nemo 12B** | `mistral-nemo-12b` | ~7GB | ~24GB | 128k | Powerful 12B. Large context window, strong reasoning. |
-| **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | 128k | SOTA Code Gen. ⚠️ 120GB+ RAM on MPS! |
+| **Qwen 2.5 Coder 32B** | `qwen-coder-32b` | ~20GB | ~24GB | 128k | SOTA Code Gen. |
 | **Qwen 2.5 Coder 14B** | `qwen-coder-14b` | ~10GB | ~12GB | 128k | Fast & Capable Code Gen. |
 | **Qwen 2.5 Coder 7B** | `qwen-coder-7b` | ~5GB | ~6GB | 128k | Lightweight Code Gen. |
 | **Qwen3 Coder 30B** | `qwen3-coder-30b` | ~8GB | ~10GB | 32k | **MoE** (3.3B active). Efficient SOTA. |
 
 - All models are quantized (4-bit) on CUDA where possible to fit in consumer GPU memory.
 
+---
+
+## Precision & Framework Control
+
+AI-Media supports fine-grained control over model precision and ML framework. For a deep dive into precision types and their trade-offs, see **[Precisions Explained](precisions-explained.md)**.
+
+### Quick Reference
+
+| Option | Description |
+|--------|-------------|
+| `--precision-force`, `-pf` | Force precision: `int4`, `int6`, `int8`, `float16`, `bfloat16`, `float32` |
+| `--ml-framework`, `-mf` | Force framework (Mac): `mlx` (native) or `torch` (PyTorch MPS) |
+
+### Platform Defaults (Text Models)
+
+When no precision is specified, AI-Media automatically selects optimal settings:
+
+| Platform | Default Precision | Default Framework | Notes |
+|----------|------------------|-------------------|-------|
+| **CUDA (NVIDIA)** | `int4` (4-bit bitsandbytes) | PyTorch | Auto-quantized for consumer GPUs |
+| **MPS (Mac PyTorch)** | `float16` | PyTorch | Stable, no quantization on MPS |
+| **MLX (Mac Native)** | `int4` | MLX | Fastest inference on Apple Silicon |
+
+> [!NOTE]
+> **Why bfloat16 on Mac?** MPS doesn't support 4-bit quantization natively. Use MLX (`-mf mlx`) for quantized models on Apple Silicon.
+
+### CLI Examples
+
+```bash
+# Chat with forced bfloat16 (default on MPS now)
+python ai-media.py -c -chm llama-3.1-8b -pf bfloat16
+
+# MLX with int4 quantization (Mac - fastest)
+python ai-media.py -c -chm qwen3-8b -mf mlx -pf int4
+
+# CUDA with int8 quantization
+python ai-media.py -ga -p "Topic" -pf int8
+
+# Code generation with MLX
+python ai-media.py -gc "Python script" -mf mlx -pf int4
+```
+
+> [!TIP]
+> **Mac Users**: For best text generation performance, use MLX with int4 (`-mf mlx -pf int4`). It's significantly faster than PyTorch/MPS. See [Inference Server](inference-server.md) for API usage with precision.
+
+---
 
 
 ## Examples
@@ -140,8 +186,8 @@ Performs live web searches (DuckDuckGo) before writing.
 
 ```bash
 # Latest News (Knowledge beyond training cutoff)
-python ai-media.py -gr -p "SpaceX launches in 2025"
-python ai-media.py --generate-research --prompt "SpaceX launches in 2025"
+python ai-media.py -gr -p "SpaceX launches in 2026"
+python ai-media.py --generate-research --prompt "SpaceX launches in 2026"
 
 # Intensive Research (More Sources)
 # -ri 10 reads 10 distinct sources for a broader view.

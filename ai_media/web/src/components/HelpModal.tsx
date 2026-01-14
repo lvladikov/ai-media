@@ -168,7 +168,7 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
     <div className="space-y-6 max-w-4xl text-secondary text-sm">
       <p className="text-base">
         Generate high-quality images using state-of-the-art diffusion models running locally.
-        Supports SDXL, SD 1.5, SD 3.5, Flux, and Qwen-Image.
+        Supports SDXL, SD 1.5, SD 3.5, Flux, Z-Image, and Qwen-Image.
       </p>
 
       {/* Quick Pick Recommendations */}
@@ -206,6 +206,10 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
           [
             <span className="font-bold text-primary">SDXL Turbo</span>,
             '~8GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'No login, good all-rounder'
+          ],
+          [
+            <span className="font-bold text-primary">Z-Image Turbo</span>,
+            '~31GB', '48GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 9 steps</span>, 'MLX/CUDA/MPS', 'Alibaba model, fast'
           ],
           [
             <span className="font-bold text-primary">SD 1.5</span>,
@@ -254,7 +258,7 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
         <InfoCard title="Key Features" icon={<Image size={16} className="text-blue-600 dark:text-blue-400" />}>
           <ul className="list-disc pl-4 space-y-1">
             <li><strong>Text-to-Image</strong>: Detailed wallpapers, art, photos.</li>
-            <li><strong>Negative Prompt</strong>: List items to exclude (e.g., "blur, text").</li>
+            <li><strong>Negative Prompt</strong>: List items to exclude. <em>Note: Z-Image/Turbo/Flux ignore this and CFG — use "without/avoid" in your prompt.</em></li>
             <li><strong>Steps/CFG</strong>: Turbo models use 4 steps & 0 CFG. Standard use 30+ steps.</li>
           </ul>
         </InfoCard>
@@ -549,6 +553,22 @@ function HelpChat({ onNavigate }: HelpSectionProps) {
           [
             <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
             '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
           ]
         ]}
       />
@@ -637,7 +657,13 @@ function HelpArticle({ onNavigate }: HelpSectionProps) {
       <SectionTitle icon={<FileText size={20} />}>Capabilities</SectionTitle>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <InfoCard title="Long-Form Generation" icon={<FileText size={16} className="text-purple-500" />}>
-          <p>Generates content in sections, allowing for articles much longer than the context window of standard chats.</p>
+          <p className="mb-2">Generates content in sections. Options:</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Quick</strong>: ~500 words</li>
+            <li><strong>Standard</strong>: ~1500 words</li>
+            <li><strong>Detailed</strong>: ~3000 words</li>
+            <li><strong>Exhaustive</strong>: ~10,000 words</li>
+          </ul>
         </InfoCard>
         <InfoCard title="SEO Optimization" icon={<TrendingUp size={16} className="text-green-500" />}>
           <p>Automatically structures headings, meta descriptions, and keywords for better readability and reach.</p>
@@ -683,6 +709,22 @@ function HelpArticle({ onNavigate }: HelpSectionProps) {
           [
             <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
             '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
           ]
         ]}
       />
@@ -766,6 +808,22 @@ function HelpCode({ onNavigate }: HelpSectionProps) {
           [
             <span className="font-medium text-blue-500">DeepSeek R1 Llama 70B</span>,
             '~40GB', '128GB+', <span className="text-orange-500 font-bold">🐢 Slow</span>, 'CUDA Only', 'SOTA Intelligence'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-purple-500">Qwen 3 Opus 4.5 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'Opus Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 8B</span>,
+            '~8GB', '16GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
+          ],
+          [
+            <span className="font-medium text-indigo-500">Qwen 3 GPT-5.2 14B</span>,
+            '~14GB', '32GB+', <span className="text-emerald-500 font-bold">⚡ Fast</span>, 'Mac/CUDA', 'GPT-5.2 Reasoning'
           ]
         ]}
       />
@@ -814,6 +872,7 @@ function HelpTransform() {
           <ul className="list-disc pl-4 space-y-1">
             <li><strong>InstructPix2Pix</strong>: Stylistic edits ("Make it anime").</li>
             <li><strong>Qwen-Image-Edit</strong>: Precision text/object edits.</li>
+            <li><strong>Z-Image Turbo</strong>: Fast, high-quality edits (MLX/Mac Optimized).</li>
             <li><strong>Background Removal</strong>: RMBG-1.4 (Transparent PNG).</li>
           </ul>
         </InfoCard>
@@ -1015,6 +1074,92 @@ function HelpUpscale() {
         <p className="mt-4 text-[11px] text-tertiary italic">
           Tip: For ultra-fast results on 4K/8K, use "Fast Mode" instead. It bypasses the multi-step diffusion process while maintaining excellent clarity.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function HelpPrecision() {
+  return (
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
+      <p className="text-base font-medium text-primary">
+        Control model precision and ML framework for optimal performance on your hardware.
+      </p>
+
+      {/* Quick Pick Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+          <div className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mb-1 text-center">🚀 Speed King</div>
+          <div className="text-primary font-bold text-sm text-center">int4 (4-bit)</div>
+          <p className="text-secondary text-xs mt-1">Fastest, lowest memory. ~95% quality. Best for quick iterations and limited RAM.</p>
+        </div>
+        <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+          <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1 text-center">⚖️ Balanced</div>
+          <div className="text-primary font-bold text-sm text-center">bfloat16</div>
+          <p className="text-secondary text-xs mt-1">Recommended for LLMs. Full quality with 2x memory savings. Default on MPS.</p>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+          <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1 text-center">🎯 Reference</div>
+          <div className="text-primary font-bold text-sm text-center">float32</div>
+          <p className="text-secondary text-xs mt-1">Maximum quality. 4x memory. Use for benchmarking or when quality is critical.</p>
+        </div>
+      </div>
+
+      <SectionTitle icon={<Cpu size={20} />}>Precision Types</SectionTitle>
+      <Table
+        headers={['Precision', 'Description', 'Quality', 'Memory']}
+        rows={[
+          [<span className="font-bold text-primary">float32</span>, 'Full precision (reference)', '100%', '4x'],
+          [<span className="font-bold text-primary">bfloat16</span>, 'Brain float (recommended)', '~100%', '2x'],
+          [<span className="font-bold text-primary">float16</span>, 'Half precision (standard)', '~99%', '2x'],
+          [<span className="font-bold text-primary">int8</span>, '8-bit quantization', '~98%', '1x'],
+          [<span className="font-bold text-primary">int6</span>, '6-bit quantization', '~97%', '0.75x'],
+          [<span className="font-bold text-primary">int4</span>, '4-bit quantization (fastest)', '~95%', '0.5x'],
+        ]}
+      />
+
+      <SectionTitle icon={<Monitor size={20} />}>Platform Support</SectionTitle>
+      <Table
+        headers={['Precision', 'CUDA (NVIDIA)', 'MPS (PyTorch Mac)', 'MLX (Native Mac)']}
+        rows={[
+          ['float32', <span className="text-emerald-500">✅</span>, <span className="text-emerald-500">✅</span>, <span className="text-emerald-500">✅</span>],
+          ['bfloat16', <span className="text-emerald-500">✅ Ampere+</span>, <span className="text-emerald-500">✅</span>, <span className="text-emerald-500">✅</span>],
+          ['float16', <span className="text-emerald-500">✅</span>, <span className="text-emerald-500">✅</span>, <span className="text-emerald-500">✅</span>],
+          ['int8', <span className="text-emerald-500">✅ bitsandbytes</span>, <span className="text-red-500">❌ Use MLX</span>, <span className="text-emerald-500">✅</span>],
+          ['int6', <span className="text-red-500">❌ Not Supported</span>, <span className="text-red-500">❌ Use MLX</span>, <span className="text-emerald-500">✅</span>],
+          ['int4', <span className="text-emerald-500">✅ bitsandbytes</span>, <span className="text-red-500">❌ Use MLX</span>, <span className="text-emerald-500">✅</span>],
+        ]}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="CLI Options" icon={<Terminal size={16} className="text-blue-600 dark:text-blue-400" />}>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><code className="text-xs bg-tertiary px-1 rounded">--precision-force</code> / <code className="text-xs bg-tertiary px-1 rounded">-pf</code>: Force precision</li>
+            <li><code className="text-xs bg-tertiary px-1 rounded">--ml-framework</code> / <code className="text-xs bg-tertiary px-1 rounded">-mf</code>: Force framework (Mac)</li>
+          </ul>
+          <p className="mt-2 text-xs text-tertiary">Example: <code className="bg-tertiary px-1 rounded">-mf mlx -pf int4</code></p>
+        </InfoCard>
+
+        <InfoCard title="Inference Server" icon={<Globe size={16} className="text-emerald-600 dark:text-emerald-400" />}>
+          <p className="mb-2">Use <code className="text-xs bg-tertiary px-1 rounded">model:precision</code> syntax:</p>
+          <div className="bg-tertiary p-2 rounded text-xs font-mono">
+            llama-3.1-8b:int4<br/>
+            qwen-coder-14b:bfloat16
+          </div>
+        </InfoCard>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex items-start gap-4">
+        <div className="p-2 bg-blue-500/20 rounded shrink-0 text-blue-600 dark:text-blue-400">
+          <Info size={20} />
+        </div>
+        <div>
+          <h4 className="font-bold text-primary text-sm mb-1">Mac Users: MLX Recommended</h4>
+          <p className="text-xs text-secondary leading-normal">
+            For text generation on Apple Silicon, use <strong>MLX with int4</strong> for fastest speeds and lowest memory.
+            MLX is optimized for Apple's Neural Engine and provides significantly better performance than PyTorch/MPS.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -1440,6 +1585,7 @@ const SECTIONS = [
   { id: 'multimedia', label: 'Converters', icon: <FileType size={18} />, component: HelpMultimedia },
   { id: 'translate', label: 'Translation', icon: <Globe size={18} />, component: HelpTranslate },
   { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
+  { id: 'precision', label: 'Precision & Framework', icon: <Cpu size={18} />, component: HelpPrecision },
 ];
 
 export function HelpModal() {

@@ -17,6 +17,8 @@ def run_transform(
     bypass_warning: bool = False,
     force: bool = False,
     progress_queue: Queue = None,
+    use_mlx: bool = None,
+    precision: str = None,
 ):
     """Background task for image transformation. Runs in child process."""
     
@@ -55,6 +57,8 @@ def run_transform(
                 progress_callback=on_progress,
                 force=force,
                 bypass_warning=bypass_warning,
+                use_mlx=use_mlx,
+                precision=precision,
             )
         
         if success:

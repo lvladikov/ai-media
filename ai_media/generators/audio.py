@@ -113,7 +113,7 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
     import sys
     sys.setrecursionlimit(50000)  # Fix for Stable Audio / torchsde recursion on MPS
     
-    device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+    device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
     
     # --- Image-to-Audio Logic (Captioning) ---
     if image_input:

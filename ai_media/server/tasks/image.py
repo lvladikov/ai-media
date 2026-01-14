@@ -17,6 +17,8 @@ def run_image_generation(
     negative_prompt: str = "",
     force: bool = False,
     bypass_warning: bool = False,
+    framework: str = None,
+    precision: str = None,
     progress_queue: Queue = None,
 ):
     """Background task for image generation. Runs in child process."""
@@ -36,7 +38,7 @@ def run_image_generation(
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         # Import and run the existing generator
-        from ai_media.generators.image import generate_image as gen_image
+        from ai_media.generators.image import ImageGenerator
         
         # Define callback for progress updates
         def on_progress(percent, message):
@@ -47,12 +49,19 @@ def run_image_generation(
                 message=message
             )
 
-        success = gen_image(
+        # Initialize generator with explicit framework/precision if provided
+        generator = ImageGenerator(
+            model_id=model, 
+            use_mlx=(framework == "mlx") if framework else None,
+            precision=precision,
+            framework=framework 
+        )
+        
+        outputs = generator.generate(
             prompt=prompt,
             output_file=output_path,
             width=width,
             height=height,
-            model_name=model,
             steps=steps,
             guidance_scale=guidance_scale,
             negative_prompt=negative_prompt,
@@ -60,6 +69,8 @@ def run_image_generation(
             bypass_warning=bypass_warning,
             progress_callback=on_progress,
         )
+        
+        success = len(outputs) > 0
         
         if success:
             from . import get_relative_path

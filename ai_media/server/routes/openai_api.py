@@ -48,6 +48,26 @@ class ModelList(BaseModel):
     object: str = "list"
     data: List[Dict[str, Any]]
 
+# OpenAI Responses API models (newer API used by Continue in agent mode)
+class ResponsesInputMessage(BaseModel):
+    role: str
+    content: str
+
+class ResponsesRequest(BaseModel):
+    """OpenAI Responses API request format."""
+    model: str
+    input: Union[str, List[ResponsesInputMessage]]  # Can be string or message array
+    instructions: Optional[str] = None
+    temperature: Optional[float] = 0.7
+    top_p: Optional[float] = 1.0
+    max_output_tokens: Optional[int] = None
+    stream: Optional[bool] = False
+    # Additional fields Continue might send
+    tools: Optional[List[Any]] = None
+    tool_choice: Optional[Any] = None
+    reasoning: Optional[Dict[str, Any]] = None
+
+
 class ChatCompletionResponseChoice(BaseModel):
     index: int
     message: ChatMessage
@@ -134,6 +154,7 @@ def _handle_shutdown(model_name, stream=False):
             }
             yield f"data: {json.dumps(final_chunk)}\n\n"
             yield "data: [DONE]\n\n"
+            
 
         return StreamingResponse(stop_stream(), media_type="text/event-stream")
 
@@ -227,8 +248,12 @@ def _handle_memory_command(model_name, action, stream=False):
         }
 
 
-async def _handle_image_generation(request: Request, prompt: str, model_name: str, stream: bool = False, response_prefix: str = None):
+async def _handle_image_generation(request: Request, prompt: str, model_name: str, stream: bool = False, response_prefix: str = None, framework: str = None, precision: str = None):
     """Handle image generation requests."""
+    # Apply Transformers v5 patch before importing diffusers-dependent modules
+    from ai_media.utils.transformers_patch import ensure_patch_applied
+    ensure_patch_applied()
+    
     from ai_media.generators.image import ImageGenerator
     from ai_media.server.config import load_config
     from ai_media.utils.parsers import extract_prompt_parameters
@@ -268,7 +293,6 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
             }]
         }
 
-    # Init Generator
     # Init Generator (Cached)
     # Ensure Policy: Unload non-image models first (if not done by ensure_only logic in wrapper, but redundant check safe)
     model_cache.ensure_only("image")
@@ -276,8 +300,14 @@ async def _handle_image_generation(request: Request, prompt: str, model_name: st
     img_generator = model_cache.get("image", model_name)
     if not img_generator:
         print(f"Loading new ImageGenerator for {model_name}")
-        from ai_media.generators.image import ImageGenerator
-        img_generator = ImageGenerator(model_id=model_name)
+
+        if not framework:
+            from ai_media.server.config import CONFIG
+            if "generation" in CONFIG:
+                framework = CONFIG["generation"].get("ml_framework")
+
+        use_mlx_arg = "mlx" if framework == "mlx" else None
+        img_generator = ImageGenerator(model_id=model_name, use_mlx=use_mlx_arg, precision=precision)
         model_cache.set("image", model_name, img_generator)
     else:
         print(f"Using cached ImageGenerator for {model_name}")
@@ -579,7 +609,6 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
     # Filter prompt to remove 'stop inference server' exchanges to prevent model confusion hallucinations
     filtered_prompt = []
     stop_triggered = False
-    stop_triggered = False
     for m in prompt:
          content_lower = m.content.strip().lower()
          
@@ -621,7 +650,9 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
 
     # Determine device for logging
     device_name = "CPU"
-    if torch.cuda.is_available():
+    if getattr(generator, 'use_mlx', False):
+         device_name = "MLX"
+    elif torch.cuda.is_available():
         device_name = "CUDA"
     elif torch.backends.mps.is_available():
         device_name = "MPS"
@@ -632,14 +663,42 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
     
     # Callback to receive TQDM/Loading updates from ArticleGenerator
     last_msg = [None] # Use list for closure mutability
+    last_percent_logged = {} # prefix -> percent
+    
     def loading_callback(status, percent, message):
          if message and message.strip():
              # Strip \r (carriage return) which TQDM uses to overwrite lines in terminal
-             # We want them as distinct lines in the Thinking block
              clean_msg = message.replace("\r", "").strip()
-             if clean_msg and clean_msg != last_msg[0]:
-                 logs_to_show.append(clean_msg)
-                 last_msg[0] = clean_msg
+             
+             # Throttling Logic for Percentages (Reduce spam in Chat UI)
+             # content e.g. "Generating: 15%"
+             import re
+             match = re.search(r'^([A-Za-z\.\s]+[:\s]+)(\d+)%$', clean_msg)
+             if match:
+                 prefix = match.group(1)
+                 curr_pct = int(match.group(2))
+                 
+                 last_pct = last_percent_logged.get(prefix, -1)
+                 
+                 # Only show if:
+                 # 1. First time seeing this prefix
+                 # 2. Significant jump (>20%)
+                 # 3. Completion (100%)
+                 # 4. Error status
+                 if (last_pct == -1 or 
+                     (curr_pct - last_pct) >= 20 or 
+                     curr_pct == 100 or 
+                     status == "error"):
+                     
+                     if clean_msg != last_msg[0]:
+                        logs_to_show.append(clean_msg)
+                        last_msg[0] = clean_msg
+                        last_percent_logged[prefix] = curr_pct
+             else:
+                 # Non-percentage message (e.g. text logs), show always if new
+                 if clean_msg != last_msg[0]:
+                     logs_to_show.append(clean_msg)
+                     last_msg[0] = clean_msg
 
     # 0. Set callback BEFORE starting thread to catch immediate "Checking resources" etc.
     generator.progress_callback = loading_callback
@@ -653,7 +712,33 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
                 # Load model
                 generator._load_model()
                 
-                if generator.pipeline and generator.tokenizer:
+                # Check for MLX Generator first
+                if getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None):
+                    # MLX Path
+                    messages = [{"role": m.role, "content": m.content} for m in thread_args['prompt_data']]
+                    
+                     # INJECT SYSTEM INSTRUCTION
+                    if messages and messages[0]['role'] == 'system':
+                        messages[0]['content'] += (
+                            "\n\nIMPORTANT: Do not proactively use tools to read files or context (like 'read_currently_open_file') "
+                            "unless the user explicitly asks you to examine specific files or the codebase. "
+                            "For greetings and general questions, simply reply in text."
+                        )
+
+                    iterator = generator.mlx_generator.chat(
+                        messages=messages,
+                        max_tokens=thread_args['max_new_tokens'],
+                        temperature=thread_args['temperature'],
+                        top_p=thread_args['top_p'],
+                        stream=True
+                    )
+                    
+                    # Reset cancellation state
+                    generator.is_cancelled = False
+                    
+                    streamer_queue.put(iterator)
+                
+                elif generator.pipeline and generator.tokenizer:
                     # Create streamer NOW with valid tokenizer
                     local_streamer = TextIteratorStreamer(generator.tokenizer, skip_prompt=True, skip_special_tokens=True)
                     streamer_queue.put(local_streamer)
@@ -718,8 +803,24 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
     if response_prefix:
         yield f"data: {json.dumps(make_chunk(response_prefix))}\n\n"
     yield f"data: {json.dumps(make_chunk('<think>\n'))}\n\n"
-    yield f"data: {json.dumps(make_chunk(f'Server: Loading model {model_name}...\n\n'))}\n\n"
-    yield f"data: {json.dumps(make_chunk(f'Moving to device ({device_name})...\n\n'))}\n\n"
+    
+    # Check if model is already loaded to avoid spamming "Loading..." logs on every message
+    # We check if:
+    # 1. Generator has a loaded model (pipeline or mlx_generator)
+    # 2. The loaded model's name matches the requested model_name
+    is_already_loaded = False
+    try:
+        if generator.model_name == model_name:
+             if getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None):
+                 is_already_loaded = True
+             elif generator.pipeline:
+                 is_already_loaded = True
+    except:
+        pass
+
+    if not is_already_loaded:
+        yield f"data: {json.dumps(make_chunk(f'Server: Loading model {model_name}...\n\n'))}\n\n"
+        yield f"data: {json.dumps(make_chunk(f'Moving to device ({device_name})...\n\n'))}\n\n"
 
     # Loop while thread is alive AND streamer has no tokens yet
     last_progress = {} # prefix -> last_percent
@@ -756,7 +857,7 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
         return updates
 
 
-    while thread.is_alive() and not generator.pipeline:
+    while thread.is_alive() and not (generator.pipeline or (getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None))):
         while logs_to_show:
             msg = logs_to_show.pop(0)
             for completion in complete_progress(msg):
@@ -782,12 +883,20 @@ async def generate_response_stream(generator, prompt, model_name, request_id, ch
     for completion in complete_progress():
         yield completion
             
+    # CRITICAL FIX for MLX: The thread might finish BEFORE we grab the streamer (since chat() returns generator instantly)
+    # So if streamer is None, check queue ONE LAST TIME
+    if not streamer:
+        try:
+            streamer = streamer_queue.get_nowait()
+        except queue.Empty:
+            pass
+
     if not streamer:
         yield f"data: {json.dumps(make_chunk('Failed to load model or tokenizer init failed.\n'))}\n\n"
         return
 
     # If we exited loop, model is loaded (or thread died)
-    if not generator.pipeline:
+    if not generator.pipeline and not (getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None)):
         yield f"data: {json.dumps(make_chunk('Failed to load model.\n'))}\n\n"
     else:
         yield f"data: {json.dumps(make_chunk('Model loaded.\n</think>\n'))}\n\n"
@@ -950,27 +1059,59 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
                          "usage": None
                      }
 
-             return await _handle_image_generation(raw_request, last_msg, model_name, stream=request.stream, response_prefix=response_prefix)
+             # Extract optional parameters for image generation
+             framework = None
+             precision = None
+             try:
+                 request_json = await raw_request.json()
+                 framework = request_json.get("framework")
+                 precision = request_json.get("precision")
+             except:
+                 pass
+
+             return await _handle_image_generation(raw_request, last_msg, model_name, stream=request.stream, 
+                                                   response_prefix=response_prefix, 
+                                                   framework=framework, precision=precision)
 
         # --- TEXT GENERATION HANDLING (Existing Logic) ---
         # Enforce single model policy (Unload image models if any)
         model_cache.ensure_only("text")
         
+        # Parse model:precision:framework syntax (e.g., llama-3.1-8b:int4:mlx)
+        from ai_media.utils.precision import parse_model_precision_framework
+        base_model_name, precision_suffix, framework_suffix = parse_model_precision_framework(model_name)
+        
+        # Fallback to Global Config keys if not specified in model suffix
+        if not framework_suffix:
+             framework_suffix = CONFIG.get("generation", {}).get("ml_framework")
+        
+        if not precision_suffix:
+             precision_suffix = CONFIG.get("generation", {}).get("precision_force")
+        
+        # Use base model name for cache key and model lookup
+        cache_key = f"{base_model_name}:{precision_suffix or ''}:{framework_suffix or ''}"
+        cache_key = cache_key.rstrip(":") # Clean up trailing colons
+        
         # 1. Get/Load Generator
         # Check cache first
-        generator = model_cache.get("text", model_name)
+        generator = model_cache.get("text", cache_key)
         if generator is None:
             # Check if model exists in definitions
             from ai_media.models import TEXT_MODELS
-            if model_name not in TEXT_MODELS and request.model not in TEXT_MODELS.values():
+            if base_model_name not in TEXT_MODELS and request.model not in TEXT_MODELS.values():
                  # Try default fallback to 'default' if no match?
                  # ideally we strictly match available models
                  pass
 
-            print(f"Server: Loading model {model_name} for API request...")
+            print(f"Server: Loading model {base_model_name} for API request{'(precision: ' + precision_suffix + ')' if precision_suffix else ''}...")
             # Initialize generator (loads model)
             # bypass_warning=True because API requests are usually automated/intentional
-            generator = ArticleGenerator(model_name=model_name, bypass_warning=True)
+            generator = ArticleGenerator(
+                model_name=base_model_name, 
+                bypass_warning=True,
+                precision_force=precision_suffix,  # Pass parsed precision
+                framework_force=framework_suffix    # Pass parsed framework
+            )
             
             # Load model INSIDE the stream generator for streaming requests
             # For non-streaming, we must load it here
@@ -981,14 +1122,17 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
                 loaded = await loop.run_in_executor(None, generator._load_model)
             
                 if not loaded:
-                    raise HTTPException(status_code=500, detail=f"Failed to load model {model_name}")
+                    raise HTTPException(status_code=500, detail=f"Failed to load model {base_model_name}")
             
-            model_cache.set("text", model_name, generator)
+            model_cache.set("text", cache_key, generator)
         
         # 2. Prepare Messages
         if not request.stream:
-             # Check pipeline only if not streaming (streaming loads it lazily)
-             if not generator.pipeline or not generator.tokenizer:
+             # Check for EITHER PyTorch pipeline OR MLX generator
+             has_pytorch = generator.pipeline and generator.tokenizer
+             has_mlx = getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None)
+             
+             if not has_pytorch and not has_mlx:
                   raise HTTPException(status_code=500, detail="Model pipeline not initialized")
         else:
              # For streaming, we need tokenizer to be loaded to apply template
@@ -1019,32 +1163,49 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
                 media_type="text/event-stream"
             )
 
-        # 4. NON-STREAMING Response (Async wrapper)
-        # Ensure we have tokenizer now
-        if not generator.tokenizer:
-             generator._load_model()
-             
-        # Convert pydantic models to dicts
-        conversation = [{"role": m.role, "content": m.content} for m in request.messages]
-        prompt = generator.tokenizer.apply_chat_template(
-            conversation, 
-            tokenize=False, 
-            add_generation_prompt=True
-        )
-
-        kwargs = dict(
-            max_new_tokens=chat_max_tokens,
-            do_sample=request.temperature > 0,
-            temperature=request.temperature,
-            top_p=request.top_p,
-            return_full_text=False
-        )
-        
-        # Run in thread pool to prevent blocking
+        # 4. NON-STREAMING Response
         loop = asyncio.get_running_loop()
-        outputs = await loop.run_in_executor(None, run_generation_sync, generator, prompt, kwargs)
+        conversation = [{"role": m.role, "content": m.content} for m in request.messages]
+        
+        # Check if using MLX
+        if getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None):
+            # MLX path: use mlx_generator.chat()
+            def run_mlx_generation():
+                tokens = []
+                for token in generator.mlx_generator.chat(
+                    messages=conversation,
+                    max_tokens=chat_max_tokens,
+                    temperature=request.temperature,
+                    top_p=request.top_p,
+                    stream=True
+                ):
+                    tokens.append(token)
+                return "".join(tokens)
             
-        response_text = outputs[0]['generated_text'].strip()
+            response_text = await loop.run_in_executor(None, run_mlx_generation)
+        else:
+            # PyTorch path: ensure tokenizer loaded
+            if not generator.tokenizer:
+                 generator._load_model()
+                 
+            prompt = generator.tokenizer.apply_chat_template(
+                conversation, 
+                tokenize=False, 
+                add_generation_prompt=True
+            )
+
+            kwargs = dict(
+                max_new_tokens=chat_max_tokens,
+                do_sample=request.temperature > 0,
+                temperature=request.temperature,
+                top_p=request.top_p,
+                return_full_text=False
+            )
+            
+            # Run in thread pool to prevent blocking
+            outputs = await loop.run_in_executor(None, run_generation_sync, generator, prompt, kwargs)
+            response_text = outputs[0]['generated_text'].strip()
+        
         log_response_with_reasoning(model_name, response_text)
         
         # Cleanup
@@ -1073,3 +1234,339 @@ async def chat_completions(raw_request: Request, body: ChatCompletionRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def generate_responses_stream(
+    generator, 
+    messages: List[dict], 
+    model_name: str, 
+    response_id: str,
+    max_tokens: int,
+    temperature: float,
+    top_p: float
+):
+    """
+    Generate SSE stream in OpenAI Responses API format.
+    Uses event: prefixes required by Continue in agent mode.
+    """
+    import time
+    
+    created_time = int(time.time())
+    output_index = 0
+    content_index = 0
+    
+    # Create the response object structure
+    def make_response_event(event_type: str, data: dict):
+        """Format as proper SSE with event: prefix"""
+        return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+    
+    # 1. response.created event
+    yield make_response_event("response.created", {
+        "type": "response.created",
+        "response": {
+            "id": response_id,
+            "object": "response",
+            "created_at": created_time,
+            "status": "in_progress",
+            "model": model_name,
+            "output": []
+        }
+    })
+    
+    # 2. response.in_progress event
+    yield make_response_event("response.in_progress", {
+        "type": "response.in_progress",
+        "response": {
+            "id": response_id,
+            "object": "response",
+            "created_at": created_time,
+            "status": "in_progress",
+            "model": model_name,
+            "output": []
+        }
+    })
+    
+    # 3. response.output_item.added - announcing new text output
+    yield make_response_event("response.output_item.added", {
+        "type": "response.output_item.added",
+        "output_index": output_index,
+        "item": {
+            "type": "message",
+            "id": f"msg_{uuid.uuid4()}",
+            "status": "in_progress",
+            "role": "assistant",
+            "content": []
+        }
+    })
+    
+    # 4. response.content_part.added 
+    yield make_response_event("response.content_part.added", {
+        "type": "response.content_part.added",
+        "item_id": f"msg_{uuid.uuid4()}",
+        "output_index": output_index,
+        "content_index": content_index,
+        "part": {
+            "type": "output_text",
+            "text": "",
+            "annotations": []
+        }
+    })
+    
+    # Load model and generate (reuse existing logic)
+    full_response = []
+    
+    try:
+        # Check if model is already loaded (same pattern as chat_completions)
+        # We only need to load if:
+        # 1. No model is loaded at all (no pipeline/mlx_generator)
+        # 2. OR the loaded model doesn't match the requested model
+        is_already_loaded = False
+        try:
+            # Check if generator has a model loaded and it matches
+            if getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None):
+                is_already_loaded = True
+            elif generator.pipeline:
+                is_already_loaded = True
+        except:
+            pass
+        
+        needs_loading = not is_already_loaded
+        
+        if needs_loading:
+
+            # Load model in background thread while sending heartbeat events
+            import threading
+            import queue as queue_module
+            
+            load_error = [None]
+            load_done = threading.Event()
+            
+            def load_model_thread():
+                try:
+                    generator._load_model()
+                except Exception as e:
+                    load_error[0] = e
+                finally:
+                    load_done.set()
+            
+            loader_thread = threading.Thread(target=load_model_thread)
+            loader_thread.start()
+            
+            # Send heartbeat events during model loading
+            heartbeat_count = 0
+            loading_started = False
+            while not load_done.wait(timeout=2.0):
+                heartbeat_count += 1
+                # Send loading status as think content to show in Continue's "Thinking" section
+                if not loading_started:
+                    # First heartbeat - open think tag and show loading message
+                    loading_msg = f"<think>\nLoading model {model_name}...\n"
+                    loading_started = True
+                else:
+                    # Subsequent heartbeats - show progress dots
+                    loading_msg = "." if heartbeat_count % 3 != 0 else ".\n"
+                
+                yield make_response_event("response.output_text.delta", {
+                    "type": "response.output_text.delta",
+                    "item_id": f"msg_{response_id}",
+                    "output_index": output_index,
+                    "content_index": content_index,
+                    "delta": loading_msg
+                })
+                await asyncio.sleep(0)
+            
+            # Close the think tag if we opened it
+            if loading_started:
+                yield make_response_event("response.output_text.delta", {
+                    "type": "response.output_text.delta",
+                    "item_id": f"msg_{response_id}",
+                    "output_index": output_index,
+                    "content_index": content_index,
+                    "delta": "\nModel loaded.\n</think>\n"
+                })
+                await asyncio.sleep(0)
+
+            
+            loader_thread.join()
+            
+            if load_error[0]:
+                raise load_error[0]
+        
+        # Get streamer
+        if getattr(generator, 'use_mlx', False) and getattr(generator, 'mlx_generator', None):
+            streamer = generator.mlx_generator.chat(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stream=True
+            )
+
+        else:
+            # PyTorch path
+            conversation = messages
+            prompt = generator.tokenizer.apply_chat_template(
+                conversation, 
+                tokenize=False, 
+                add_generation_prompt=True
+            )
+            inputs = generator.tokenizer(prompt, return_tensors="pt").to(generator.device)
+            
+            from transformers import TextIteratorStreamer
+            streamer_obj = TextIteratorStreamer(generator.tokenizer, skip_prompt=True, skip_special_tokens=True)
+            
+            import threading
+            gen_kwargs = dict(
+                **inputs,
+                max_new_tokens=max_tokens,
+                do_sample=temperature > 0,
+                temperature=temperature if temperature > 0 else None,
+                top_p=top_p,
+                streamer=streamer_obj
+            )
+            thread = threading.Thread(target=generator.pipeline.model.generate, kwargs=gen_kwargs)
+            thread.start()
+            streamer = streamer_obj
+        
+        # 5. Stream response.output_text.delta events for each token
+        for new_text in streamer:
+            if not new_text:
+                continue
+            
+            full_response.append(new_text)
+            
+            yield make_response_event("response.output_text.delta", {
+                "type": "response.output_text.delta",
+                "item_id": f"msg_{response_id}",
+                "output_index": output_index,
+                "content_index": content_index,
+                "delta": new_text
+            })
+            await asyncio.sleep(0)
+        
+        final_text = "".join(full_response)
+        
+        # 6. response.output_text.done
+        yield make_response_event("response.output_text.done", {
+            "type": "response.output_text.done",
+            "item_id": f"msg_{response_id}",
+            "output_index": output_index,
+            "content_index": content_index,
+            "text": final_text
+        })
+        
+        # 7. response.output_item.done
+        yield make_response_event("response.output_item.done", {
+            "type": "response.output_item.done",
+            "output_index": output_index,
+            "item": {
+                "type": "message",
+                "id": f"msg_{response_id}",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": final_text}]
+            }
+        })
+        
+        # 8. response.completed
+        yield make_response_event("response.completed", {
+            "type": "response.completed",
+            "response": {
+                "id": response_id,
+                "object": "response",
+                "created_at": created_time,
+                "status": "completed",
+                "model": model_name,
+                "output": [{
+                    "type": "message",
+                    "id": f"msg_{response_id}",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": final_text}]
+                }],
+                "usage": {
+                    "input_tokens": -1,
+                    "output_tokens": len(full_response),
+                    "total_tokens": -1
+                }
+            }
+        })
+        
+        # Log response
+        log_response_with_reasoning(model_name, final_text)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        yield make_response_event("response.failed", {
+            "type": "response.failed",
+            "response": {
+                "id": response_id,
+                "status": "failed",
+                "error": {"message": str(e)}
+            }
+        })
+    finally:
+        generator._cleanup_memory()
+
+
+@router.post("/responses")
+async def responses_api(raw_request: Request, body: ResponsesRequest):
+    """
+    OpenAI Responses API endpoint (used by Continue in agent mode).
+    
+    Implements proper Responses API streaming format with event: prefixes.
+    """
+    from ai_media.models import TEXT_MODELS, get_model_id
+    from ai_media.generators.text import ArticleGenerator
+    
+    if CONFIG["server"].get("verbose_inference"):
+        print(f"\n📥 Responses API Request ({body.model})")
+    
+    # Convert 'input' to messages format
+    if isinstance(body.input, str):
+        messages = [{"role": "user", "content": body.input}]
+    else:
+        messages = [{"role": m.role, "content": m.content} for m in body.input]
+    
+    # If instructions provided, prepend as system message
+    if body.instructions:
+        messages.insert(0, {"role": "system", "content": body.instructions})
+    
+    # Get or create generator
+    model_name = body.model
+    base_model_name = model_name.split("-mlx")[0].split("-int")[0].split("-fp")[0]
+    cache_key = base_model_name
+    
+    generator = model_cache.get("text", cache_key)
+    if generator is None:
+        generator = ArticleGenerator(
+            model_name=base_model_name,
+            bypass_warning=True,
+            precision_force=None,
+            framework_force=None
+        )
+        model_cache.set("text", cache_key, generator)
+    
+    # Generate response ID
+    response_id = f"resp_{uuid.uuid4()}"
+    max_tokens = body.max_output_tokens or 2048
+    
+    # Log first message
+    first_user_msg = next((m["content"] for m in messages if m.get("role") == "user"), "")
+    if CONFIG["server"].get("verbose_inference"):
+        print(f"\n📥 Inference Request ({model_name}): {first_user_msg[:50]}...")
+    
+    # Always stream for Responses API
+    return StreamingResponse(
+        generate_responses_stream(
+            generator,
+            messages,
+            model_name,
+            response_id,
+            max_tokens,
+            body.temperature,
+            body.top_p
+        ),
+        media_type="text/event-stream"
+    )

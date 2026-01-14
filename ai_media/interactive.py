@@ -112,21 +112,31 @@ def run_shell_command(cmd_string, cwd=None):
     except Exception as e:
         print(f"❌ Error running command: {e}")
         return 1
-def run_interactive(jump_point=None):
+def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
     """Run interactive mode.
     
     Args:
         jump_point: Optional jump path (e.g., 'image/sdxl', 'audio/bark')
+        ml_framework: Optional framework force ('torch', 'mlx')
+        precision_force: Optional precision force ('int4', 'float16', etc.)
     """
     
     # Jump point mappings: name -> (menu_action, submenu_value)
     JUMP_POINTS = {
         # By name
         'image': ('image', None),
+        'image/sd35-turbo': ('image', 'sd3.5-turbo'),
         'image/sdxl': ('image', 'sdxl'),
+        'image/z-image': ('image', 'z-image'),
         'image/sd15': ('image', 'sd-1.5'),
+        'image/sd35-medium': ('image', 'sd3.5-medium'),
+        'image/sd35-large': ('image', 'sd3.5-large'),
+        'image/qwen': ('image', 'qwen-image-auto'),
+        'image/qwen-lightning': ('image', 'qwen-image-lightning'),
         'image/flux': ('image', 'flux'),
         'image/flux-dev': ('image', 'flux-dev'),
+        'image/flux2': ('image', 'flux2'),
+        'image/flux2-full': ('image', 'flux2-full'),
         'video': ('video', None),
         'video/zeroscope': ('video', 'zeroscope'),
         'video/modelscope': ('video', 'ms-1.7b'),
@@ -160,12 +170,16 @@ def run_interactive(jump_point=None):
         'sysinfo': ('sysinfo', None),
         'web': ('web', None),
         'cleanup': ('cleanup', None),
-        # By number (matching menu order)
+        # By number (matching menu order approx)
         '1': ('image', None),
-        '1/1': ('image', 'sdxl'),
-        '1/2': ('image', 'sd-1.5'),
-        '1/3': ('image', 'flux'),
-        '1/4': ('image', 'flux-dev'),
+        '1/1': ('image', 'sd3.5-turbo'),
+        '1/2': ('image', 'sdxl'),
+        '1/3': ('image', 'z-image'),
+        '1/4': ('image', 'sd-1.5'),
+        '1/5': ('image', 'sd3.5-medium'),
+        '1/6': ('image', 'sd3.5-large'),
+        '1/7': ('image', 'qwen-image-auto'),
+        '1/8': ('image', 'qwen-image-lightning'),
         '2': ('video', None),
         '2/1': ('video', 'zeroscope'),
         '2/2': ('video', 'ms-1.7b'),
@@ -275,7 +289,7 @@ def run_interactive(jump_point=None):
         
         # GPU Info
         if torch.backends.mps.is_available():
-            gpu_info = "MPS (Apple Silicon) ✅ Available"
+            gpu_info = "Apple Silicon GPU ✅ Available"
             try:
                 # [NEW] Mac MPS Stats
                 mem_curr = torch.mps.current_allocated_memory() / (1024**3)
@@ -339,26 +353,36 @@ def run_interactive(jump_point=None):
         else:
             gpu_info = "CPU Only (No Acceleration Detected)"
             
-        # Dtype Info (uses centralized detection)
-        try:
-            from .utils.system import is_bfloat16_supported
-            if torch.cuda.is_available():
-                dtype_info = "bfloat16" if is_bfloat16_supported() else "float16"
-            elif torch.backends.mps.is_available():
-                dtype_info = "float32"
-            else:
-                dtype_info = "float32"
-        except:
-            dtype_info = "float32"
+        # Framework & Dtype Info (Centralized Detection)
+        from .utils.system import get_optimal_device_and_dtype
+        opt_device, opt_dtype = get_optimal_device_and_dtype(
+            quiet=True, 
+            framework_force=ml_framework,
+            precision_force=precision_force
+        )
+        
+        is_mlx = opt_device is None
+        framework_info = "MLX (Native Apple Silicon)" if is_mlx else "PyTorch"
+        if not is_mlx and torch.cuda.is_available():
+             framework_info = "PyTorch (CUDA)"
+        elif not is_mlx and torch.backends.mps.is_available():
+             framework_info = "PyTorch (MPS)"
+             
+        if is_mlx:
+            from .server.config import CONFIG
+            dtype_info = CONFIG.get("precision_force") or "int4"
+        else:
+            dtype_info = str(opt_dtype).replace("torch.", "")
             
         # Clear Loading Indicator (Overwrite line)
         print("\r" + " " * 50 + "\r", end="", flush=True)
             
         print(f"💻 OS:       {os_info}")
         print(f"🧠 CPU:      {cpu_model} | {cpu_count} Cores (Usage: {cpu_percent}%)")
-        print(f"💾 RAM:      {ram_avail} Available / {ram_total} Total ({ram_percent} Used)")
-        print(f"🎮 GPU:      {gpu_info}")
-        print(f"⚡ DTYPE:    {dtype_info}")
+        print(f"💾 RAM:       {ram_avail} Available / {ram_total} Total ({ram_percent} Used)")
+        print(f"🎮 GPU:       {gpu_info}")
+        print(f"🏛️  FRAMEWORK: {framework_info}")
+        print(f"⚡ DTYPE:     {dtype_info}")
         print()
         
         prompt_menu(None, [], allow_back=True)
@@ -396,64 +420,106 @@ def run_interactive(jump_point=None):
         clear_screen()
         show_header("Image Generation")
         
-        # Model selection (skip if preset)
+        # Model selection logic
+        framework = "auto"
+        precision = "auto"
+        model = None
+
         if preset_model:
             model = preset_model
             print(f"📦 Model: {model}\n")
         else:
-            print("📦 Select Model:\n")
-            print(f"{emoji('⏳', '')} Loading Models...", end="", flush=True)
-            # Build model options with platform-specific notes
+            # Framework selection FIRST
+            framework = "auto" # default
+            
+            # Check Platform
+            import platform
             try:
                 import torch
-                is_cuda = torch.cuda.is_available()
-                is_mps = torch.backends.mps.is_available() and not is_cuda
             except ImportError:
-                is_cuda = False
-                is_mps = False
-            is_mac = sys.platform == 'darwin'
+                torch = None
+
+            is_mac = platform.system() == "Darwin"
+            is_cuda = False
+            if torch and torch.cuda.is_available():
+                is_cuda = True
+
+            # Framework Prompt (Mac only)
+            if is_mac:
+                from ai_media.utils.precision import is_mlx_available
+                mlx_ok = is_mlx_available()
+                
+                if mlx_ok:
+                    if ml_framework:
+                         framework = ml_framework
+                         print(f"\n🏗️  Framework: {framework.upper()} (Pre-selected via CLI)")
+                    else:
+                        print("\n🏗️  Select Framework:\n")
+                        fw_options = [
+                            ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                            ("PyTorch (MPS/CPU)", "torch")
+                        ]
+                        # Note: We don't filter frameworks by precision here because precision is next
+                        sel_fw = prompt_choice("Framework", fw_options)
+                        if sel_fw is None: return
+                        framework = sel_fw
+
+            # Precision selection
+            if precision_force:
+                 precision = precision_force
+                 print(f"\n⚙️  Precision: {precision} (Pre-selected via CLI)")
+            else:
+                print("\n⚙️  Select Precision:\n")
             
-            model_options = [
-                ("SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated) ~19GB", "sd3.5-turbo"),
-                ("SDXL Turbo (Fast, no login) ~8GB", "sdxl"),
-                ("SD 1.5 (Lightweight) ~4GB", "sd-1.5"),
+            # Determine auto label based on framework/platform
+            auto_label = "Auto (Platform Default)"
+            if framework == "mlx":
+                auto_label = "Auto (int4 - MLX Default)"
+            elif framework == "torch" and is_mac:
+                auto_label = "Auto (bfloat16 - Default)"
+            elif is_cuda:
+                auto_label = "Auto (float16 - CUDA Default)"
+            else:
+                auto_label = "Auto (float32 - CPU Default)"
+
+            # Get supported precisions for this framework
+            from ai_media.utils.precision import get_supported_precisions
+            device_type = "cpu"
+            if is_cuda: device_type = "cuda"
+            elif is_mac: device_type = "mps"
+            
+            supported_precs = get_supported_precisions(device_type, framework)
+            
+            # Build precision options
+            all_options = [
+                ("int4 (4-bit, Fastest)", "int4"),
+                ("int6 (6-bit, Balanced Speed)", "int6"),
+                ("int8 (8-bit, Balanced Quality)", "int8"),
+                ("bfloat16 (Brain Float)", "bfloat16"),
+                ("float16 (Half)", "float16"),
+                ("float32 (Full)", "float32"),
             ]
             
-            # SD 3.5 models (gated, work on all platforms)
-            model_options.extend([
-                ("SD 3.5 Medium (High Quality, 🔒 Gated) ~10GB", "sd3.5-medium"),
-                ("SD 3.5 Large (Best Quality, 🔒 Gated) ~19GB", "sd3.5-large"),
-            ])
+            precision_options = [(auto_label, "auto")]
+            for label, val in all_options:
+                if val in supported_precs:
+                    precision_options.append((label, val))
             
-            # Qwen-Image models
-            # Auto: Smart select (Full on Mac, 4-bit on CUDA)
-            model_options.append(("Qwen 2.5 Image (Auto: Best Quality) ~20-40GB", "qwen-image-auto"))
-            # Lightning: Fast 8-step
-            model_options.append(("Qwen 2.5 Image (Lightning: Fast 8-step) ~40GB", "qwen-image-lightning"))
+            precision = prompt_choice("Precision", precision_options)
+            if precision is None:
+                return
             
-            # Flux base models with Mac-specific notes
-            if is_mac:
-                model_options.extend([
-                    ("Flux Schnell (High Quality, Slow on Mac) ~12GB", "flux"),
-                    ("Flux Dev (Professional, Very Slow on Mac) ~16GB", "flux-dev"),
-                ])
-            else:
-                model_options.extend([
-                    ("Flux Schnell (High Quality) ~12GB", "flux"),
-                    ("Flux Dev (Professional) ~16GB", "flux-dev"),
-                ])
+            # Model selection with dynamic RAM
+            print("\n📦 Select Model:\n")
+            # print(f"{emoji('⏳', '')} Loading Models...", end="", flush=True) # Usually fast enough now
             
-            # FLUX.2 models with platform-specific notes
-            if is_cuda:
-                # CUDA: Show 4-bit quantized option
-                model_options.append(("FLUX.2 (4-bit SOTA 2025, CUDA) ~18GB", "flux2"))
-            elif is_mac:
-                # Mac: Show full model with RAM warning
-                model_options.append(("FLUX.2 Full (SOTA 2025, ⚠️ 128GB+ RAM!) ~65GB", "flux2-full"))
-            # Linux without CUDA - don't show flux2 as it won't work
+            from ai_media.utils.model_resources import get_image_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
             
-            # Clear loading indicator
-            print("\r" + " " * 50 + "\r", end="", flush=True)
+            model_options = get_image_model_options(precision, system_ram_gb=sys_ram, is_mac=is_mac, is_cuda=is_cuda)
+            
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -463,15 +529,30 @@ def run_interactive(jump_point=None):
         from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
         triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
         print(f"🎲 Tip: Enter {triggers_str} for a surprise Image prompt!\n")
-        prompt = prompt_text("📝 Enter prompt")
-        if prompt is None:
-            return
+        print(f"   (Leave empty for random prompt)")
         
-        # Handle random prompt trigger
-        from ai_media.utils.prompts import maybe_replace_with_random
-        prompt, was_random = maybe_replace_with_random(prompt, "image")
+        prompt = prompt_text("📝 Enter prompt", required=False)
+        if prompt is None: # Cancelled with Back/Exit command
+             # Logic is tricky here. prompt_text returns None on "0" or "back".
+             # If prompt is "", it returns "" if required=False.
+             # We need to distinguish between empty string (random) and None (back).
+             # prompt_text generally handles '0' internal checks but returns None on actual back.
+             # Let's assume None = abort, "" = empty input.
+             return
+
+        # Handle random prompt trigger (keyword or empty)
+        from ai_media.utils.prompts import maybe_replace_with_random, get_random_prompt
+        was_random = False
+        
+        if not prompt:
+            # Empty input -> Force random
+            prompt = get_random_prompt("image")
+            was_random = True
+        else:
+            prompt, was_random = maybe_replace_with_random(prompt, "image")
+
         if was_random:
-            print(f"🎲 Random prompt: {prompt}")
+            print(f"🎲 Using random prompt: {prompt}")
 
         # Negative Prompt (Optional)
         print("   (Tip: List content to exclude, e.g. 'blur, text'. Do NOT use 'no' or 'without'.)")
@@ -512,15 +593,29 @@ def run_interactive(jump_point=None):
         print()
         output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
         
-        # Build and run command
-        cmd = f"-i -p \"{prompt}\" -s {size} -otn {orientation} --image-model {model}"
-        if output:
-            cmd += f" -o \"{output}\""
+        # Build command
+        cmd = f'-i -p "{prompt}"'
+        if model:
+             cmd += f' --image-model {model}'
         if neg_prompt:
-            cmd += f" --negative-prompt \"{neg_prompt}\""
+             cmd += f' --negative-prompt "{neg_prompt}"'
+        if size:
+             cmd += f' -s {size}'
+        if orientation and orientation != "landscape":
+             cmd += f' -otn {orientation}'
+        if output:
+             cmd += f' -o "{output}"'
         
+        # Add Framework/Precision params
+        if precision and precision != "auto":
+             cmd += f' -pf {precision}'
+        if framework and framework != "auto":
+             cmd += f' --ml-framework {framework}'
+             
+        # Run
         run_self_command(cmd)
         wait_for_back()
+
     
     def video_menu(preset_model=None):
         """Video generation submenu."""
@@ -754,44 +849,137 @@ def run_interactive(jump_point=None):
         # Build command based on operation
         if operation == "edit":
             print()
-            instruction = prompt_text("📝 Enter edit instruction (e.g., 'Make it anime')")
-            if instruction is None:
-                return
+            # Handle random prompt on empty input
+            instruction = prompt_text("📝 Enter edit instruction (e.g., 'Make it anime')", required=False)
             
-            # Model selection for edit
-            print("\n📦 Select Edit Model:\n")
+            from ai_media.utils.prompts import maybe_replace_with_random, get_random_prompt
+            was_random = False
+            
+            if not instruction:
+                # Empty input -> Force random
+                instruction = get_random_prompt("image") # Use image prompts for edits too for now
+                was_random = True
+            else:
+                instruction, was_random = maybe_replace_with_random(instruction, "image")
+                
+            if was_random:
+                print(f"🎲 Using random instruction: {instruction}")
+            
+            if not instruction: # Should technically not happen if get_random_prompt works
+                 return
+            
+            # Framework/Precision selection for Edit
+            framework = "auto"
+            precision = "auto"
+            
+            # Check Platform
+            import platform
             try:
                 import torch
-                is_cuda = torch.cuda.is_available()
-                is_mps = torch.backends.mps.is_available() and not is_cuda
             except ImportError:
-                is_cuda = False
-                is_mps = False
+                torch = None
+
+            is_mac = platform.system() == "Darwin"
+            is_cuda = False
+            if torch and torch.cuda.is_available():
+                is_cuda = True
+
+            # Framework Prompt (Mac only)
+            if is_mac:
+                from ai_media.utils.precision import is_mlx_available
+                mlx_ok = is_mlx_available()
+                
+                if mlx_ok:
+                    if ml_framework:
+                         framework = ml_framework
+                         print(f"\n🏗️  Framework: {framework.upper()} (Pre-selected via CLI)")
+                    else:
+                        print("\n🏗️  Select Framework:\n")
+                        fw_options = [
+                            ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                            ("PyTorch (MPS/CPU)", "torch")
+                        ]
+                        sel_fw = prompt_choice("Framework", fw_options)
+                        if sel_fw is None: return
+                        framework = sel_fw
+
+            # Precision selection
+            if precision_force:
+                 precision = precision_force
+                 print(f"\n⚙️  Precision: {precision} (Pre-selected via CLI)")
+            else:
+                print("\n⚙️  Select Precision:\n")
             
-            edit_model_options = [
-                ("InstructPix2Pix (Default, Fast) ~4GB", "instruct-pix2pix"),
+            # Determine auto label based on framework/platform
+            auto_label = "Auto (Platform Default)"
+            if framework == "mlx":
+                auto_label = "Auto (int4 - MLX Default)"
+            elif framework == "torch" and is_mac:
+                auto_label = "Auto (bfloat16 - Default)"
+            elif is_cuda:
+                auto_label = "Auto (float16 - CUDA Default)"
+            else:
+                auto_label = "Auto (float32 - CPU Default)"
+
+            # Get supported precisions for this framework
+            from ai_media.utils.precision import get_supported_precisions
+            device_type = "cpu"
+            if is_cuda: device_type = "cuda"
+            elif is_mac: device_type = "mps"
+            
+            supported_precs = get_supported_precisions(device_type, framework)
+            
+            # Build precision options
+            all_options = [
+                ("int4 (4-bit, Fastest)", "int4"),
+                ("int6 (6-bit, Balanced Speed)", "int6"),
+                ("int8 (8-bit, Balanced Quality)", "int8"),
+                ("bfloat16 (Brain Float)", "bfloat16"),
+                ("float16 (Half)", "float16"),
+                ("float32 (Full)", "float32"),
             ]
             
+            precision_options = [(auto_label, "auto")]
+            for label, val in all_options:
+                if val in supported_precs:
+                    precision_options.append((label, val))
             
-            # Add Qwen-Image-Edit
-            edit_model_options.append(("Qwen-Image-Edit (Base 2511, Precise) ~20GB", "qwen-image-edit"))
-            edit_model_options.append(("Qwen-Edit-Lightning (Fast 2512) ~16GB", "qwen-image-edit-lightning"))
+            precision = prompt_choice("Precision", precision_options)
+            if precision is None:
+                return
+            
+            # Model selection for edit with dynamic RAM
+            print("\n📦 Select Edit Model:\n")
+            
+            from ai_media.utils.model_resources import get_transform_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
+            
+            edit_model_options = get_transform_model_options(precision, system_ram_gb=sys_ram, is_mac=is_mac, is_cuda=is_cuda)
             
             edit_model = prompt_choice("Edit Model", edit_model_options)
             if edit_model is None:
                 return
             
-            cmd = f"-ti \"{input_file}\" -tp \"{instruction}\" --edit-model {edit_model}"
+            cmd = f'-ti "{input_file}" -tp "{instruction}" --edit-model {edit_model}'
+            
+            # Add Framework/Precision params
+            if precision and precision != "auto":
+                 cmd += f' -pf {precision}'
+            if framework and framework != "auto":
+                 cmd += f' --ml-framework {framework}'
+                 
         elif operation == "rembg":
-            cmd = f"-ti \"{input_file}\" --remove-background"
+            cmd = f'-ti "{input_file}" --remove-background'
         elif operation == "silhouette":
-            cmd = f"-ti \"{input_file}\" --remove-background --silhouette"
+            cmd = f'-ti "{input_file}" --remove-background --silhouette'
         
         # Output
         print()
         output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
         if output:
-            cmd += f" -o \"{output}\""
+            cmd += f' -o "{output}"'
         
         run_self_command(cmd)
         wait_for_back()
@@ -1283,9 +1471,12 @@ def run_interactive(jump_point=None):
             from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
             triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
             print(f"🎲 Tip: Enter {triggers_str} for a surprise topic!\n")
-            topic = prompt_text("Topic")
-            if not topic:
+            print("(Random prompt used if empty)\n")
+            topic = prompt_text("Topic", required=False)
+            if topic is None:
                 return
+            if not topic:
+                topic = "rndpr" # Default to random prompt if empty
             
             # Handle random prompt trigger
             from ai_media.utils.prompts import maybe_replace_with_random
@@ -1293,21 +1484,88 @@ def run_interactive(jump_point=None):
             if was_random:
                 print(f"🎲 Using random topic: {topic}")
             
-            # Model selection
-            print("\n📦 Select Model:\n")
-            model_options = [
-                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
-                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
-                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
-                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
-                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
-                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
-                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
-                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
-                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
-                ("Mistral Nemo-12B", "mistral-nemo-12b"),
+            # Framework selection FIRST
+            framework = "torch"
+            import platform
+            try:
+                import torch
+            except ImportError:
+                torch = None # Should handle gracefully if not available (but likely is)
+
+            is_mac = platform.system() == "Darwin"
+            
+            if is_mac:
+                from ai_media.utils.precision import get_supported_frameworks
+                from ai_media.utils.precision import is_mlx_available
+                mlx_ok = is_mlx_available()
+                
+                if mlx_ok:
+                    if ml_framework:
+                         framework = ml_framework
+                         print(f"\n🏗️  Framework: {framework.upper()} (Pre-selected via CLI)")
+                    else:
+                        print("\n🏗️  Select Framework:\n")
+                        fw_options = [
+                            ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                            ("PyTorch (MPS/CPU)", "torch")
+                        ]
+                        # Note: We don't filter frameworks by precision here because precision is next
+                        framework = prompt_choice("Framework", fw_options)
+                        if framework is None: return
+
+            # Precision selection (filtered by framework)
+            if precision_force:
+                 precision = precision_force
+                 print(f"\n⚙️  Precision: {precision} (Pre-selected via CLI)")
+            else:
+                print("\n⚙️  Select Precision:\n")
+            
+            # Determine auto label based on framework/platform
+            auto_label = "Auto (Platform Default)"
+            if framework == "mlx":
+                auto_label = "Auto (int4 - MLX Default)"
+            elif framework == "torch" and is_mac:
+                auto_label = "Auto (bfloat16 - Default)"
+            elif torch and torch.cuda.is_available():
+                auto_label = "Auto (float16 - CUDA Default)"
+            else:
+                auto_label = "Auto (float32 - CPU Default)"
+
+            # Get supported precisions for this framework
+            from ai_media.utils.precision import get_supported_precisions
+            device_type = "cpu"
+            if torch and torch.cuda.is_available(): device_type = "cuda"
+            elif is_mac: device_type = "mps"
+            
+            supported_precs = get_supported_precisions(device_type, framework)
+            
+            # Build precision options
+            all_options = [
+                ("int4 (4-bit, Fastest)", "int4"),
+                ("int6 (6-bit, Balanced Speed)", "int6"),
+                ("int8 (8-bit, Balanced Quality)", "int8"),
+                ("bfloat16 (Brain Float)", "bfloat16"),
+                ("float16 (Half)", "float16"),
+                ("float32 (Full)", "float32"),
             ]
+            
+            precision_options = [(auto_label, "auto")]
+            for label, val in all_options:
+                if val in supported_precs:
+                    precision_options.append((label, val))
+            
+            precision = prompt_choice("Precision", precision_options)
+            if precision is None:
+                return
+            
+            # Model selection with dynamic RAM based on precision
+            print("\n📦 Select Model:\n")
+            from ai_media.utils.model_resources import get_text_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
+            
+            model_options = get_text_model_options(precision, system_ram_gb=sys_ram)
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -1354,6 +1612,7 @@ def run_interactive(jump_point=None):
                 ("Quick (~500 words, fast) (Default)", "quick"),
                 ("Standard (~1500 words)", "standard"),
                 ("Detailed (~3000 words, comprehensive)", "detailed"),
+                ("Exhaustive (~10000 words, exhaustive)", "exhaustive"),
             ]
             length = prompt_choice("Length", length_options)
             if length is None:
@@ -1366,6 +1625,10 @@ def run_interactive(jump_point=None):
             # Build command
             flag = "-gr" if online else "-ga"
             cmd = f'{flag} -p "{topic}" -atm {model} --output-format {output_format} -al {length}'
+            if precision != "auto":
+                cmd += f" -pf {precision}"
+            if framework:
+                cmd += f" --ml-framework {framework}"
             if online:
                 cmd += f" -ri {research_iter}"
             if output_path:
@@ -1390,10 +1653,12 @@ def run_interactive(jump_point=None):
             from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
             triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
             print(f"🎲 Tip: Enter {triggers_str} for a surprise Coding prompt!\n")
-            print("(Leave empty to go back)\n")
+            print("(Random prompt used if empty)\n")
             description = prompt_text("Description", required=False)
-            if not description:
+            if description is None:
                 return
+            if not description:
+                description = "rndpr"
             
             # Handle random prompt trigger
             from ai_media.utils.prompts import maybe_replace_with_random
@@ -1401,22 +1666,88 @@ def run_interactive(jump_point=None):
             if was_random:
                 print(f"🎲 Random prompt: {description}")
             
-            # Model selection
-            print("\n📦 Select Code Model:\n")
-            model_options = [
-                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
-                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
-                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
-                ("Qwen 2.5 Coder 14B", "qwen-coder-14b"),
-                ("Qwen 2.5 Coder 7B", "qwen-coder-7b"),
-                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
-                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
-                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
-                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
-                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
-                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
+            # Framework selection FIRST
+            framework = "torch"
+            import platform
+            try:
+                import torch
+            except ImportError:
+                torch = None
+
+            is_mac = platform.system() == "Darwin"
+            
+            if is_mac:
+                from ai_media.utils.precision import get_supported_frameworks
+                from ai_media.utils.precision import is_mlx_available
+                mlx_ok = is_mlx_available()
+                
+                if mlx_ok:
+                    if ml_framework:
+                         framework = ml_framework
+                         print(f"\n🏗️  Framework: {framework.upper()} (Pre-selected via CLI)")
+                    else:
+                        print("\n🏗️  Select Framework:\n")
+                        fw_options = [
+                            ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                            ("PyTorch (MPS/CPU)", "torch")
+                        ]
+                        # Note: We don't filter frameworks by precision here because precision is next
+                        framework = prompt_choice("Framework", fw_options)
+                        if framework is None: return
+
+            # Precision selection (filtered by framework)
+            if precision_force:
+                 precision = precision_force
+                 print(f"\n⚙️  Precision: {precision} (Pre-selected via CLI)")
+            else:
+                print("\n⚙️  Select Precision:\n")
+            
+            # Determine auto label based on framework/platform
+            auto_label = "Auto (Platform Default)"
+            if framework == "mlx":
+                auto_label = "Auto (int4 - MLX Default)"
+            elif framework == "torch" and is_mac:
+                auto_label = "Auto (bfloat16 - Default)"
+            elif torch and torch.cuda.is_available():
+                auto_label = "Auto (float16 - CUDA Default)"
+            else:
+                auto_label = "Auto (float32 - CPU Default)"
+
+            # Get supported precisions for this framework
+            from ai_media.utils.precision import get_supported_precisions
+            device_type = "cpu"
+            if torch and torch.cuda.is_available(): device_type = "cuda"
+            elif is_mac: device_type = "mps"
+            
+            supported_precs = get_supported_precisions(device_type, framework)
+            
+            # Build precision options
+            all_options = [
+                ("int4 (4-bit, Fastest)", "int4"),
+                ("int6 (6-bit, Balanced Speed)", "int6"),
+                ("int8 (8-bit, Balanced Quality)", "int8"),
+                ("bfloat16 (Brain Float)", "bfloat16"),
+                ("float16 (Half)", "float16"),
+                ("float32 (Full)", "float32"),
             ]
+            
+            precision_options = [(auto_label, "auto")]
+            for label, val in all_options:
+                if val in supported_precs:
+                    precision_options.append((label, val))
+            
+            precision = prompt_choice("Precision", precision_options)
+            if precision is None:
+                return
+            
+            # Model selection with dynamic RAM based on precision
+            print("\n📦 Select Code Model:\n")
+            from ai_media.utils.model_resources import get_code_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
+            
+            model_options = get_code_model_options(precision, system_ram_gb=sys_ram)
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -1430,6 +1761,10 @@ def run_interactive(jump_point=None):
             
             # Build command
             cmd = f'-gc -p "{description}" -cdm {model}'
+            if precision != "auto":
+                cmd += f' -pf {precision}'
+            if framework:
+                cmd += f' --ml-framework {framework}'
             if output_path:
                 cmd += f' -o "{output_path}"'
             
@@ -1445,28 +1780,93 @@ def run_interactive(jump_point=None):
         if preset_model:
             model = preset_model
             print(f"📦 Model: {model}\n")
+            # Use default precision for preset model
+            precision = "auto"
         else:
-            print("📦 Select Chat Model:\n")
-            model_options = [
-                ("Llama 3.1-8B (Default)", "llama-3.1-8b"),
-                ("DeepSeek R1-Qwen-7B (~7GB)", "deepseek-r1-qwen-7b"),
-                ("DeepSeek R1-Qwen-14B (~14GB)", "deepseek-r1-qwen-14b"),
-                ("DeepSeek R1-Qwen-32B (⚠️ ~24GB RAM!)", "deepseek-r1-qwen-32b"),
-                ("DeepSeek R1-Llama-8B (~8GB)", "deepseek-r1-llama-8b"),
-                ("DeepSeek R1-Llama-70B (⚠️ ~40GB RAM!)", "deepseek-r1-llama-70b"),
-                ("Qwen 3 8B (Reasoning - 16GB VRAM)", "qwen3-8b"),
-                ("Qwen 3 14B (Reasoning - 28GB VRAM)", "qwen3-14b"),
-                ("Qwen3-Coder-30B (MoE, 3.3B active)", "qwen3-coder-30b"),
-                ("Qwen 2.5 Coder 32B (⚠️ 120GB+ RAM!)", "qwen-coder-32b"),
-                ("Qwen3-VL 8B (Vision-Language)", "qwen-vl"),
-                ("Mistral Nemo-12B", "mistral-nemo-12b"),
+            # Framework selection FIRST
+            framework = "torch"
+            import platform
+            try:
+                import torch
+            except ImportError:
+                torch = None
+
+            is_mac = platform.system() == "Darwin"
+            
+            if is_mac:
+                from ai_media.utils.precision import get_supported_frameworks
+                from ai_media.utils.precision import is_mlx_available
+                mlx_ok = is_mlx_available()
+                
+                if mlx_ok:
+                    print("\n🏗️  Select Framework:\n")
+                    fw_options = [
+                        ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                        ("PyTorch (MPS/CPU)", "torch")
+                    ]
+                    # Note: We don't filter frameworks by precision here because precision is next
+                    framework = prompt_choice("Framework", fw_options)
+                    if framework is None: return
+
+            # Precision selection (filtered by framework)
+            print("\n⚙️  Select Precision:\n")
+            
+            # Determine auto label based on framework/platform
+            auto_label = "Auto (Platform Default)"
+            if framework == "mlx":
+                auto_label = "Auto (int4 - MLX Default)"
+            elif framework == "torch" and is_mac:
+                auto_label = "Auto (bfloat16 - Default)"
+            elif torch and torch.cuda.is_available():
+                auto_label = "Auto (float16 - CUDA Default)"
+            else:
+                auto_label = "Auto (float32 - CPU Default)"
+
+            # Get supported precisions for this framework
+            from ai_media.utils.precision import get_supported_precisions
+            device_type = "cpu"
+            if torch and torch.cuda.is_available(): device_type = "cuda"
+            elif is_mac: device_type = "mps"
+            
+            supported_precs = get_supported_precisions(device_type, framework)
+            
+            # Build precision options
+            all_options = [
+                ("int4 (4-bit, Fastest)", "int4"),
+                ("int6 (6-bit, Balanced Speed)", "int6"),
+                ("int8 (8-bit, Balanced Quality)", "int8"),
+                ("bfloat16 (Brain Float)", "bfloat16"),
+                ("float16 (Half)", "float16"),
+                ("float32 (Full)", "float32"),
             ]
+            
+            precision_options = [(auto_label, "auto")]
+            for label, val in all_options:
+                if val in supported_precs:
+                    precision_options.append((label, val))
+            
+            precision = prompt_choice("Precision", precision_options)
+            if precision is None:
+                return
+            
+            # Model selection with dynamic RAM based on precision
+            print("\n📦 Select Chat Model:\n")
+            from ai_media.utils.model_resources import get_chat_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
+            
+            model_options = get_chat_model_options(precision, system_ram_gb=sys_ram)
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
         
         # Build command and run
         cmd = f"-c --chat-model {model}"
+        if precision != "auto":
+            cmd += f" -pf {precision}"
+        if framework:
+            cmd += f" --ml-framework {framework}"
         
         run_self_command(cmd)
         # No "Press Enter" needed - chat exits naturally
@@ -1737,30 +2137,43 @@ def run_interactive(jump_point=None):
             clear_screen()
             show_header("Web Server Mode")
             
-            options = [
-                ("🧩  Start Inference Server (OpenAI Compatible)", "INFERENCE"),
-                ("🧩  Start Inference Server (OpenAI Compatible, Verbose)", "INFERENCE_VERBOSE"),
+            # Detect Mac for dynamic options
+            import sys
+            is_mac = sys.platform == 'darwin'
+            
+            options = []
+            
+            if is_mac:
+                options.append(("🧩  Start Inference Server (OpenAI Compatible) [PyTorch]", "INFERENCE_TORCH"))
+                options.append(("🧩  Start Inference Server (OpenAI Compatible, Verbose) [PyTorch]", "INFERENCE_VERBOSE_TORCH"))
+                options.append(("🍎  Start Inference Server (OpenAI Compatible) [MLX]", "INFERENCE_MLX"))
+                options.append(("🍎  Start Inference Server (OpenAI Compatible, Verbose) [MLX]", "INFERENCE_VERBOSE_MLX"))
+            else:
+                options.append(("🧩  Start Inference Server (OpenAI Compatible)", "INFERENCE"))
+                options.append(("🧩  Start Inference Server (OpenAI Compatible, Verbose)", "INFERENCE_VERBOSE"))
+                
+            options.extend([
                 ("🚀  Start Server (No Client)", "SERVER_ONLY"),
                 ("🌐  Start Client (Web)", "WEB_CLIENT"),
                 ("🔥  Start Both Server and Web Client", "BOTH_WEB"),
                 ("⚡  Start Both Server and Web + Electron Dev Client", "BOTH_FULL"),
                 ("🛠️   Electron Build Options", "BUILD_OPTS"),
                 ("📦  Versioning Scripts", "VERSION_OPTS"),
-            ]
+            ])
             
-            choice = prompt_choice("Select an option:", options, allow_back=True, default_index=4)
+            # Find index of BOTH_WEB to set it as default (Correct for Mac, CUDA, or CPU)
+            default_idx = next((i for i, opt in enumerate(options) if opt[1] == "BOTH_WEB"), 0)
+            
+            choice = prompt_choice("Select an option:", options, allow_back=True, default_index=default_idx)
             
             if choice is None: return
             
             web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
             
             code = 0
+            # Common Commands
             if choice == "SERVER_ONLY":
                 code = run_self_command("--serve-no-client")
-            elif choice == "INFERENCE":
-                code = run_self_command("--inference-server")
-            elif choice == "INFERENCE_VERBOSE":
-                code = run_self_command("--inference-server-verbose")
             elif choice == "WEB_CLIENT":
                 code = run_shell_command("npm run dev:client", cwd=web_dir)
             elif choice == "BOTH_WEB":
@@ -1771,6 +2184,20 @@ def run_interactive(jump_point=None):
                 electron_build_menu()
             elif choice == "VERSION_OPTS":
                 version_menu()
+            
+            # Inference Server Dynamic Options
+            elif choice == "INFERENCE":
+                code = run_self_command("--inference-server")
+            elif choice == "INFERENCE_VERBOSE":
+                code = run_self_command("--inference-server-verbose")
+            elif choice == "INFERENCE_TORCH":
+                code = run_self_command("--inference-server --ml-framework torch")
+            elif choice == "INFERENCE_VERBOSE_TORCH":
+                code = run_self_command("--inference-server-verbose --ml-framework torch")
+            elif choice == "INFERENCE_MLX":
+                code = run_self_command("--inference-server --ml-framework mlx")
+            elif choice == "INFERENCE_VERBOSE_MLX":
+                code = run_self_command("--inference-server-verbose --ml-framework mlx")
                 
             if choice != "BUILD_OPTS" and choice != "VERSION_OPTS":
                 # If code is non-zero (likely interrupted by Ctrl+C or error), 
@@ -1858,7 +2285,7 @@ def run_interactive(jump_point=None):
             options = [
                 ("🧹  Clear testing/data/outputs", "--clear-data-output"),
                 ("🗑️   Clear media_output", "--clear-media-output"),
-                ("🔥  Clear All", "--clear-all")
+                ("🔥  Clear All Output Data", "--clear-all-outputs")
             ]
             
             choice = prompt_choice("Select cleanup action:", options, allow_back=True)
@@ -2023,7 +2450,6 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
     _test_state['failed'] = 0
 
     suite_start_time = time.time()
-    suite_start_time = time.time()
     # timestamp with milliseconds
     start_dt = datetime.fromtimestamp(suite_start_time)
     suite_timestamp = start_dt.strftime("%Y%m%d-%H%M%S-%f")[:-3]
@@ -2078,7 +2504,6 @@ def run_tests(verbose=False, test_filter=None, exit_on_finish=True):
             results.append((test_name, False, failure_reason))
             continue
         
-        # 2. Delete expected outputs before run (clean slate)
         # 2. Delete expected outputs before run (clean slate)
         for output_item in expected_outputs:
             output_path = os.path.join(script_dir, output_item)

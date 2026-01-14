@@ -46,6 +46,18 @@ def load_config() -> Dict[str, Any]:
         except Exception as e:
             print(f"⚠️ Error loading config.json: {e}, using defaults")
     
+    # Platform Defaults
+    import platform
+    if platform.system() == "Darwin":
+        if "ml_framework" not in default_config:
+            default_config["ml_framework"] = "mlx"
+
+    # Env Var Overrides (Propagated from CLI)
+    if os.environ.get("AI_MEDIA_ML_FRAMEWORK"):
+        default_config["ml_framework"] = os.environ["AI_MEDIA_ML_FRAMEWORK"]
+    if os.environ.get("AI_MEDIA_PRECISION_FORCE"):
+        default_config["precision_force"] = os.environ["AI_MEDIA_PRECISION_FORCE"]
+
     # Normalize paths to use OS-specific separators (Fix for mixed slashes)
     if "paths" in default_config:
         for key, value in default_config["paths"].items():

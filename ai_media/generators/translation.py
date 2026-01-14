@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class TranslationGenerator:
     def __init__(self):
-        self.device, self.dtype = get_optimal_device_and_dtype()
+        self.device, self.dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
         self.processor = None
         self.model = None
         self.current_model_id = None

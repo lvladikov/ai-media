@@ -63,30 +63,41 @@ async def health_check():
 async def get_system_info():
     """Get system information including device, VRAM, and RAM."""
     import torch
+    from ..utils.system import get_optimal_device_and_dtype
     
-    # Detect device
+    # Use centralized detection
+    opt_device, opt_dtype = get_optimal_device_and_dtype(quiet=True)
+    is_mlx = opt_device is None
+    
+    # Detect device (physical hardware info)
     if torch.cuda.is_available():
-        device = "cuda"
         gpu_name = torch.cuda.get_device_name(0)
         vram_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        device = "mps"
         gpu_name = "Apple Silicon GPU"
         vram_total = None  # Unified memory
     else:
-        device = "cpu"
         gpu_name = None
         vram_total = None
+    
+    # Resolve Dtype for display
+    if is_mlx:
+         # Default MLX to int4 unless config says otherwise
+         dtype_str = CONFIG.get("precision_force") or "int4"
+    else:
+         dtype_str = str(opt_dtype).replace("torch.", "")
     
     # RAM
     import psutil
     ram_total = psutil.virtual_memory().total / (1024**3)
     
     return {
-        "device": device,
-        "dtype": "float16" if device != "cpu" else "float32",
+        "device": str(opt_device) if opt_device else "mlx",
+        "framework": "mlx" if is_mlx else "torch",
+        "dtype": dtype_str,
         "cuda_available": torch.cuda.is_available(),
         "mps_available": hasattr(torch.backends, 'mps') and torch.backends.mps.is_available(),
+        "mlx_available": is_mlx, # If we resolved to it, it's available
         "gpu_name": gpu_name,
         "vram_total_gb": round(vram_total, 2) if vram_total else None,
         "ram_total_gb": round(ram_total, 2),

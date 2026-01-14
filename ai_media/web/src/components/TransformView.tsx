@@ -10,6 +10,8 @@ import { Tooltip } from './common/Tooltip';
 import { DragDropZone } from './common/DragDropZone';
 import { formatDuration } from '../utils/formatTime';
 import { ModelHelpLink } from './common/ModelHelpLink';
+import { getDynamicRam } from '../utils/modelResources';
+import { HelpCircle } from 'lucide-react';
 
 // Check if a file extension can't be previewed in browsers
 const isNonPreviewableFormat = (filename: string): boolean => {
@@ -57,6 +59,9 @@ export function TransformView() {
   const [guidanceScale, setGuidanceScale] = useState(7.5);
   const [imageGuidanceScale, setImageGuidanceScale] = useState(1.5);
   const [showRecipes, setShowRecipes] = useState(false);
+  
+  const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
+  const [precision, setPrecision] = useState("auto");
 
   const [inputImage, setInputImage] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -93,6 +98,9 @@ export function TransformView() {
       setImageGuidanceScale(1.5);
     } else if (model === 'qwen-image-edit-lightning') {
       setGuidanceScale(2.0);
+      setImageGuidanceScale(1.5);
+    } else if (model === 'z-image') {
+      setGuidanceScale(1.0); // Not used by backend, but set safe default
       setImageGuidanceScale(1.5);
     }
   }, [model]);
@@ -215,6 +223,8 @@ export function TransformView() {
           guidance_scale: guidanceScale,
           image_guidance_scale: imageGuidanceScale,
           silhouette: silhouette,
+          framework: framework !== 'auto' ? framework : undefined,
+          precision: precision !== 'auto' ? precision : undefined,
         }),
       });
 
@@ -450,17 +460,78 @@ export function TransformView() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-secondary">Model</label>
-                  <select
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="select w-full bg-primary border-border text-sm focus:border-primary-500"
-                  >
-                    <option value="instruct-pix2pix">InstructPix2Pix (Creative)</option>
-                    <option value="qwen-image-edit">Qwen-Image-Edit (Precise)</option>
-                    <option value="qwen-image-edit-lightning">Qwen-Edit-Lightning (Fast)</option>
-                  </select>
+                <div className="space-y-4">
+                  {/* Framework Selector matched to ImageGenerator logic */}
+                  <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
+                    <label className="text-sm font-medium text-secondary block">Platform</label>
+                    <select
+                      className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+                      value={framework}
+                      onChange={(e) => setFramework(e.target.value)}
+                      title="Inference Framework - Use MLX for best performance on Mac"
+                    >
+                      <option value="mlx">MLX (Native Mac)</option>
+                      <option value="torch">PyTorch (MPS)</option>
+                    </select>
+                  </div>
+
+                  {/* Precision Selector */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-secondary">Precision</label>
+                       <button
+                        onClick={() => useAppStore.getState().openHelpSection('precision')}
+                        className="text-tertiary hover:text-brand-500 transition-colors"
+                        title="Learn about precision options"
+                      >
+                        <HelpCircle size={14} />
+                      </button>
+                    </div>
+                    <select
+                      className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
+                      value={precision}
+                      onChange={(e) => setPrecision(e.target.value)}
+                      title="Model precision - affects speed and memory usage"
+                    >
+                      <option value="auto">
+                        {(() => {
+                          const isMac = navigator.userAgent.toLowerCase().includes('mac');
+                          const isMlx = framework === 'mlx' || (framework === 'auto' && isMac);
+                          return `Auto (${isMlx ? 'int4 - MLX Default' : 'bfloat16 - Default'})`;
+                        })()}
+                      </option>
+                      <option value="int4">int4 (4-bit, Fast)</option>
+                      <option value="int6">int6 (6-bit, Balanced Speed)</option>
+                      <option value="int8">int8 (8-bit, Balanced Quality)</option>
+                      <option value="float16">float16 (Standard)</option>
+                      <option value="bfloat16">bfloat16 (Brain Float)</option>
+                      <option value="float32">float32 (Slow, Max Quality)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-secondary">Model</label>
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="select w-full bg-primary border-border text-sm focus:border-primary-500"
+                    >
+                       {[
+                         {id: 'instruct-pix2pix', label: 'InstructPix2Pix (Creative)'},
+                         {id: 'qwen-image-edit', label: 'Qwen-Image-Edit (Precise)'},
+                         {id: 'qwen-image-edit-lightning', label: 'Qwen-Edit-Lightning (Fast)'},
+                         {id: 'z-image', label: 'Z-Image Turbo (Mac/MLX Fast)'}
+                       ].map(m => {
+                          const vram = getDynamicRam(m.id, precision, framework);
+                          const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
+                          return (
+                            <option key={m.id} value={m.id}>
+                              {`${isHighRam ? '⚠️ ' : ''}${m.label} (${vram})`}
+                            </option>
+                          );
+                       })}
+                    </select>
+                  </div>
                 </div>
               </div>
             ) : activeTab === 'remove-object' ? (
@@ -570,14 +641,14 @@ export function TransformView() {
             )}
 
             {activeTab !== 'rembg' && (
-              <div className="space-y-4 pt-2 border-t border-border/50">
+              <div className={`space-y-4 pt-2 border-t border-border/50 ${model === 'z-image' ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-secondary flex justify-between items-center">
                     <span className="flex items-center gap-1.5">
                       Text Guidance (CFG)
                       <Tooltip content="Controls adherence. High = strict, Low = subtle." align="left" />
                     </span>
-                    <span className="text-primary-400">{guidanceScale.toFixed(1)}</span>
+                    <span className="text-primary-400">{model === 'z-image' ? 'Auto' : guidanceScale.toFixed(1)}</span>
                   </label>
                   <input
                     type="range"
@@ -596,7 +667,7 @@ export function TransformView() {
                       Image Preservation
                       <Tooltip content="Fidelity to original structure." align="left" />
                     </span>
-                    <span className="text-primary-400">{imageGuidanceScale.toFixed(1)}</span>
+                    <span className="text-primary-400">{model === 'z-image' ? 'Auto' : imageGuidanceScale.toFixed(1)}</span>
                   </label>
                   <input
                     type="range"
@@ -608,6 +679,9 @@ export function TransformView() {
                     className="w-full accent-primary-500 h-1 bg-secondary rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
+                {model === 'z-image' && (
+                   <p className="text-[10px] text-tertiary text-center">Z-Image Turbo uses fixed internal guidance parameters.</p>
+                )}
               </div>
             )}
           </div>

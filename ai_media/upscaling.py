@@ -17,6 +17,7 @@ from .utils.parsers import format_time
 from .utils.performance import ResourceMonitor, PerformanceTracker
 from .utils.ffmpeg import get_video_encoding_params, _check_ffmpeg_encoder
 from .utils.interaction import check_overwrite
+from .utils.transformers_patch import ensure_patch_applied, cleanup_patch
 
 
 # Check for Real-ESRGAN availability without eager importing
@@ -605,8 +606,15 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
     Uses optimal combination of x4, x2 AI passes + final Lanczos resize.
     """
     import torch
-    from diffusers import StableDiffusionUpscalePipeline, StableDiffusionLatentUpscalePipeline
     from PIL import Image
+    
+    # Lazy-apply Transformers v5 patch before importing diffusers
+    ensure_patch_applied()
+    
+    from diffusers import StableDiffusionUpscalePipeline, StableDiffusionLatentUpscalePipeline
+    
+    # Ephemeral cleanup
+    cleanup_patch()
     
     use_x2_model = (factor <= 2.0)
     model_id = IMAGE_MODELS.get('upscaler_x2' if use_x2_model else 'upscaler')
@@ -860,7 +868,7 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=
             v_h = int(cap_chk.get(cv2.CAP_PROP_FRAME_HEIGHT))
             cap_chk.release()
              
-            device, _ = get_optimal_device_and_dtype(prefer_bfloat16=True)
+            device, _ = get_optimal_device_and_dtype(prefer_bfloat16=True, prefer_mlx=False)
             if not check_resources_and_confirm(v_w, v_h, factor, device.type, force=force, bypass_warning=bypass_warning):
                 return False
         

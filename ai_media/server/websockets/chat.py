@@ -12,34 +12,54 @@ from ..cache import model_cache
 router = APIRouter()
 
 
-def generate_chat_response(message: str, history: List[Dict], model: str, is_model_cached: bool = False) -> str:
+def generate_chat_response(message: str, history: List[Dict], model: str, precision: str = None, framework: str = None, is_model_cached: bool = False) -> Dict:
     """Generate a chat response using the LLM.
     
     Args:
         message: User's message
         history: Conversation history
         model: Model name
+        precision: Precision override
+        framework: Framework override
         is_model_cached: If True, model is already loaded (for status reporting)
     
     Returns:
-        str: Response from the LLM or error message
+        dict: {"content": response, "reasoning": reasoning} or error message
     """
     try:
         from ai_media.generators.text import ArticleGenerator
+        from ai_media.utils.precision import parse_model_precision_framework
+        
+        # Parse potential model:precision:framework string
+        base_model, prec_suffix, fw_suffix = parse_model_precision_framework(model)
+
+        # Prefer explicit args, fallback to suffix
+        final_prec = precision or prec_suffix
+        final_fw = framework or fw_suffix
+
+        cache_key = f"{base_model}:{final_prec or ''}:{final_fw or ''}".rstrip(":")
         
         # Use cached model if same, otherwise load new
-        generator = model_cache.get("text", model)
+        generator = model_cache.get("text", cache_key)
         if generator is None:
-            generator = ArticleGenerator(model_name=model, bypass_warning=True)
-            model_cache.set("text", model, generator)
+            generator = ArticleGenerator(
+                model_name=base_model, 
+                precision_force=final_prec,
+                framework_force=final_fw,
+                bypass_warning=True
+            )
+            model_cache.set("text", cache_key, generator)
         
         response = generator.chat_single(message, history[:-1])  # Exclude current message from history
-        # Note: Model stays cached for reuse
-        return response
+        
+        # Retrieve extracted reasoning (stored by chat_single)
+        reasoning = getattr(generator, 'last_reasoning', None)
+        
+        return {"content": response, "reasoning": reasoning}
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f"Error generating response: {str(e)}"
+        return {"content": f"Error generating response: {str(e)}", "reasoning": None}
 
 
 @router.websocket("/ws/chat")
@@ -72,14 +92,24 @@ async def websocket_chat(websocket: WebSocket):
             if data.get("type") == "load":
                 # Explicitly load model on connect
                 model = data.get("model", "default")
+                precision = data.get("precision")
+                framework = data.get("framework")
+                
+                from ai_media.utils.precision import parse_model_precision_framework
+                base_model, prec_suffix, fw_suffix = parse_model_precision_framework(model)
+                
+                # Combine overrides
+                final_prec = precision or prec_suffix
+                final_fw = framework or fw_suffix
+                cache_key = f"{base_model}:{final_prec or ''}:{final_fw or ''}".rstrip(":")
                 
                 # Check cache first
-                is_model_cached = model_cache.get("text", model) is not None
+                is_model_cached = model_cache.get("text", cache_key) is not None
                 if is_model_cached:
                     await safe_send_json({"type": "status", "status": "ready", "message": "Model ready."})
                     await safe_send_json({"type": "status_clear"}) # Clear loading indicator
                 else:
-                    await safe_send_json({"type": "status", "status": "loading", "message": "Loading model... (this may take a moment)"})
+                    await safe_send_json({"type": "status", "status": "loading", "message": f"Loading {base_model}{' ('+final_prec+')' if final_prec else ''}..."})
                     
                     # Pre-load in thread
                     def preload():
@@ -92,18 +122,18 @@ async def websocket_chat(websocket: WebSocket):
                                 safe_send_json({"type": "log", "message": message}),
                                 loop
                             )
-                            
-                            if status == "error":
-                                asyncio.run_coroutine_threadsafe(
-                                    safe_send_json({"type": "status", "status": "error", "message": message}),
-                                    loop
-                                )
                         
-                        generator = ArticleGenerator(model_name=model, progress_callback=progress_callback, bypass_warning=True)
+                        generator = ArticleGenerator(
+                            model_name=base_model, 
+                            precision_force=final_prec,
+                            framework_force=final_fw,
+                            progress_callback=progress_callback, 
+                            bypass_warning=True
+                        )
                         # Explicitly trigger heavy load
                         success = generator._load_model()
                         if success:
-                            model_cache.set("text", model, generator)
+                            model_cache.set("text", cache_key, generator)
                         return success
                         
                     # internal function `preload` runs in a separate thread to avoid blocking the loop
@@ -191,24 +221,34 @@ async def websocket_chat(websocket: WebSocket):
                 
                 # Send acknowledgment
                 # Send acknowledgment with specific status
-                is_cached = model_cache.get("text", model) is not None
-                status_msg = "Thinking..." if is_cached else f"Loading {model}..."
+                from ai_media.utils.precision import parse_model_precision_framework
+                base_model, prec_suffix, fw_suffix = parse_model_precision_framework(model)
+                final_prec = data.get("precision") or prec_suffix
+                final_fw = data.get("framework") or fw_suffix
+                cache_key = f"{base_model}:{final_prec or ''}:{final_fw or ''}".rstrip(":")
+                
+                # Check if model is cached (for status message)
+                is_cached = model_cache.get("text", cache_key) is not None
+                status_msg = "Thinking..." if is_cached else f"Loading {base_model}..."
                 await safe_send_json({"type": "status", "status": "loading" if not is_cached else "processing", "message": status_msg})
                 
-                # Generate response (in thread pool to not block)
                 # Generate response (in thread pool to not block)
                 response = await loop.run_in_executor(
                     None, 
                     generate_chat_response, 
                     user_message,
                     chat_sessions[session_id],
-                    model,
+                    base_model, # Pass base model, let args handle overrides
+                    final_prec,
+                    final_fw,
                     True # Model should be loaded now
                 )
 
-                # Parse reasoning FIRST
-                from ai_media.generators.text import ArticleGenerator
-                parsed = ArticleGenerator.extract_reasoning(response)
+                # Response is now a dict {"content": ..., "reasoning": ...}
+                parsed = {
+                    "content": response["content"],
+                    "reasoning": response["reasoning"]
+                }
                 
                 # Add to history (store CLEAN content without reasoning to save context tokens)
                 chat_sessions[session_id].append({"role": "assistant", "content": parsed["content"]})

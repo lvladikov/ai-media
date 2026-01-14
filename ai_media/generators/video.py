@@ -14,6 +14,7 @@ from ..utils.parsers import format_time
 from ..utils.performance import PerformanceTracker, ResourceMonitor, write_report_json
 from ..utils.ffmpeg import get_video_encoding_params, ffmpeg_resize_video
 from ..utils.interaction import emoji
+from ..utils.transformers_patch import ensure_patch_applied, cleanup_patch
 
 
 def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, strength=0.6):
@@ -45,9 +46,12 @@ def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, st
         from diffusers import DiffusionPipeline, DPMSolverMultistepScheduler
         from PIL import Image
         
+        # Ephemeral cleanup
+        cleanup_patch()
+        
         # Auto-detect device/dtype if not provided
         if device is None or dtype is None:
-            device, dtype = get_optimal_device_and_dtype(quiet=True)
+            device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_mlx=False)
         
         # MPS limitation: Force CPU for XL V2V upscale
         original_device = device
@@ -152,6 +156,9 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     
     # Pre-calculate Device and Estimate
     try:
+        # Lazy-apply Transformers v5 patch before importing diffusers
+        ensure_patch_applied()
+        
         from diffusers import (
             DiffusionPipeline, 
             DPMSolverMultistepScheduler, 
@@ -165,7 +172,10 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         from diffusers.utils import export_to_video, load_image
         import torch
         
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        # Ephemeral cleanup
+        cleanup_patch()
+        
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
         dtype_name = str(dtype).replace("torch.", "")
         
         # Estimate Performance

@@ -73,6 +73,8 @@ class ImageGenerateRequest(BaseModel):
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
+    framework: Optional[str] = Field(None, description="Force specific ML framework ('torch', 'mlx')")
+    precision: Optional[str] = Field(None, description="Force specific precision ('int4', 'float16', etc.)")
 
 
 class VideoGenerateRequest(BaseModel):
@@ -87,6 +89,8 @@ class VideoGenerateRequest(BaseModel):
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
+    framework: Optional[str] = Field(None, description="Force specific ML framework ('torch', 'mlx')")
+    precision: Optional[str] = Field(None, description="Force specific precision ('int4', 'float16', etc.)")
 
 
 class AudioGenerateRequest(BaseModel):
@@ -104,7 +108,7 @@ class ArticleGenerateRequest(BaseModel):
     topic: str = Field(..., description="Topic for article generation")
     model: str = Field("default", description="LLM model name")
     format: str = Field("md", description="Output format (md, html, pdf, docx)")
-    length: str = Field("standard", description="quick, standard, or detailed")
+    length: str = Field("standard", description="quick, standard, detailed, or exhaustive")
     online: bool = Field(False, description="Enable online research")
     research_iterations: int = Field(3, description="Number of research iterations (if online)")
     max_images: int = Field(5, description="Maximum number of images to fetch (if online)")
@@ -133,6 +137,8 @@ class TransformRequest(BaseModel):
     silhouette: bool = Field(False, description="Create black silhouette instead of transparent (for rembg)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
+    framework: Optional[str] = Field(None, description="Force specific ML framework ('torch', 'mlx')")
+    precision: Optional[str] = Field(None, description="Force specific precision ('int4', 'float16', etc.)")
 
 
 class ConvertRequest(BaseModel):

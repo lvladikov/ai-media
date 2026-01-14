@@ -66,7 +66,7 @@ def is_bfloat16_supported():
     return False
 
 
-def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False):
+def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False, precision_force=None, framework_force=None, prefer_mlx=None):
     """
     Detect the best available hardware (CUDA, MPS, or CPU) 
     and return the device string and optimal torch dtype.
@@ -74,27 +74,105 @@ def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False):
     Args:
         quiet: Suppress device detection messages
         prefer_bfloat16: If True, use bfloat16 on supported CUDA hardware
+        precision_force: User-forced precision ("int4", "int6", "int8", "float16", "bfloat16", "float32")
+        framework_force: User-forced framework ("torch", "mlx") - affects device selection on Mac
+        prefer_mlx: If True, use MLX as default framework on Apple Silicon. 
+                   If None (default), use MLX automatically on macOS.
+    
+    Returns:
+        (torch.device, torch.dtype) - Note: int4/int6/int8 return None for dtype (use quantization config)
     """
+    import torch
+    
+    # Helper to convert precision string to torch dtype
+    def precision_to_dtype(prec):
+        mapping = {
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+            "int8": None,  # Requires special loading
+            "int4": None,  # Requires special loading
+        }
+        return mapping.get(prec, torch.float32)
+    
+    # Auto-detect platform-specific framework preference
+    if prefer_mlx is None:
+        import platform
+        prefer_mlx = (platform.system() == "Darwin")
+    
     try:
-        import torch
         if torch.cuda.is_available():
             if not quiet:
                 print(f"🚀 Detected NVIDIA GPU: Using CUDA\n")
-            # Use bfloat16 if requested and supported (Ampere+)
+            
+            # Handle forced precision
+            if precision_force:
+                dtype = precision_to_dtype(precision_force)
+                if dtype is not None:
+                    return torch.device("cuda"), dtype
+                # int4/int8 return None dtype - caller handles quantization
+                return torch.device("cuda"), None
+            
+            # Auto-select: bfloat16 if supported (Ampere+), else float16
             if prefer_bfloat16 and torch.cuda.is_bf16_supported():
                 return torch.device("cuda"), torch.bfloat16
             return torch.device("cuda"), torch.float16
             
         if torch.backends.mps.is_available():
+            # Auto-switch to MLX if int4/int6/int8 requested on Mac (since MPS doesn't support them well)
+            if precision_force in ["int4", "int6", "int8"] and framework_force != "torch":
+                if not quiet:
+                    print(f"🍎 Auto-switching to MLX for {precision_force} precision on Apple Silicon\n")
+                return None, None # Signal MLX usage
+
+            # Default to MLX for Apple Silicon if requested (and not forced to torch)
+            if prefer_mlx and framework_force != "torch":
+                 framework_force = "mlx"
+            
+            # MLX framework requested
+            if framework_force == "mlx":
+                # If preferring MLX, we check if it's actually importable? 
+                # Assuming yes if we are here.
+                if not quiet:
+                    if framework_force == "mlx":
+                        print(f"🍎 Using MLX (Native Apple Silicon)\n")
+                    else:
+                        print(f"🍎 Using MLX (Native Apple Silicon, Preferred)\n")
+                        
+                # Return None device to signal MLX should be used
+                if precision_force:
+                    return None, precision_to_dtype(precision_force)
+                return None, None  # MLX handles its own precision
+            
+            # If we are here, we are using MPS
             if not quiet:
                 print(f"🍎 Detected Apple Silicon: Using MPS (Metal Performance Shaders)\n")
+            
+            # Handle forced precision for MPS
+            if precision_force:
+                dtype = precision_to_dtype(precision_force)
+                if precision_force in ["int4", "int6", "int8"]:
+                    print(f"⚠️  {precision_force} not directly supported on MPS. Forced to torch, falling back to float16.")
+                    return torch.device("mps"), torch.float16
+                if dtype is not None:
+                    return torch.device("mps"), dtype
+                return torch.device("mps"), torch.float16
+            
+            # Default MPS: prefer bfloat16 for stability, float16 as fallback
+            if prefer_bfloat16:
+                return torch.device("mps"), torch.bfloat16
             return torch.device("mps"), torch.float16
     except ImportError:
         pass
     
-    import torch  # Will raise if not installed
     if not quiet:
         print(f"💻 Using CPU (Slow): CUDA or MPS not detected (or torch missing)\n")
+    
+    if precision_force:
+        dtype = precision_to_dtype(precision_force)
+        if dtype is not None:
+            return torch.device("cpu"), dtype
+    
     return torch.device("cpu"), torch.float32
 
 
@@ -103,6 +181,7 @@ def get_system_resources():
     ram_available = 0
     ram_total = 0
     vram_available = 0
+    vram_total = 0
     
     try:
         if psutil:
@@ -123,15 +202,22 @@ def get_system_resources():
             try:
                 if psutil:
                     vram_available = psutil.virtual_memory().available / (1024**3) * 0.75
+                    vram_total = ram_total * 0.75
             except:
                 vram_available = 8  # Conservative default
+                vram_total = 16
     except ImportError:
         pass
     
-    return ram_available, vram_available, ram_total
+    return {
+        "ram_available": ram_available,
+        "ram_total": ram_total,
+        "vram_available": vram_available,
+        "vram_total": vram_total
+    }
 
 
-def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None, bypass_warning=False, callback=None):
+def check_resources_and_warn(model_id, width=None, height=None, duration=None, force=False, model_requirements=None, bypass_warning=False, callback=None, is_mlx=False, precision=None):
     """
     Check if system resources are sufficient for the requested task.
     Returns True to proceed, False to abort.
@@ -145,6 +231,8 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
         model_requirements: Dict of model requirements (from models.py)
         bypass_warning: Specifically skip resource warning prompts
         callback: Optional function to emit warnings (e.g. to client)
+        is_mlx: Whether using MLX framework (Apple Silicon)
+        precision: Requested precision (e.g. "int4", "float16")
     """
     if model_requirements is None:
         return True  # Can't check without requirements
@@ -153,7 +241,11 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     if not reqs:
         return True  # Unknown model, proceed with caution
     
-    ram_available, vram_available, ram_total = get_system_resources()
+    # Unpack dictionary returned by get_system_resources
+    resources = get_system_resources()
+    ram_available = resources["ram_available"]
+    vram_available = resources["vram_available"]
+    ram_total = resources["ram_total"]
     warnings = []
     
     # Check for half-precision support (bf16/fp16)
@@ -161,7 +253,16 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     is_half_precision = False
     dtype_label = "float32"
     
-    if torch.cuda.is_available():
+    if precision:
+        dtype_label = precision
+        # int4/int8/float16 are all considered lower resource than float32
+        if precision in ["float16", "bfloat16", "int8", "int6", "int4"]:
+            is_half_precision = True
+    elif is_mlx:
+         # MLX defaults (often float16 or int4 if default)
+         is_half_precision = True
+         dtype_label = "float16 (MLX)"
+    elif torch.cuda.is_available():
         is_half_precision = True # CUDA usually runs fp16/bf16
         dtype_label = "bfloat16" if is_bfloat16_supported() else "float16"
     elif torch.backends.mps.is_available():
@@ -171,6 +272,15 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     # Apply scaling factor for half-precision (approx 0.6x of fp32 requirements)
     scale_factor = 0.6 if is_half_precision else 1.0
     
+    # MLX / Quantization scaling
+    # 4-bit quantization reduces memory by ~3-4x compared to fp16
+    if "int4" in (dtype_label or ""):
+        scale_factor = 0.25 # Aggressive reduction for 4-bit
+    elif "int8" in (dtype_label or ""):
+        scale_factor = 0.5
+    elif "int6" in (dtype_label or ""):
+        scale_factor = 0.375 # Approximate between int4 (0.25) and int8 (0.5) 
+        
     req_ram = reqs.get("ram", 0) * scale_factor
     req_vram = reqs.get("vram", 0) * scale_factor
     
@@ -253,14 +363,7 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     log_warn(f"\n   Model: {model_id}")
     
     # Add dtype info
-    import torch
-    if torch.cuda.is_available():
-        dtype_info = "bfloat16" if is_bfloat16_supported() else "float16"
-    elif torch.backends.mps.is_available():
-        dtype_info = "float32"
-    else:
-        dtype_info = "float32"
-    log_warn(f"   Dtype: {dtype_info}")
+    log_warn(f"   Dtype: {dtype_label}")
     
     # Check for VAE Tiling condition (Resolution > 1536x1536)
     if width and height:

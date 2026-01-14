@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ImageTranslationGenerator:
     def __init__(self):
-        self.device, self.dtype = get_optimal_device_and_dtype()
+        self.device, self.dtype = get_optimal_device_and_dtype(prefer_mlx=False)
         # Use ArticleGenerator for robust Text Translation (NLLB, LLMs)
         from ai_media.generators.text import ArticleGenerator
         self.translator = ArticleGenerator()

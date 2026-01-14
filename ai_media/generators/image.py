@@ -11,12 +11,17 @@ import threading
 import warnings
 import re
 import contextlib
+import platform
 from datetime import datetime
 
 from ..models import IMAGE_MODELS, MODEL_REQUIREMENTS, get_model_id
 from ..utils.system import get_optimal_device_and_dtype, clear_gpu_memory, check_resources_and_warn
 from ..utils.parsers import format_time
 from ..utils.performance import PerformanceTracker, ResourceMonitor, write_report_json
+from ..utils.transformers_patch import ensure_patch_applied, cleanup_patch
+
+# Suppress HuggingFace Hub warning about symlinks
+warnings.filterwarnings("ignore", message="The `local_dir_use_symlinks` argument is deprecated")
 
 
 class TqdmCapture:
@@ -49,16 +54,31 @@ class TqdmCapture:
     def flush(self):
         sys.__stderr__.flush()
 
+    def isatty(self):
+        return sys.__stderr__.isatty()
+    
+    @property
+    def encoding(self):
+        return sys.__stderr__.encoding
+
 
 class ImageGenerator:
     """Class for generating images using Diffusers pipelines."""
     
-    def __init__(self, model_id="default"):
+    def __init__(self, model_id="default", use_mlx=None, precision=None, **kwargs):
         """Initialize the generator.
         
         Args:
-            model_id: Model short code or HF ID.
         """
+        # Parse precision suffix (e.g. flux-dev:int8)
+        if ":" in model_id:
+            parts = model_id.split(":")
+            # Allow common precisions
+            if len(parts) == 2 and parts[1] in ["int4", "int6", "int8", "float16", "bfloat16", "float32"]:
+                model_id = parts[0]
+                if precision is None:
+                    precision = parts[1]
+        
         self.model_name = model_id
         # Resolve Model ID immediately
         self.model_id = get_model_id(model_id, IMAGE_MODELS)
@@ -69,6 +89,33 @@ class ImageGenerator:
         self._cancelled = False
         self._lock = threading.Lock()
         self.progress_callback = None
+        
+        # Normalize and detect framework/device
+        # Map boolean use_mlx to framework strings for central utility
+        framework_force = use_mlx
+        if use_mlx is True: framework_force = "mlx"
+        if use_mlx is False: framework_force = "torch"
+        
+        self.device, self.dtype = get_optimal_device_and_dtype(
+            quiet=True,
+            precision_force=precision,
+            framework_force=framework_force,
+            prefer_mlx=True # Default to MLX on Mac
+        )
+        
+        # Signal MLX usage (device=None)
+        self.use_mlx = self.device is None
+        self.precision_override = precision
+        
+        if self.use_mlx:
+            self.device = "mlx" # String marker
+            if not self.precision_override:
+                 # Check config for precision if not forced
+                 from ..server.config import CONFIG
+                 self.precision_override = CONFIG.get("precision_force")
+        
+        # Override if model is specifically an MLX-only model (though we handle this in _load mostly)
+        self.mlx_model = None
 
     def _log_status(self, status, progress, message, terminal=True):
         """Helper to report progress to callback and/or terminal."""
@@ -102,6 +149,16 @@ class ImageGenerator:
             del self.pipe
             self.pipe = None
             clear_gpu_memory()
+        
+        if self.mlx_model:
+            print(f"🧹 Unloading MLX image model: {self.model_name}")
+            del self.mlx_model
+            self.mlx_model = None
+            try:
+                import mlx.core as mx
+                mx.clear_cache()
+            except:
+                pass
             
     def stop(self):
         """Signal generation to stop."""
@@ -111,20 +168,35 @@ class ImageGenerator:
         
     def _ensure_pipeline_loaded(self):
         """Load the pipeline if not already loaded."""
-        if self.pipe:
+        if self.pipe or self.mlx_model:
             return
 
+        # Check for MLX usage
+        if self.use_mlx:
+            return self._load_pipeline_mlx()
+
         import torch
+        from ..utils.transformers_patch import ensure_patch_applied
+        ensure_patch_applied()
+        
         from diffusers import FluxPipeline, AutoPipelineForText2Image, Flux2Pipeline, StableDiffusion3Pipeline, DiffusionPipeline
         
-        # Determine device and dtype
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        # --- EPHEMERAL PATCH CLEANUP: Remove file immediately after import ---
+        # The file has served its purpose (bypassing the import check).
+        # We delete it now to keep the venv clean during runtime.
+        cleanup_patch()
+        
+        # Determine device and dtype (Force torch framework detection)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
         self.device = device
         self.dtype = dtype
         
         use_offload = False
         extra_kwargs = {}
         pipe = None
+        
+        # Special check for Flux + MPS: Automatically suggest MLX if available but not selected?
+        # For now we stick to explicit selection to avoid confusion.
         
         self._log_status("loading", 10, f"Loading image model: {self.model_name}...")
         
@@ -138,8 +210,29 @@ class ImageGenerator:
                 
                 class TqdmCallbackWrapper(original_tqdm):
                     def __init__(self, *args, **kwargs):
+                        # Force restricted inputs to prevent wrapping/spam
+                        # If a width isn't provided, cap it to avoid wrapping on common terminal sizes
+                        if "ncols" not in kwargs:
+                            # Try to get terminal size, default to 100 if unknown, cap max at 120
+                            try:
+                                width = os.get_terminal_size().columns
+                                kwargs["ncols"] = min(width - 5, 120) 
+                            except:
+                                kwargs["ncols"] = 100
+                        
                         super().__init__(*args, **kwargs)
                         self._last_callback_time = 0
+
+                    def set_description(self, desc=None, refresh=True):
+                        # Intercept and truncate super long diffusers descriptions
+                        if desc and len(desc) > 40:
+                             # Truncate middle or end? Diffusers usually puts interesting stuff at end?
+                             # Actually "Materializing param=..." is boring. Keep it short.
+                             if "Materializing param" in desc:
+                                 desc = "Materializing params..."
+                             elif len(desc) > 50:
+                                 desc = desc[:47] + "..."
+                        super().set_description(desc, refresh)
 
                     def update(self, n=1):
                         super().update(n)
@@ -278,6 +371,15 @@ class ImageGenerator:
                          if device.type == "cuda": use_offload = True
                          extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 4, "max_sequence_length": 256}
 
+                    elif "z-image" in self.model_name.lower() or "zimage" in self.model_name.lower():
+                         # Z-Image Turbo (Alibaba/Tongyi) - via diffusers
+                         from diffusers import ZImagePipeline
+                         zimage_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
+                         self._log_status("loading", 15, "Loading Z-Image Turbo Pipeline (PyTorch)...")
+                         pipe = ZImagePipeline.from_pretrained(self.model_id, torch_dtype=zimage_dtype)
+                         if device.type == "cuda": use_offload = True
+                         extra_kwargs = {"guidance_scale": 3.5, "num_inference_steps": 9}
+
                     elif "sdxl-turbo" in self.model_id.lower() or "turbo" in self.model_id.lower():
                          # SDXL Turbo
                          sdxl_dtype = torch.float32 if device.type == "mps" else dtype
@@ -324,19 +426,247 @@ class ImageGenerator:
              if hasattr(pipe, 'safety_checker') and pipe.safety_checker: pipe.safety_checker = pipe.safety_checker.to(torch.float32)
 
         self.pipe = pipe
+
         self.defaults = extra_kwargs
+
+    def _load_pipeline_mlx(self):
+        """Load MLX pipeline using mflux."""
+        try:
+            from mlx.utils import tree_flatten
+            import mlx.core as mx
+        except ImportError:
+            self._log_status("error", 0, "❌ mflux not installed. Cannot use MLX for image generation.")
+            raise
+
+        self._log_status("loading", 10, f"Loading MLX model: {self.model_name}...")
+        
+        # Resolve MLX model ID using mappings
+        from ..models import MLX_MODEL_MAPPINGS, get_mlx_model_id
+        
+        # Determine precision 
+        # Default to "int4" (mflux convention) unless overridden
+        target_precision = "int4"
+        if self.precision_override:
+            # Normalize precision string
+            p = self.precision_override.lower()
+            if "4" in p or "int4" in p: target_precision = "int4"
+            elif "6" in p or "int6" in p: target_precision = "int6"
+            elif "8" in p or "int8" in p: target_precision = "int8"
+            elif "16" in p or "float16" in p or "fp16" in p: target_precision = "float16" # mflux often uses float16
+            elif "bf16" in p: target_precision = "bf16" # Not all mflux support bf16, but check mappings
+            
+        mlx_model_id = get_mlx_model_id(self.model_id, target_precision)
+        
+        # Verify quantize integer for mflux instantiation
+        quantize_val = 4 # Default
+        if target_precision == "int8": quantize_val = 8
+        elif target_precision == "int6": quantize_val = 6
+        elif target_precision in ["float16", "bf16"]: quantize_val = None # None means 16-bit usually in mflux if loaded that way?
+        # Actually mflux Flux1.from_name takes `quantize` arg which is int (4 or 8) or None.
+        
+        self._log_status("loading", 15, f"Target Precision: {target_precision} (Quantize: {quantize_val})")
+        
+        # Update override so resource checker knows what we loaded
+        if not self.precision_override:
+            self.precision_override = target_precision
+        
+        # Mapping checks
+        short_name = self.model_name.lower()
+        
+        try:
+            if "qwen" in short_name:
+                from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
+                self._log_status("loading", 20, f"Loading Qwen Image (MLX)...")
+                
+                # Check if we have a specific repo ID or local path
+                # mflux uses `model_path` argument.
+                # If mapped ID is a repo (contains /), use that.
+                
+                # Qwen models (especially 4bit variants) don't play nice with additional runtime quantization attempts
+                # due to shape mismatches (group size 64 vs 1). 
+                # They are likely already optimized/quantized or require no further quantization relative to group size.
+                # Qwen models (especially 4bit variants) require explicit quantization config on load
+                # to correctly interpret the packed weights.
+                # If we pass None, it treats them as raw, leading to shape mismatches.
+                qwen_quant_val = quantize_val if quantize_val is not None else 4
+                
+                self.mlx_model = QwenImage(
+                    model_path=mlx_model_id,
+                    quantize=qwen_quant_val 
+                )
+                
+            elif "z-image" in short_name or "z_image" in short_name or "zimage" in short_name:
+                # Z-Image (Alibaba/Tongyi) - NOT the same as SDXL Turbo!
+                from mflux.models.z_image.variants.turbo.z_image_turbo import ZImageTurbo
+                self._log_status("loading", 20, f"Loading Z-Image Turbo (MLX)...")
+                
+                self.mlx_model = ZImageTurbo(
+                    model_path=mlx_model_id,
+                    quantize=quantize_val
+                )
+                
+
+
+                
+            elif "flux" in short_name or "default" in short_name:
+                # Flux (Default)
+                from mflux.models.flux.variants.txt2img.flux import Flux1
+                
+                # Map model name to mflux aliases if possible
+                mflux_alias = "schnell" # Default
+                if "dev" in short_name: mflux_alias = "dev"
+                elif "schnell" in mflux_alias: mflux_alias = "schnell"
+                
+                self._log_status("loading", 20, f"Loading Flux (MLX): {mflux_alias}...")
+                self.mlx_model = Flux1.from_name(mflux_alias, quantize=quantize_val)
+                
+            else:
+                # Model not supported on MLX - offer fallback to PyTorch/MPS
+                from rich.console import Console
+                console = Console()
+                console.print(f"\n[bold yellow]⚠️  MLX Not Supported:[/bold yellow] Model '{self.model_name}' is not available on MLX.")
+                console.print(f"[dim]   Supported MLX models: Flux, Qwen-Image, Z-Image.[/dim]")
+                console.print(f"[dim]   💡 Tip: For MLX-native fast generation, try 'z-image' (similar to SDXL Turbo).[/dim]\n")
+                
+                # Check if we're in server mode (bypass_warning or non-interactive) or CLI mode
+                # In server/web mode: auto-switch. In CLI mode: prompt user.
+                import sys
+                is_auto_mode = getattr(self, '_bypass_warning', False) or not sys.stdin.isatty()
+                
+                if is_auto_mode:
+                    # Server mode: auto-switch
+                    console.print(f"[yellow]   ➡️  Auto-switching to PyTorch/MPS framework...[/yellow]\n")
+                    self._log_status("loading", 15, f"⚠️ MLX not supported for {self.model_name}, switching to PyTorch/MPS...")
+                else:
+                    # CLI mode: prompt user
+                    console.print(f"[bold]   Switch to PyTorch/MPS to run this model? [/bold]", end="")
+                    try:
+                        response = input("[Y/n]: ").strip().lower()
+                        if response in ('n', 'no'):
+                            console.print(f"[red]   Generation cancelled.[/red]")
+                            raise ValueError(f"Model '{self.model_name}' not supported on MLX. User declined PyTorch fallback.")
+                    except EOFError:
+                        pass  # Non-interactive, proceed with fallback
+                    
+                    console.print(f"[green]   ✓ Switching to PyTorch/MPS framework...[/green]\n")
+                    self._log_status("loading", 15, f"Switching to PyTorch/MPS for {self.model_name}...")
+                
+                # Switch to PyTorch
+                self.use_mlx = False
+                self.mlx_model = None
+                
+                # Load via PyTorch path instead
+                return self._ensure_pipeline_loaded()
+
+            self._log_status("loading", 100, f"✅ MLX Model loaded")
+            
+        except Exception as e:
+            self._log_status("error", 0, f"❌ MLX Load Error: {e}")
+            raise e
+
+    def _generate_mlx(self, prompt, width, height, output_file, steps, guidance_scale, user_specified_steps=False, user_specified_guidance=False):
+        """Handle generation for MLX models using mflux."""
+        try:
+            from ..utils.performance import PerformanceTracker # Import here to avoid circular
+            
+            import time
+            start_time = time.time()
+            
+            # Seed logic
+            import random
+            seed = random.randint(0, 2**32 - 1)
+            
+            # Execute Generation
+            # Use inspection to determine supported arguments
+            import inspect
+            sig = inspect.signature(self.mlx_model.generate_image)
+            supported_args = sig.parameters.keys()
+            
+            gen_kwargs = {
+                "seed": seed,
+                "prompt": prompt,
+                "height": height,
+                "width": width
+            }
+            
+            # Conditionally add optional args if supported by the model wrapper
+            requests_steps = steps
+            if "steps" in supported_args:
+                gen_kwargs["steps"] = steps
+            elif "num_inference_steps" in supported_args:
+                gen_kwargs["num_inference_steps"] = steps
+            else:
+                requests_steps = "Auto"
+                
+            if "guidance" in supported_args:
+                gen_kwargs["guidance"] = guidance_scale
+                
+            self._log_status("loading", 50, f"Starting MLX Generation ({width}x{height}, steps: {requests_steps})...")
+            
+            image = self.mlx_model.generate_image(**gen_kwargs)
+            
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Save
+            # mflux GeneratedImage.save defaults to overwrite=False (rename), 
+            # but we handle conflict resolution upstream.
+            import inspect
+            if hasattr(image, "save"):
+                try:
+                    sig = inspect.signature(image.save)
+                    if "overwrite" in sig.parameters:
+                        image.save(output_file, overwrite=True)
+                    else:
+                        image.save(output_file)
+                except ValueError: # built-in method like PIL might fail signature check
+                     image.save(output_file)
+            else:
+                 # Should not happen typically
+                 image.save(output_file)
+                 
+            print(f"✅ Image saved to {output_file}")
+            
+            # Log metrics (approximate for MLX)
+            avg_ram = 0 
+            avg_cpu = 0
+            avg_gpu = 0
+            
+            tracker = PerformanceTracker()
+            tracker.print_actual(duration, avg_cpu, avg_ram, 0, avg_gpu)
+            
+            # Update stats for reporting
+            self._log_status("complete", 100, "Generation Complete") 
+            
+            return [output_file]
+            
+        except Exception as e:
+            self._log_status("error", 0, f"❌ MLX Generation Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def generate(self, prompt, width=1024, height=1024, output_file=None, steps=None, 
                  guidance_scale=None, negative_prompt="", unsafe=False, report_json=None, 
                  force=False, bypass_warning=False, progress_callback=None, allow_header=True, **kwargs):
         """Generate an image."""
         self._cancelled = False # Reset cancellation flag
+        self._bypass_warning = bypass_warning  # Store for _load_pipeline_mlx auto-switch
         self.progress_callback = progress_callback
         
         # Track if specific steps were requested by user
         user_specified_steps = steps is not None
         if steps is None:
-            steps = 30  # Default fallback for display/estimation if model doesn't override
+            # Smart defaults based on model type
+            lower_name = self.model_name.lower()
+            if "z-image" in lower_name:
+                steps = 9
+            elif "turbo" in lower_name or "schnell" in lower_name:
+                steps = 4 
+            elif "lightning" in lower_name:
+                steps = 8
+            else:
+                steps = 30  # Default fallback for others
 
         # Track if specific guidance was requested
         user_specified_guidance = guidance_scale is not None
@@ -351,9 +681,8 @@ class ImageGenerator:
             
             # Load config for output directory
             try:
-                from ..server.config import load_config
-                config = load_config()
-                output_dir = config.get("paths", {}).get("media_output")
+                from ..server.config import CONFIG
+                output_dir = CONFIG.get("paths", {}).get("media_output")
                 if not output_dir:
                     # Fallback if key missing
                     output_dir = os.path.join(os.getcwd(), "media-output")
@@ -367,22 +696,38 @@ class ImageGenerator:
         # Pre-calculate Device and Estimate Resources
         try:
             import torch
+            # Apply Transformers v5 patch BEFORE importing diffusers
+            from ..utils.transformers_patch import ensure_patch_applied
+            ensure_patch_applied()
             from diffusers import FluxPipeline, AutoPipelineForText2Image
             
             # Determine device and dtype
-            device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
-            dtype_name = str(dtype).replace("torch.", "")
+            if self.use_mlx and not self.precision_override:
+                 self.precision_override = "int4" # Default for MLX/mflux
+
+            framework_arg = "mlx" if self.use_mlx else None
+            device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, framework_force=framework_arg, precision_force=self.precision_override)
+            
+            if device is None and self.use_mlx:
+                # MLX Case
+                platform_name = "MLX"
+                dtype_name = f"{self.precision_override}"
+            else:
+                platform_name = device.type.upper() if device else "CPU"
+                dtype_name = str(dtype).replace("torch.", "")
+
             
             # Estimate Performance
             tracker = PerformanceTracker()
-            est_values = tracker.estimate_image(self.model_id, width, height, device, dtype=dtype_name)
+            # est_values = tracker.estimate_image(self.model_id, width, height, device, dtype=dtype_name)
             
             # Display Info Header
             if allow_header:
-                self._log_status("loading", 0, f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
-                est_msg = tracker.get_estimate_msg(*est_values)
-                if est_msg:
-                    self._log_status("loading", 0, est_msg)
+                self._log_status("loading", 0, f"Platform: {platform_name} | Dtype: {dtype_name}")
+                # est_msg = tracker.get_estimate_msg(*est_values)
+                # if est_msg:
+                #     self._log_status("loading", 0, est_msg)
+
             
         except ImportError:
             self._log_status("error", 0, "❌ Failed to import torch/diffusers. Please check installation.")
@@ -398,6 +743,8 @@ class ImageGenerator:
         print(f"   Output: {output_file}")
         print(f"   Steps:  {steps if user_specified_steps else 'Auto (Model Default)'}")
         print(f"   CFG:    {guidance_scale if user_specified_guidance else 'Auto (Model Default)'}")
+
+        print(f"   Framework: {'MLX' if self.use_mlx else 'PyTorch'}")
         print("")  # Spacer
         
         # Helper to pipe messages to client if callback available
@@ -405,8 +752,13 @@ class ImageGenerator:
             self._log_status("loading", 0, msg)
             
         # Check resources
+        check_prec = self.precision_override
+        if self.use_mlx and not check_prec:
+            check_prec = "int4"
+
         if not check_resources_and_warn(self.model_id, width=width, height=height, force=force, bypass_warning=bypass_warning,
-                                         model_requirements=MODEL_REQUIREMENTS, callback=self.progress_callback):
+                                         model_requirements=MODEL_REQUIREMENTS, callback=self.progress_callback, 
+                                         is_mlx=self.use_mlx, precision=check_prec):
             return []
         
         try:
@@ -423,6 +775,11 @@ class ImageGenerator:
             capture = TqdmCapture(self._log_status)
             with contextlib.redirect_stderr(capture):
                 self._ensure_pipeline_loaded()
+                
+            # MLX Branch - Handle separately
+            if self.use_mlx:
+                 return self._generate_mlx(prompt, width, height, output_file, steps, guidance_scale, user_specified_steps, user_specified_guidance)
+            
             pipe = self.pipe
             
             # Use defaults from load
@@ -518,32 +875,196 @@ class ImageGenerator:
 
                 # Start Resource Monitoring
                 with ResourceMonitor() as monitor:
-                    # SAFETY: Filter kwargs to prevent crashing models that don't support specific args (like negative_prompt)
-                    import inspect
-                    if hasattr(pipe, "__call__"):
-                        try:
-                            sig = inspect.signature(pipe.__call__)
-                            supported_args = set(sig.parameters.keys())
-                            has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-                            
-                            if not has_kwargs:
-                                keys_to_remove = [k for k in extra_kwargs if k not in supported_args]
-                                for k in keys_to_remove:
-                                    if k == "negative_prompt":
-                                        log_warn(f"   ⚠️ Warning: Model {self.model_name} does not support negative prompts. Ignoring.")
-                                    del extra_kwargs[k]
-                        except Exception:
-                            pass # Fallback to trusting the caller if inspection fails
 
-                    # Reverted: User found TqdmCapture here too noisy (dumps all stderr)
-                    # with contextlib.redirect_stderr(capture):
-                    output = pipe(
-                        prompt=prompt, 
-                        height=height, 
-                        width=width,
-                        callback_on_step_end=callback_on_step_end,
-                        **extra_kwargs
-                    )
+                    
+                    if self.use_mlx:
+                        # MLX / mflux Generation
+                        from mflux.utils.image_util import ImageUtil
+                        from mflux.models.common.config.config import Config
+                        
+                        # mflux model-specific defaults for steps
+                        short_name = self.model_name.lower()
+                        if not user_specified_steps:
+                            if "z-image" in short_name or "zimage" in short_name:
+                                steps = 9  # Z-Image Turbo optimal
+                            elif "flux" in short_name:
+                                steps = 4  # Flux Schnell default
+                            # else: keep the 30 default set earlier
+                        if not user_specified_guidance: 
+                            # All MLX turbo models (Flux, Z-Image) use 0 CFG by default
+                            guidance_scale = 0.0
+                        
+                        self._log_status("loading", 10, f"Starting MLX Generation ({width}x{height}, {steps} steps)...")
+                        
+                        # Initialize seed
+                        seed = int(time.time())
+                        
+                        # Dispatch based on model type
+                        # Flux1/ZImageTurbo/QwenImage have different signatures
+                        
+                        common_args = {
+                            "seed": seed,
+                            "prompt": prompt,
+                            "num_inference_steps": steps,
+                            "height": height,
+                            "width": width,
+                            #"image_path": output_file # Manual save to avoid [Errno 2] from library
+                        }
+                        
+                        # Tqdm Patch for MLX Progress
+                        import sys
+                        from tqdm import tqdm as real_tqdm
+                        
+                        # Capture callback reference for TqdmWrapper
+                        outer_progress_callback = progress_callback
+                        original_tqdms = {}
+                        
+                        class TqdmWrapper:
+                            def __init__(self, iterable=None, desc=None, total=None, *args, **kwargs):
+                                self.iterable = iterable
+                                self.desc = desc or "Generating"
+                                self.total = total or (len(iterable) if iterable else None)
+                                self.n = 0
+                                self._start_time = time.time()
+                                self._tqdm = real_tqdm(iterable, desc=desc, total=total, *args, **kwargs)
+
+                            def _report_progress(self):
+                                if outer_progress_callback and self.total and self.total > 0:
+                                    percent = min(100, int((self.n / self.total) * 100))
+                                    # Calculate ETA
+                                    elapsed = time.time() - self._start_time
+                                    if self.n > 0:
+                                        avg_time = elapsed / self.n
+                                        remaining = max(0, self.total - self.n)
+                                        eta_secs = int(remaining * avg_time)
+                                        mins, secs = divmod(eta_secs, 60)
+                                        outer_progress_callback(percent, f"Generating: {percent}%, Remaining Time: {mins:02d}:{secs:02d}")
+                                    else:
+                                        outer_progress_callback(percent, f"Generating: {percent}%")
+
+                            def update(self, n=1):
+                                self.n += n
+                                if self._tqdm: self._tqdm.update(n)
+                                self._report_progress()
+                            
+                            def __iter__(self):
+                                if self.iterable:
+                                    for item in self._tqdm:
+                                        yield item
+                                        self.n += 1
+                                        self._report_progress()
+
+                            def __enter__(self): return self
+                            def __exit__(self, *args): 
+                                if self._tqdm: self._tqdm.close()
+                            
+                            def close(self):
+                                if self._tqdm: self._tqdm.close()
+                            
+                            @property
+                            def format_dict(self):
+                                if self._tqdm: return self._tqdm.format_dict
+                                return {"n": self.n, "total": self.total}
+                            
+                            def __getattr__(self, name):
+                                # Delegate any other attribute access to underlying tqdm
+                                if self._tqdm:
+                                    return getattr(self._tqdm, name)
+                                raise AttributeError(f"'TqdmWrapper' has no attribute '{name}'")
+
+                        # Patch mflux modules
+                        for name, module in sys.modules.items():
+                            if name.startswith("mflux") and hasattr(module, "tqdm"):
+                                if module.tqdm != TqdmWrapper:
+                                    original_tqdms[name] = module.tqdm
+                                    module.tqdm = TqdmWrapper
+                        
+                        try:
+                            # Ensure directory exists immediately before saving
+                            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                            
+                            # Identify class name
+                            model_class_name = self.mlx_model.__class__.__name__
+                            
+                            if "Flux1" in model_class_name:
+                                 # Flux signature: guidance, negative_prompt
+                                 generated_image = self.mlx_model.generate_image(
+                                     **common_args,
+                                     guidance=guidance_scale,
+                                     negative_prompt=negative_prompt if negative_prompt else None
+                                 )
+                            elif "ZImageTurbo" in model_class_name:
+                                 # Z-Image Turbo (Alibaba) - no guidance/negative_prompt support
+                                 generated_image = self.mlx_model.generate_image(**common_args)
+                            elif "QwenImage" in model_class_name:
+                                 # Qwen signature
+                                 generated_image = self.mlx_model.generate_image(
+                                     **common_args,
+                                     guidance=guidance_scale,
+                                     negative_prompt=negative_prompt if negative_prompt else None
+                                 )
+                            else:
+                                 # Fallback
+                                 generated_image = self.mlx_model.generate_image(**common_args)
+                        
+                        finally:
+                            # Restore tqdm
+                            for name, original in original_tqdms.items():
+                                if name in sys.modules:
+                                    sys.modules[name].tqdm = original
+                        
+                        # Manual Save Logic
+                        pil_img = None
+                        if generated_image:
+                            if hasattr(generated_image, "image"): # Wrapper object (Flux)
+                                pil_img = generated_image.image
+                            elif hasattr(generated_image, "save"): # Is a PIL image
+                                pil_img = generated_image
+                        
+                        if pil_img:
+                            try:
+                                pil_img.save(output_file)
+                                print(f"✅ Saved MLX image manually to {output_file}")
+                            except Exception as e:
+                                print(f"❌ Manual save failed: {e}")
+                                raise e
+                        else:
+                            # If we didn't get an image back but file exists (fallback?), that's weird.
+                            # But since we removed image_path, we expect return.
+                            if not os.path.exists(output_file):
+                                 raise Exception(f"MLX generation returned {type(generated_image)} and no file was saved.")
+                             
+                        # Mock output object for compatibility
+                        # We populate with actual image so downstream can use it if needed
+                        class MockOutput:
+                             images = [pil_img] if pil_img else [None]
+                             
+                        output = MockOutput()
+
+                    else:
+                        # PyTorch / Diffusers Generation
+                        # Reverted: User found TqdmCapture here too noisy (dumps all stderr)
+                        # with contextlib.redirect_stderr(capture):
+                        output = pipe(
+                            prompt=prompt, 
+                            height=height, 
+                            width=width,
+                            callback_on_step_end=callback_on_step_end,
+                            **extra_kwargs
+                        )
+                    
+                    if self.use_mlx:
+                        # Post-process for MLX (metrics)
+                         duration = time.time() - start_time
+                         avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+                         tracker.record_image(self.model_id, width, height, "mlx", duration, 
+                                             cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=self.precision_override or "int4")
+                         print(f"   ✓ Generated in {format_time(duration)} (RAM: {avg_ram:.1f}GB | "
+                               f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+                         print(f"✅ Image saved to {output_file}")
+                         tracker.print_actual(duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
+                         print("")
+                         return [output_file]
                 
                 # Collect metrics
                 duration = time.time() - start_time
@@ -710,8 +1231,7 @@ class ImageGenerator:
                         if output:
                             # 2. Upscale Result
                             print("")
-                            # 2. Upscale Result
-                            print("")
+
                             return upscale_image_file(output[0], output[0], strength=0.0, factor=upscale_factor,
                                                     progress_callback=self.progress_callback,
                                                     check_cancelled=lambda: self._cancelled)
@@ -750,8 +1270,7 @@ class ImageGenerator:
                         if output:
                             # 2. Upscale Result
                             print("")
-                            # 2. Upscale Result
-                            print("")
+
                             return upscale_image_file(output[0], output[0], strength=0.0, factor=4.0,
                                                     progress_callback=self.progress_callback,
                                                     check_cancelled=lambda: self._cancelled)
@@ -764,13 +1283,13 @@ class ImageGenerator:
 
 
 # WRAPPER FUNCTION (Backward Compatibility for CLI/Interactive)
-def generate_image(prompt, output_file, width, height, model_name="default", steps=30, 
-                   guidance_scale=7.5, negative_prompt="", unsafe=False, report_json=None, force=False, bypass_warning=False, progress_callback=None):
+def generate_image(prompt, output_file, width, height, model_name="default", steps=None, 
+                   guidance_scale=None, negative_prompt="", unsafe=False, report_json=None, force=False, bypass_warning=False, progress_callback=None, use_mlx=None, precision=None):
     """Wrapper for ImageGenerator to maintain CLI compatibility.
     
     See ImageGenerator.generate for args.
     """
-    generator = ImageGenerator(model_id=model_name)
+    generator = ImageGenerator(model_id=model_name, use_mlx=use_mlx, precision=precision)
     outputs = generator.generate(
         prompt=prompt, 
         width=width, 
