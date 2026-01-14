@@ -63,7 +63,7 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **SDXL Turbo** | `sdxl` | ~8GB | ~8GB | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. Uses float32 on Apple Silicon. |
+| **SDXL Turbo** | `sdxl` | ~8GB | ~8GB | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. |
 | **Z-Image Turbo** | `z-image` | ~31GB | ~31GB | Alibaba model. Fast (9 steps) and high quality. MLX-native on Mac, also CUDA/MPS. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. Older model. |
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
@@ -79,7 +79,6 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **FLUX.2 (Full)** | `flux2-full` | ~65GB | ~90GB+ VRAM/RAM | Maximum quality. 🔒 **Gated**. ⚠️ Mac: 128GB+ RAM required. |
 
 > [!NOTE]
-> **Apple Silicon/MPS:** SDXL Turbo uses float32 precision on Mac to avoid black images (float16 produces NaN values in VAE). This doubles memory usage compared to NVIDIA/CUDA.
 >
 > **FLUX.2 on Mac:** The 4-bit quantized version (`flux2`) requires `bitsandbytes` which only works on CUDA/NVIDIA GPUs. On Mac, it falls back to the full model with CPU offloading. **⚠️ Even 64GB unified RAM is not enough** — the process will be killed by Mac OS OOM. Recommended only for **high-end Macs with 128GB+ RAM**. For most Mac users, use `flux`, `sd3.5-turbo` or `sdxl` instead.
 >

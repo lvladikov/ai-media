@@ -83,13 +83,11 @@ def get_current_dtype():
     try:
         from ai_media.utils.system import is_bfloat16_supported
         import torch
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() or torch.backends.mps.is_available():
             # Use centralized detection
             if is_bfloat16_supported():
                 return 'bfloat16'
             return 'float16'
-        if torch.backends.mps.is_available():
-            return 'float32'  # MPS uses float32 for stability
     except (ImportError, AttributeError):
         pass
     return 'float32'
