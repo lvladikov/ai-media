@@ -109,7 +109,16 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
                   isFailed ? 'Generation Failed' :
                     isCancelled ? 'Generation Cancelled' :
                       (job.type === 'analysis' ? 'Analysis' : job.type) + ' Generation'
-              )}{elapsed > 0 && job.status === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : ''}
+              )}
+              {(() => {
+                if (isComplete && job.generation_started_at && job.updated_at) {
+                   const start = new Date(job.generation_started_at).getTime();
+                   const end = new Date(job.updated_at).getTime();
+                   const dur = Math.max(0, Math.round((end - start) / 1000));
+                   return dur > 0 ? ` (${formatDuration(dur * 1000)})` : '';
+                }
+                return elapsed > 0 && job.status === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : '';
+              })()}
               </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}

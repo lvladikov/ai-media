@@ -2548,7 +2548,7 @@ class TestGlobPatternFiltering(unittest.TestCase):
         
     def test_wildcard_star_prefix(self):
         """Test wildcard * at start matches suffix."""
-        result = self.matches_filter("Image - Default (SD 3.5 Turbo)", ["*Default*"])
+        result = self.matches_filter("Image - Default (Z-Image Turbo)", ["*Default*"])
         self.assertTrue(result)
         
     def test_wildcard_star_middle(self):
@@ -3306,9 +3306,9 @@ class TestImageGeneratorClass(unittest.TestCase):
     def test_image_generator_model_id_resolution(self):
         """Test ImageGenerator resolves model IDs correctly."""
         from ai_media.generators.image import ImageGenerator
-        # Default should resolve to sd3.5-turbo HuggingFace ID
+        # Default should resolve to Z-Image Turbo HuggingFace ID
         gen = ImageGenerator(model_id="default")
-        self.assertIn("stabilityai", gen.model_id.lower())
+        self.assertIn("tongyi-mai", gen.model_id.lower())
     
     def test_generate_image_wrapper_function(self):
         """Test generate_image wrapper function exists and is callable."""

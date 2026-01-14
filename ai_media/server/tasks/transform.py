@@ -21,6 +21,7 @@ def run_transform(
     precision: str = None,
 ):
     """Background task for image transformation. Runs in child process."""
+    from ai_media.generators.transform import remove_background, generate_edit
     
     def send_update(**kwargs):
         """Send progress update to parent via queue."""
@@ -37,16 +38,37 @@ def run_transform(
         
         # Determine which transform function to use
         if model == "remove-bg" or instruction.lower() == "remove-bg":
-            from ai_media.generators.transform import remove_background
-            send_update(status="generating", phase="generating", progress=30, message="Removing background...")
+            import datetime
+            send_update(
+                status="generating", 
+                phase="generating", 
+                progress=30, 
+                message="Removing background...",
+                generation_started_at=datetime.datetime.utcnow().isoformat()
+            )
             success = remove_background(input_path, output_path, silhouette=silhouette, force=force, bypass_warning=bypass_warning)
         else:
-            from ai_media.generators.transform import generate_edit
+            import datetime
+            generation_start_sent = False
             
             def on_progress(pct, msg):
-                send_update(status="generating", phase="generating", progress=pct, message=msg)
+                nonlocal generation_start_sent
                 
-            send_update(status="generating", phase="generating", progress=30, message="Transforming image...")
+                # Determine if we are actually generating or still loading/sharding
+                is_actually_generating = "Generating" in msg or "Editing" in msg or "Applying edits" in msg
+                
+                update_kwargs = {
+                    "status": "generating" if is_actually_generating else "loading",
+                    "phase": "generating" if is_actually_generating else "loading",
+                    "progress": pct,
+                    "message": msg
+                }
+                
+                if is_actually_generating and not generation_start_sent:
+                    update_kwargs["generation_started_at"] = datetime.datetime.utcnow().isoformat()
+                    generation_start_sent = True
+                    
+                send_update(**update_kwargs)
             success = generate_edit(
                 input_path=input_path,
                 prompt=instruction,

@@ -131,14 +131,8 @@ def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False, precision_f
             
             # MLX framework requested
             if framework_force == "mlx":
-                # If preferring MLX, we check if it's actually importable? 
-                # Assuming yes if we are here.
                 if not quiet:
-                    if framework_force == "mlx":
-                        print(f"🍎 Using MLX (Native Apple Silicon)\n")
-                    else:
-                        print(f"🍎 Using MLX (Native Apple Silicon, Preferred)\n")
-                        
+                    print(f"🍎 Using MLX (Native Apple Silicon)\n")
                 # Return None device to signal MLX should be used
                 if precision_force:
                     return None, precision_to_dtype(precision_force)
@@ -162,6 +156,12 @@ def get_optimal_device_and_dtype(quiet=False, prefer_bfloat16=False, precision_f
             if prefer_bfloat16:
                 return torch.device("mps"), torch.bfloat16
             return torch.device("mps"), torch.float16
+        
+        # Fallback for Apple Silicon if MPS not 'available' but we are on Darwin
+        import platform
+        if platform.system() == "Darwin":
+             if not quiet: print(f"⚠️  MPS not available via torch.backends.mps, but on Mac. Force using MPS fallback.\n")
+             return torch.device("mps"), torch.float32
     except ImportError:
         pass
     
@@ -319,10 +319,9 @@ def check_resources_and_warn(model_id, width=None, height=None, duration=None, f
     can_prompt = sys.stdin.isatty()
     should_bypass = force or bypass_warning or not can_prompt
 
-    # Helper to print and callback
+    # Helper to print warnings - StreamLogger captures stdout for queue
     def log_warn(msg):
         print(msg)
-        if callback: callback(0, msg.strip())
 
     # Display warnings - use different style for zeroscope upscaling info
     if is_zeroscope and len(warnings) == 1 and "Dynamic Upscaling" in warnings[0]:

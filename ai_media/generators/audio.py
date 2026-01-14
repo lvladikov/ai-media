@@ -83,7 +83,7 @@ def generate_long_bark(prompt, processor, model, device, voice_preset, sample_ra
 
 def generate_audio(prompt, output_path, duration, sampling_rate, model_name="default", 
                    image_input=None, caption_model="florence", voice_preset="v2/en_speaker_6",
-                   report_json=None, force=False, bypass_warning=False):
+                   report_json=None, force=False, bypass_warning=False, progress_callback=None):
     """Generate audio using MusicGen, AudioLDM2, Stable Audio, or Bark.
     
     Args:
@@ -172,6 +172,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             
             max_tokens = int(duration * 50)
             print(f"🎵 Synthesizing audio... (MusicGen)")
+            if progress_callback:
+                progress_callback(30, "Synthesizing audio... (MusicGen)")
             
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -214,6 +216,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                 pipe.to(device)
             
             print(f"🎵 Synthesizing audio... (AudioLDM2)")
+            if progress_callback:
+                progress_callback(30, "Synthesizing audio... (AudioLDM2)")
             
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -251,6 +255,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
             
             print(f"🎵 Synthesizing audio... (Stable Audio)")
+            if progress_callback:
+                progress_callback(30, "Synthesizing audio... (Stable Audio)")
 
             start_time = time.time()
             with ResourceMonitor() as monitor:
@@ -284,6 +290,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             model = BarkModel.from_pretrained(model_id, torch_dtype=bark_dtype).to(device)
             
             print(f"🎵 Synthesizing audio... (Bark)")
+            if progress_callback:
+                progress_callback(30, "Synthesizing audio... (Bark)")
             if duration > 14:
                 print(f"   (Note: Bark generates max ~14s sequences per history block. "
                       f"Output will be shorter than {duration}s)")

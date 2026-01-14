@@ -184,7 +184,13 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
         return False
 
     try:
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True)
+        # Force torch framework since we're in PyTorch branch (MLX was either not requested or failed)
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, framework_force="torch")
+        
+        # Fallback to CPU if no device detected
+        if device is None:
+            device = torch.device("cpu")
+            dtype = torch.float32
         
         # CRITICAL FIX: InstructPix2Pix (SD1.5 based) often produces black images on MPS with float16.
         # We force float32 for this specific pipeline on MPS to ensure valid output.
@@ -212,7 +218,7 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
                 progress_callback(pct, msg)
 
         # Initialize Pipeline
-        if "z-image-edit" in model_name.lower():
+        if "z-image" in model_name.lower():
             # ----------------------------------------------------------------
             # Z-Image Turbo (PyTorch) - Dedicated Img2Img Pipeline
             # ----------------------------------------------------------------
@@ -240,20 +246,28 @@ def generate_edit(input_path, prompt, output_path, model_name="default",
             print(start_msg)
             if progress_callback: progress_callback(0, start_msg)
             
+            # Define callback for new Diffusers API
+            def step_callback(pipe, step_index, timestep, callback_kwargs):
+                progress_data = global_tracker.update(1, model_desc="Applying edits")
+                if progress_data and progress_callback:
+                    pct, msg = progress_data
+                    progress_callback(pct, msg)
+                return callback_kwargs
+            
             with torch.inference_mode():
                 output = pipe(
                     prompt=prompt,
                     image=image,
                     num_inference_steps=zimage_steps,
                     guidance_scale=guidance_scale if guidance_scale != 7.5 else 3.5,
-                    callback=diffusers_callback,
-                    callback_steps=1
+                    callback_on_step_end=step_callback
                 )
             
             result = output.images[0]
             result.save(output_path)
             print(f"✅ Edited image saved to {output_path}")
             return True
+
 
         elif "qwen-image-edit-lightning" in model_name.lower():
             # ----------------------------------------------------------------

@@ -183,7 +183,7 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
         </div>
         <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
           <div className="text-blue-600 dark:text-blue-400 font-medium text-xs mb-1">🍎 Mac User</div>
-          <div className="text-primary font-bold text-sm">SD 3.5 Turbo</div>
+          <div className="text-primary font-bold text-sm">Z-Image Turbo</div>
           <div className="text-secondary text-xs">Best Mac performance</div>
         </div>
         <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
@@ -203,20 +203,20 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
         headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
         rows={[
           [
-            <span className="font-bold text-primary flex items-center">SD 3.5 Turbo <GatedLock onClick={() => onNavigate('gated-models')} /></span>,
-            '~19GB', '32GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 4 steps</span>, 'Mac/CUDA', 'Default. High quality, very fast'
+            <span className="font-bold text-primary flex items-center">Z-Image Turbo</span>,
+            '~8GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 9 steps</span>, 'MLX/CUDA/MPS', <span><strong>Default</strong>. Alibaba model, fast, high quality</span>
           ],
           [
             <span className="font-bold text-primary">SDXL Turbo</span>,
             '~8GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'No login, good all-rounder'
           ],
           [
-            <span className="font-bold text-primary">Z-Image Turbo</span>,
-            '~31GB', '48GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 9 steps</span>, 'MLX/CUDA/MPS', 'Alibaba model, fast'
-          ],
-          [
             <span className="font-bold text-primary">SD 1.5</span>,
             '~4GB', '8GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Low VRAM, artistic styles'
+          ],
+          [
+            <span className="font-bold text-primary flex items-center">SD 3.5 Turbo <GatedLock onClick={() => onNavigate('gated-models')} /></span>,
+            '~19GB', '32GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ 4 steps</span>, 'Mac/CUDA', 'High quality, very fast'
           ],
           [
             <span className="font-bold text-primary flex items-center">SD 3.5 Medium <GatedLock onClick={() => onNavigate('gated-models')} /></span>,
@@ -273,6 +273,13 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
             <li><strong>Files</strong>: PNG (lossless), JPG (compressed).</li>
           </ul>
         </InfoCard>
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg mt-4 text-xs">
+        <h4 className="text-amber-600 dark:text-amber-400 font-medium mb-2 flex items-center gap-2"><Cpu size={16} /> PyTorch Framework Note</h4>
+        <p>
+          For <strong>Z-Image Turbo</strong> and <strong>SD 3.5 Turbo</strong>, the <CodeBadge>bfloat16</CodeBadge> precision is automatically enforced when using the PyTorch framework to ensure numerical stability and avoid black image outputs on Apple Silicon (MPS).
+        </p>
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mt-4">

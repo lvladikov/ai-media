@@ -16,7 +16,7 @@ This tool provides a unified interface for multiple generations of image models,
 
 | Option | Description |
 | :--- | :--- |
-| `--image-model` | Model: `sd3.5-turbo` (default), `sdxl`, `z-image`, `sd-1.5`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image-auto`, `qwen-image-lightning`, `qwen-image-4bit`. See [Models](#models) below. |
+| `--image-model`, `-im` | Model: `z-image` (default), `sdxl`, `sd-1.5`, `sd3.5-turbo`, `sd3.5-medium`, `sd3.5-large`, `flux`, `flux-dev`, `qwen-image-auto`, `qwen-image-lightning`, `qwen-image-4bit`. See [Models](#models) below. |
 | `-otn, --orientation` | `landscape` (default), `portrait`, or `square`. Portrait swaps w/h. |
 | `--unsafe` | Disable NSFW safety checker (reduces false positives). |
 | `-p, --prompt` | Text description of content to generate. |
@@ -63,12 +63,12 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **SDXL Turbo** | `sdxl` | ~8GB | ~8GB | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. |
-| **Z-Image Turbo** | `z-image` | ~31GB | ~31GB | Alibaba model. Fast (9 steps) and high quality. MLX-native on Mac, also CUDA/MPS. |
+| **Z-Image Turbo** | `z-image` | ~8GB | ~16GB | Alibaba model. Fast (9 steps) and high quality. MLX-native on Mac, also CUDA/MPS. **Default model.** |
+| **SDXL Turbo** | `sdxl` | ~8GB | ~8GB | Fast, reasonable quality, older model - use this if you haven't yet Accepted License at HuggingFace for gated models. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. Older model. |
+| **SD 3.5 Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | Fast (4 steps) and Good Quality. 🔒 **Gated**. |
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
-| **SD 3.5 Large Turbo** | `sd3.5-turbo` | ~19GB | ~19GB | **Default**. Fast (4 steps) and Good Quality. 🔒 **Gated**. |
 | **Qwen 2.5 Image (Auto)** | `qwen-image-auto` | ~20-40GB | ~20-40GB | **Best Quality**. Automatically picks best model for your hardware (MPS/CUDA). |
 | **Qwen 2.5 Img (Lightning)** | `qwen-image-lightning` | ~40GB | ~40GB | **Fastest Qwen**. 8 steps. Works on **MPS (Mac)** & CUDA. |
 | **Qwen 2.5 Img (4-bit)** | `qwen-image-4bit` | ~20GB | ❌ N/A | **Low VRAM (CUDA Only)**. 4-bit quantized. 8 steps. |
@@ -77,10 +77,13 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
 | **FLUX.2 (Full)** | `flux2-full` | ~65GB | ~90GB+ VRAM/RAM | Maximum quality. 🔒 **Gated**. ⚠️ Mac: 128GB+ RAM required. |
+| **SD 3.5 (Turbo) / Z-Image** | - | - | - | **PyTorch (MPS) Note**: Forces `bfloat16` to avoid black images. |
 
 > [!NOTE]
 >
 > **FLUX.2 on Mac:** The 4-bit quantized version (`flux2`) requires `bitsandbytes` which only works on CUDA/NVIDIA GPUs. On Mac, it falls back to the full model with CPU offloading. **⚠️ Even 64GB unified RAM is not enough** — the process will be killed by Mac OS OOM. Recommended only for **high-end Macs with 128GB+ RAM**. For most Mac users, use `flux`, `sd3.5-turbo` or `sdxl` instead.
+>
+> **Z-Image & SD 3.5 Turbo (PyTorch/MPS):** To avoid numerical instability resulting in black images, these models **automatically enforce `bfloat16`** when using the PyTorch framework (`-mf torch`) on Apple Silicon. This ensures stable output while significantly reducing memory usage compared to `float32`.
 >
 > **High Resolution & SD 3.5 Limit:** SD 3.5 models have a recommended max resolution of **1296×1296** (higher causes noise artifacts). Architectural hard limit is 1536×1536. For larger sizes, use `--upscale`. VAE Tiling is auto-enabled for resolutions above 1536×1536.
 >
@@ -149,7 +152,7 @@ When no precision is specified, AI-Media automatically selects optimal settings:
 > **Need inspiration?** Use `rndPr`, `rndPrompt`, `randomPrompt`, or `random prompt` as your prompt to get a randomly selected creative image prompt.
 
 ```bash
-# Generate a standard 720p image (Default model: SD 3.5 Turbo)
+# Generate a standard 720p image - **Default Model**: Z-Image Turbo (`z-image`) is used if no model is specified.
 python ai-media.py -i -p "Cyberpunk city at night with neon lights"
 
 # Generate with a random prompt

@@ -18,9 +18,9 @@ import { HelpCircle } from 'lucide-react';
 
 // Display names and info matching CLI exactly
 const MODEL_DISPLAY_INFO: Record<string, { label: string }> = {
-  'sd3.5-turbo': { label: 'SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated)' },
+  'z-image': { label: 'Z-Image Turbo (Default, Alibaba, Fast 9 Steps)' },
+  'sd3.5-turbo': { label: 'SD 3.5 Turbo (Fast 4 Steps, 🔒 Gated)' },
   'sdxl': { label: 'SDXL Turbo (Fast, no login)' },
-  'z-image': { label: 'Z-Image Turbo (Alibaba, Fast 9 Steps)' },
   'sd-1.5': { label: 'SD 1.5 (Lightweight, Negative Prompt)' },
   'sd3.5-medium': { label: 'SD 3.5 Medium (High Quality, Negative Prompt, 🔒 Gated)' },
   'sd3.5-large': { label: 'SD 3.5 Large (Best Quality, Negative Prompt, 🔒 Gated)' },
@@ -35,14 +35,14 @@ const MODEL_DISPLAY_INFO: Record<string, { label: string }> = {
 };
 
 const MODEL_ORDER = [
-  'sd3.5-turbo', 'sdxl', 'z-image', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
+  'z-image', 'sd3.5-turbo', 'sdxl', 'sd-1.5', 'sd3.5-medium', 'sd3.5-large',
   'qwen-image-auto', 'qwen-image-lightning', 'qwen-image-4bit', 'flux', 'flux-dev', 'flux2', 'flux2-full'
 ];
 
 export function ImageGenerator() {
   const { addJob, systemInfo } = useAppStore();
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('sd3.5-turbo'); // Default matching CLI
+  const [model, setModel] = useState('z-image'); // Default matching CLI
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
   const [steps, setSteps] = useState(4); // SD 3.5 Turbo uses 4 steps by default
@@ -50,7 +50,7 @@ export function ImageGenerator() {
   const [negativePrompt, setNegativePrompt] = useState("");
   const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
   const [precision, setPrecision] = useState("auto");
-  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -85,7 +85,10 @@ export function ImageGenerator() {
     }
 
     // Steps defaults
-    if (model.includes('turbo') || model.includes('flux')) {
+    if (model === 'z-image') {
+       setSteps(9);
+       setGuidanceScale(0);
+    } else if (model.includes('turbo') || model.includes('flux')) {
       setSteps(4);
       setGuidanceScale(0);
     } else if (model === 'sd-1.5') {
@@ -287,7 +290,10 @@ export function ImageGenerator() {
   });
 
   // Check if current model supports Negative Prompt (Lightning models don't support CFG)
-  const supportsNegativePrompt = !model.includes('turbo') && !model.includes('flux') && !model.includes('lightning') && model !== 'sdxl';
+  const supportsNegativePrompt = !model.includes('turbo') && !model.includes('flux') && !model.includes('lightning') && model !== 'sdxl' && model !== 'z-image';
+
+  // Check if CFG is supported/enabled
+  const isCfgDisabled = model.includes('z-image');
 
   const handleCloseModal = () => {
     setCurrentJobId(null);
@@ -324,7 +330,7 @@ export function ImageGenerator() {
           <div className="flex items-center justify-between">
             <label className={`text-sm font-medium ${supportsNegativePrompt ? 'text-secondary' : 'text-tertiary'} flex items-center gap-1`}>
               Negative Prompt (Optional)
-              <Tooltip content="List items to exclude (e.g., 'blur, text'). Do NOT use 'no' or 'without'. Note: For Lightning/Turbo models, using this will force standard speed (~2x slower)." />
+              <Tooltip content="List items to exclude (e.g., 'blur, text'). Do NOT use 'no' or 'without'. Note: This may be disabled for some models. If so, please describe what to exclude in the main prompt instead." />
             </label>
           </div>
           <input
@@ -470,7 +476,7 @@ export function ImageGenerator() {
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-secondary flex items-center gap-1">
                 Text Guidance (CFG): <span className="text-brand-400 font-bold">{guidanceScale}</span>
-                <Tooltip content="How closely to follow your prompt. 0 is distilled (Turbo/Flux), 5-8 is standard. High values (>12) on Mac can sometimes cause black images." align="left" />
+                <Tooltip content="How closely to follow your prompt. 0 is distilled (Turbo/Flux), 5-8 is standard. High values (>12) on Mac can sometimes cause black images. Disabled for models that don't support it (e.g. Z-Image)." align="left" />
               </label>
             </div>
             <input
@@ -480,27 +486,16 @@ export function ImageGenerator() {
               step="0.5"
               value={guidanceScale}
               onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
-              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-brand-500"
+              disabled={isCfgDisabled}
+              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isCfgDisabled ? 'bg-tertiary opacity-50 cursor-not-allowed' : 'bg-secondary accent-brand-500'}`}
             />
           </div>
 
 
         </div>
 
-        {/* Advanced Toggle */}
-        <button 
-           className="text-xs text-tertiary hover:text-secondary flex items-center gap-1 w-fit"
-           onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-           {showAdvanced ? "Hide" : "Show"} Advanced Settings
-        </button>
 
-         {showAdvanced && (
-           <div className="space-y-4 pt-2 border-t border-border animate-in fade-in slide-in-from-top-2">
-              {/* Other advanced content for future usage */}
-              <p className="text-xs text-tertiary">More advanced settings coming soon.</p>
-           </div>
-         )}
+
 
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 

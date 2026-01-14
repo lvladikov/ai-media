@@ -845,7 +845,7 @@ def upscale_image_file(image_path, output_path, strength=0.0, factor=2.0, progre
         return []
 
 
-def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=False, bypass_warning=False):
+def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=False, bypass_warning=False, progress_callback=None):
     """Upscale video by extracting frames, upscaling them (recursively if needed), and stitching back."""
     import cv2
     import shutil
@@ -913,6 +913,8 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=
             pipe.vae.enable_tiling()
         
         print("🎨 Upscaling frames...")
+        if progress_callback:
+            progress_callback(30, "Upscaling frames...")
         for i in range(frame_count):
             input_f = temp_dir / f"frame_{i:05d}.png"
             output_f = temp_dir / f"upscaled_{i:05d}.png"
@@ -930,8 +932,13 @@ def upscale_video_file(video_path, output_path, strength=0.0, factor=2.0, force=
                 current_img = current_img.resize((target_w, target_h), Image.LANCZOS)
             current_img.save(output_f)
             print(f"   Frame {i+1}/{frame_count} done.", end='\r')
+            if progress_callback and (i % 5 == 0 or i == frame_count - 1):
+                pct = 30 + int((i / frame_count) * 60)
+                progress_callback(pct, f"Upscaling frames ({i+1}/{frame_count})...")
             
         print("\n🔗 stitching video...")
+        if progress_callback:
+            progress_callback(90, "Stitching video...")
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         cmd = [

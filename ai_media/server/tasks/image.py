@@ -40,14 +40,30 @@ def run_image_generation(
         # Import and run the existing generator
         from ai_media.generators.image import ImageGenerator
         
+        # Track when generation actually starts (after model loading)
+        generation_start_sent = False
+        import datetime
+
         # Define callback for progress updates
         def on_progress(percent, message):
-            send_update(
-                status="generating",
-                phase="generating",
-                progress=percent,
-                message=message
-            )
+            nonlocal generation_start_sent
+            
+            # Determine if we are actually generating or still loading/sharding
+            # The generator sends "Generating: XX%" or "Generating video..." etc.
+            is_actually_generating = "Generating" in message
+            
+            update_kwargs = {
+                "status": "generating" if is_actually_generating else "loading",
+                "phase": "generating" if is_actually_generating else "loading",
+                "progress": percent,
+                "message": message
+            }
+            
+            if is_actually_generating and not generation_start_sent:
+                update_kwargs["generation_started_at"] = datetime.datetime.utcnow().isoformat()
+                generation_start_sent = True
+                
+            send_update(**update_kwargs)
 
         # Initialize generator with explicit framework/precision if provided
         generator = ImageGenerator(

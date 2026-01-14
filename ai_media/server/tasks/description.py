@@ -36,11 +36,13 @@ def run_description(job_id, input_path, model_name, output_path=None, force=Fals
         # Determine device
         device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
         
+        import datetime
         send_update(
             status="generating",
             progress=30,
             phase="Processing",
-            message=f"Running {model_name}..."
+            message=f"Running {model_name}...",
+            generation_started_at=datetime.datetime.utcnow().isoformat()
         )
         
         caption = ""

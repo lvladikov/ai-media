@@ -49,11 +49,13 @@ def run_convert(
         else:
              msg = f"Converting {input_ext} to {target_format}..."
              
+        import datetime
         send_update(
             status="generating", 
             phase="generating", 
             progress=30, 
-            message=msg
+            message=msg,
+            generation_started_at=datetime.datetime.utcnow().isoformat()
         )
         
         from ai_media.conversion import (

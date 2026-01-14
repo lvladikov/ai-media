@@ -413,7 +413,7 @@ Examples:
   python ai-media.py -i -p "Cyberpunk city" -o city.png -s 720p
   python ai-media.py -i -p "Forest" -o forest.jpg -s 4k
   python ai-media.py -i -p "Capybara holding a sign" -im sd3.5-medium (SD 3.5 - Consumer-Friendly)
-  python ai-media.py -i -p "Astronaut portrait" -im sd3.5-turbo (SD 3.5 - Fast, 4 steps)
+  python ai-media.py -i -p "Astronaut portrait" -im z-image (Alibaba Z-Image Turbo - Fast, 9 steps)
   python ai-media.py -i -p "Cyberpunk city" --negative-prompt "blurry, dark, low quality" (With Negative Prompt)
   
   -- Video Generation --
@@ -477,9 +477,9 @@ Examples:
 
 Supported Models (Code : Download Size | Description):
   Images:
-    - sd3.5-turbo (default)      : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
+    - z-image (default)          : ~31GB | Alibaba Z-Image Turbo. Fast (9 steps). MLX/CUDA/MPS.
+    - sd3.5-turbo                : ~19GB | SD 3.5 Turbo. Fast (4 steps). (🔒 Gated - Free Login Required)
     - sdxl                       : ~8GB  | Fast, high quality.
-    - z-image                    : ~31GB | Alibaba Z-Image Turbo. Fast (9 steps). MLX/CUDA/MPS.
     - sd-1.5                     : ~4GB  | Lightweight, lower VRAM.
     - sd3.5-medium               : ~10GB | SD 3.5. Consumer-friendly. (🔒 Gated - Free Login Required)
     - sd3.5-large                : ~19GB | SD 3.5. Best quality. (🔒 Gated - Free Login Required)

@@ -39,29 +39,82 @@ def run_upscale(
             upscale_image_file, upscale_video_file
         )
         
-        send_update(status="generating", phase="generating", progress=30, message=f"Upscaling ({method} x{factor})...")
+        import datetime
+        # No initial generation_started_at here. Defer to specific methods.
+        send_update(
+            status="loading", 
+            phase="loading", 
+            progress=30, 
+            message=f"Preparing {method} x{factor}..."
+        )
         
         success = False
         
         if is_video:
+            send_update(
+                status="generating", 
+                phase="generating", 
+                progress=30, 
+                message=f"Upscaling Video ({method})...",
+                generation_started_at=datetime.datetime.utcnow().isoformat()
+            )
             if method == 'simple':
                 success = simple_upscale_video(input_path, output_path, factor=factor, force=force)
             elif method == 'fast':
                 success = upscale_video_fast(input_path, output_path, factor=factor, force=force, bypass_warning=bypass_warning)
             else:  # ai / creative
-                send_update(status="generating", phase="generating", progress=30, message="Upscaling video (AI Slow Mode)...")
-                # upscale_video_file currently doesn't check resources directly but calls simple/fast or does its own thing.
-                # Actually upscale_video_file in upscaling.py does NOT exist or was not shown?
-                # Wait, I saw upscale_image_file. Let me check for upscale_video_file.
-                success = upscale_video_file(input_path, output_path, strength=strength, factor=factor, force=force, bypass_warning=bypass_warning)
-        else:  # Image
-            if method == 'simple':
-                success = simple_upscale_image(input_path, output_path, factor=factor, force=force)
-            elif method == 'fast':
-                success = upscale_image_fast(input_path, output_path, factor=factor, force=force, bypass_warning=bypass_warning)
-            else:  # ai / creative
+                # Defer back to loading since it was already loading
+                send_update(status="loading", phase="loading", progress=30, message="Loading AI Video Upscaler...")
+                
+                generation_start_sent = False
                 def on_progress(pct, msg):
-                    send_update(status="generating", phase="generating", progress=pct, message=msg)
+                    nonlocal generation_start_sent
+                    # Only start the timer when we see a "Generating" or "Upscaling" message
+                    is_generating = any(k in msg.lower() for k in ["generating", "upscaling", "stitching", "muxing"])
+                    
+                    update_kwargs = {
+                        "status": "generating" if is_generating else "loading",
+                        "phase": "generating" if is_generating else "loading",
+                        "progress": pct,
+                        "message": msg
+                    }
+                    if is_generating and not generation_start_sent:
+                        update_kwargs["generation_started_at"] = datetime.datetime.utcnow().isoformat()
+                        generation_start_sent = True
+                    send_update(**update_kwargs)
+                    
+                success = upscale_video_file(input_path, output_path, strength=strength, factor=factor, 
+                                             progress_callback=on_progress, force=force, bypass_warning=bypass_warning)
+        else:  # Image
+            if method == 'simple' or method == 'fast':
+                send_update(
+                    status="generating", 
+                    phase="generating", 
+                    progress=30, 
+                    message=f"Upscaling Image ({method})...",
+                    generation_started_at=datetime.datetime.utcnow().isoformat()
+                )
+                if method == 'simple':
+                    success = simple_upscale_image(input_path, output_path, factor=factor, force=force)
+                else:
+                    success = upscale_image_fast(input_path, output_path, factor=factor, force=force, bypass_warning=bypass_warning)
+            else:  # ai / creative
+                generation_start_sent = False
+                def on_progress(pct, msg):
+                    nonlocal generation_start_sent
+                    # Only start the timer when we see a "Generating" or "Upscaling" message
+                    is_generating = any(k in msg.lower() for k in ["generating", "upscaling", "stage", "pass"])
+                    
+                    update_kwargs = {
+                        "status": "generating" if is_generating else "loading",
+                        "phase": "generating" if is_generating else "loading",
+                        "progress": pct,
+                        "message": msg
+                    }
+                    if is_generating and not generation_start_sent:
+                        update_kwargs["generation_started_at"] = datetime.datetime.utcnow().isoformat()
+                        generation_start_sent = True
+                    send_update(**update_kwargs)
                     
                 success = upscale_image_file(input_path, output_path, strength=strength, factor=factor, 
                                              progress_callback=on_progress, force=force, bypass_warning=bypass_warning)

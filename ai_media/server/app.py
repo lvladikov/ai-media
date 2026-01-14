@@ -144,7 +144,7 @@ def main(host: str = None, port: int = None, reload: bool = None, reload_exclude
         reload_kwargs["reload"] = True
         if reload_excludes:
             reload_kwargs["reload_excludes"] = reload_excludes
-            print(f"🔍 Server reload exclusions active: {len(reload_excludes)} patterns configured")
+            print(f"\n🔍 Server reload exclusions active: {len(reload_excludes)} patterns configured")
             if len(reload_excludes) > 0:
                 # Show first 3 patterns as confirmation
                 print(f"   (Excludes sample: {', '.join(reload_excludes[:3])}...)")

@@ -42,7 +42,7 @@ IMAGE_MODEL_PARAMS = {
     'sd3.5-large': 8,      # ~19GB
     'sdxl': 7,             # ~8-9GB
     'sd-1.5': 1.5,         # ~4GB
-    'z-image': 12,         # ~31GB
+    'z-image': 6,          # ~8GB
     'qwen-image': 7,       # ~20-40GB
     'qwen-image-auto': 7,
     'qwen-image-4bit': 7,
@@ -334,9 +334,9 @@ def get_image_model_options(precision: str = "auto", system_ram_gb: float = 0, i
         ram_str = format_ram_warning(mid, precision, system_ram_gb)
         options.append((f"{base_label} {ram_str}", mid))
 
-    add_opt("sd3.5-turbo", "SD 3.5 Turbo (Default, Fast 4 Steps, 🔒 Gated)")
+    add_opt("z-image", "Z-Image Turbo (Default, Alibaba, Fast 9 Steps)")
+    add_opt("sd3.5-turbo", "SD 3.5 Turbo (Fast 4 Steps, 🔒 Gated)")
     add_opt("sdxl", "SDXL Turbo (Fast, no login)")
-    add_opt("z-image", "Z-Image Turbo (Alibaba, Fast 9 Steps)")
     add_opt("sd-1.5", "SD 1.5 (Lightweight)")
     
     # SD 3.5 Models

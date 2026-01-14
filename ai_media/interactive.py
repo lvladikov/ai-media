@@ -125,9 +125,9 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
     JUMP_POINTS = {
         # By name
         'image': ('image', None),
+        'image/z-image': ('image', 'z-image'),
         'image/sd35-turbo': ('image', 'sd3.5-turbo'),
         'image/sdxl': ('image', 'sdxl'),
-        'image/z-image': ('image', 'z-image'),
         'image/sd15': ('image', 'sd-1.5'),
         'image/sd35-medium': ('image', 'sd3.5-medium'),
         'image/sd35-large': ('image', 'sd3.5-large'),
@@ -172,9 +172,9 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         'cleanup': ('cleanup', None),
         # By number (matching menu order approx)
         '1': ('image', None),
-        '1/1': ('image', 'sd3.5-turbo'),
-        '1/2': ('image', 'sdxl'),
-        '1/3': ('image', 'z-image'),
+        '1/1': ('image', 'z-image'),
+        '1/2': ('image', 'sd3.5-turbo'),
+        '1/3': ('image', 'sdxl'),
         '1/4': ('image', 'sd-1.5'),
         '1/5': ('image', 'sd3.5-medium'),
         '1/6': ('image', 'sd3.5-large'),

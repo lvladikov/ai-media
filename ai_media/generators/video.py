@@ -15,6 +15,7 @@ from ..utils.performance import PerformanceTracker, ResourceMonitor, write_repor
 from ..utils.ffmpeg import get_video_encoding_params, ffmpeg_resize_video
 from ..utils.interaction import emoji
 from ..utils.transformers_patch import ensure_patch_applied, cleanup_patch
+from ..utils.progress import capture_tqdm_progress
 
 
 def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, strength=0.6):
@@ -119,7 +120,7 @@ def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, st
 
 def generate_video(prompt, output_path, duration, width, height, model_name="default", 
                    image_input=None, audio_prompt=None, audio_model="default", report_json=None,
-                   force=False, bypass_warning=False):
+                   force=False, bypass_warning=False, progress_callback=None):
     """Generate video (Text-to-Video or Image-to-Video) with optional Audio.
     
     For Zeroscope: Implements dynamic upscaling pipeline when target resolution
@@ -154,43 +155,42 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
                                      model_requirements=MODEL_REQUIREMENTS):
         return False
     
-    # Pre-calculate Device and Estimate
-    try:
-        # Lazy-apply Transformers v5 patch before importing diffusers
-        ensure_patch_applied()
-        
-        from diffusers import (
-            DiffusionPipeline, 
-            DPMSolverMultistepScheduler, 
-            CogVideoXImageToVideoPipeline,
-            StableVideoDiffusionPipeline,
-            WanPipeline,
-            WanImageToVideoPipeline,
-            HunyuanVideoPipeline,
-            HunyuanVideoImageToVideoPipeline,
-        )
-        from diffusers.utils import export_to_video, load_image
-        import torch
-        
-        # Ephemeral cleanup
-        cleanup_patch()
-        
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
-        dtype_name = str(dtype).replace("torch.", "")
-        
-        # Estimate Performance
-        tracker = PerformanceTracker()
-        est_values = tracker.estimate_linear("video", base_model, device, duration, width=width, height=height, dtype=dtype_name)
-        
-        # Display Info Header
-        print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
-        tracker.print_estimate(*est_values)
-        
-        # Determine actual video output path (temp if mixing audio) early for tracking? No needed.
-        
-    except ImportError:
-        print("❌ Failed to import torch/diffusers. Please check installation.")
-        return False
+    with capture_tqdm_progress(progress_callback):
+        # Pre-calculate Device and Estimate
+        try:
+            # Lazy-apply Transformers v5 patch before importing diffusers
+            ensure_patch_applied()
+            
+            from diffusers import (
+                DiffusionPipeline, 
+                DPMSolverMultistepScheduler, 
+                CogVideoXImageToVideoPipeline,
+                StableVideoDiffusionPipeline,
+                WanPipeline,
+                WanImageToVideoPipeline,
+                HunyuanVideoPipeline,
+                HunyuanVideoImageToVideoPipeline,
+            )
+            from diffusers.utils import export_to_video, load_image
+            import torch
+            
+            # Ephemeral cleanup
+            cleanup_patch()
+            
+            device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
+            dtype_name = str(dtype).replace("torch.", "")
+            
+            # Estimate Performance
+            tracker = PerformanceTracker()
+            est_values = tracker.estimate_linear("video", base_model, device, duration, width=width, height=height, dtype=dtype_name)
+            
+            # Display Info Header
+            print(f"Platform: {device.type.upper()} | Dtype: {dtype_name}")
+            tracker.print_estimate(*est_values)
+            
+        except ImportError:
+            print("❌ Failed to import torch/diffusers. Please check installation.")
+            return False
     
     # --- Zeroscope Dynamic Upscaling Detection ---
     is_zeroscope = "zeroscope" in base_model.lower() and "xl" not in base_model.lower()
@@ -431,6 +431,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             render_height = (render_height // 16) * 16
         
         print(f"{emoji('🎬 ', '')}Rendering video frames at {render_width}x{render_height}... (This might be slow)")
+        if progress_callback:
+            progress_callback(30, f"Rendering video frames... ({render_width}x{render_height})")
         
         start_time = time.time()
         with ResourceMonitor() as monitor:

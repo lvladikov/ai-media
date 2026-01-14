@@ -24,42 +24,7 @@ from ..utils.transformers_patch import ensure_patch_applied, cleanup_patch
 warnings.filterwarnings("ignore", message="The `local_dir_use_symlinks` argument is deprecated")
 
 
-class TqdmCapture:
-    """Class to capture tqdm output from stderr and redirect to a callback."""
-    def __init__(self, callback):
-        self.callback = callback
-        
-    def write(self, text):
-        # Progress bars use \r to overwrite lines. 
-        # ALWAYS write original raw text to real stderr so terminal logic (TQDM) works
-        sys.__stderr__.write(text)
-
-        # Only process for web callback if there's actual content
-        if self.callback and text.strip():
-            try:
-                # Filter out raw TQDM bar lines as these are messy in the UI
-                if "|" in text and "%" in text:
-                    return
-
-                # Strip ANSI escape codes ONLY for web logs
-                clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
-                if clean_text.strip():
-                    # Pass terminal=False because we already wrote to sys.__stderr__ above
-                    self.callback("loading", 0, clean_text, terminal=False) 
-            except ConnectionAbortedError:
-                raise # Propagate cancel signal
-            except:
-                pass
-
-    def flush(self):
-        sys.__stderr__.flush()
-
-    def isatty(self):
-        return sys.__stderr__.isatty()
-    
-    @property
-    def encoding(self):
-        return sys.__stderr__.encoding
+from ..utils.progress import capture_tqdm_progress, TqdmCapture
 
 
 class ImageGenerator:
@@ -136,7 +101,14 @@ class ImageGenerator:
                 print(f"⚠️ Progress callback error: {e}")
         
         # Also print to terminal for server logs (with different icon if needed)
-        if terminal:
+        # Suppress terminal print if we already sent to callback AND we are being captured
+        # (detected via 'queue' attribute on sys.stdout from StreamLogger in process_manager.py)
+        # to avoid double logs in the web client. 
+        # HOWEVER: Always print if it's an ERROR or if callback is missing.
+        is_captured = hasattr(sys.stdout, 'queue')
+        should_print = terminal and (not self.progress_callback or not is_captured or status == "error")
+
+        if should_print:
             # Avoid double emojis if message already has one
             if not any(emoji in message for emoji in ["📚", "⏳", "⚠️", "✅", "🛑"]):
                  print(f"⏳ {message}")
@@ -187,7 +159,8 @@ class ImageGenerator:
         cleanup_patch()
         
         # Determine device and dtype (Force torch framework detection)
-        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
+        framework_arg = "mlx" if self.use_mlx else "torch"
+        device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False, framework_force=framework_arg, precision_force=self.precision_override)
         self.device = device
         self.dtype = dtype
         
@@ -202,209 +175,134 @@ class ImageGenerator:
         
         # Capture stderr during loading
         try:
-            capture = TqdmCapture(self._log_status)
-            with contextlib.redirect_stderr(capture):
-                # Monkey patch TQDM to ensure we capture progress bars even if stderr redirect fails
-                import tqdm
-                original_tqdm = tqdm.tqdm
-                
-                class TqdmCallbackWrapper(original_tqdm):
-                    def __init__(self, *args, **kwargs):
-                        # Force restricted inputs to prevent wrapping/spam
-                        # If a width isn't provided, cap it to avoid wrapping on common terminal sizes
-                        if "ncols" not in kwargs:
-                            # Try to get terminal size, default to 100 if unknown, cap max at 120
-                            try:
-                                width = os.get_terminal_size().columns
-                                kwargs["ncols"] = min(width - 5, 120) 
-                            except:
-                                kwargs["ncols"] = 100
-                        
-                        super().__init__(*args, **kwargs)
-                        self._last_callback_time = 0
+            with capture_tqdm_progress(self._log_status):
+                # Determine Pipeline Class based on model
+                if "flux.2" in self.model_id.lower() or "flux2" in self.model_id.lower():
+                     # FLUX.2
+                     is_quantized = "bnb" in self.model_id.lower() or "4bit" in self.model_id.lower()
+                     if is_quantized and device.type != "cuda":
+                         self._log_status("loading", 10, "⚠️ 4-bit quantized FLUX.2 requires CUDA. Fallback to full model with offload.")
+                         self.model_id = "black-forest-labs/FLUX.2-dev"
+                         flux2_dtype = torch.float32
+                         use_offload = False
+                     else:
+                         flux2_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+                         use_offload = True if device.type == "cuda" else False
+                     
+                     self._log_status("loading", 15, "Loading FLUX.2 Pipeline...")
+                     pipe = Flux2Pipeline.from_pretrained(self.model_id, torch_dtype=flux2_dtype)
+                     extra_kwargs = {"guidance_scale": 4.0, "num_inference_steps": 50}
 
-                    def set_description(self, desc=None, refresh=True):
-                        # Intercept and truncate super long diffusers descriptions
-                        if desc and len(desc) > 40:
-                             # Truncate middle or end? Diffusers usually puts interesting stuff at end?
-                             # Actually "Materializing param=..." is boring. Keep it short.
-                             if "Materializing param" in desc:
-                                 desc = "Materializing params..."
-                             elif len(desc) > 50:
-                                 desc = desc[:47] + "..."
-                        super().set_description(desc, refresh)
+                elif "stable-diffusion-3.5" in self.model_id.lower() or "sd3.5" in self.model_name.lower():
+                     # SD 3.5
+                     # Force bfloat16 for stability and lower memory on MPS/CUDA
+                     sd35_dtype = torch.bfloat16 if device.type in ["cuda", "mps"] else torch.float32
+                     if sd35_dtype != dtype:
+                         dtype_str = "bfloat16" if sd35_dtype == torch.bfloat16 else "float32"
+                         source_str = str(dtype).replace("torch.", "")
+                         msg = f"⚠️  Auto-upgrading stability precision: {source_str} -> {dtype_str}"
+                         self._log_status("loading", 15, msg)
+                     
+                     self._log_status("loading", 15, "Loading Stable Diffusion 3.5 Pipeline...")
+                     pipe = StableDiffusion3Pipeline.from_pretrained(self.model_id, torch_dtype=sd35_dtype)
+                     
+                     # Force CPU offloading for better RAM management on all devices
+                     use_offload = True
+                     
+                     is_turbo = "turbo" in self.model_id.lower()
+                     extra_kwargs = {
+                         "guidance_scale": 0.0 if is_turbo else 4.5,
+                         "num_inference_steps": 4 if is_turbo else 40,
+                         "max_sequence_length": 512
+                     }
 
-                    def update(self, n=1):
-                        super().update(n)
-                        if hasattr(self, 'total') and self.total:
-                            try:
-                                percent = min(100, int(self.n / self.total * 100))
-                                current_time = time.time()
-                                
-                                # Throttle: Only update every 0.2s or if complete (100%)
-                                # This prevents the output buffer from filling up during fast loading
-                                if percent >= 100 or (current_time - self._last_callback_time) > 0.2:
-                                    self._last_callback_time = current_time
-                                    desc = self.desc or "Loading"
-                                    # Use terminal=False because original TQDM (stderr) already prints the bar
-                                    capture.callback("loading", percent, f"{desc}: {percent}%", terminal=False)
-                            except:
-                                pass
-
-                # Apply patch to source tqdm
-                tqdm.tqdm = TqdmCallbackWrapper
-                # Also patch tqdm.auto if loaded
-                if "tqdm.auto" in sys.modules:
-                     sys.modules["tqdm.auto"].tqdm = TqdmCallbackWrapper
-                
-                # CRITICAL: Also patch diffusers/transformers/accelerate references
-                # Store originals to restore later
-                original_external_tqdms = {} 
-                
-                target_modules = [
-                    "diffusers.utils.logging",
-                    "transformers.utils.logging",
-                    "accelerate.utils"
-                ]
-                
-                for mod_name in target_modules:
-                    try:
-                        if mod_name in sys.modules:
-                            mod = sys.modules[mod_name]
-                        else:
-                            import importlib
-                            mod = importlib.import_module(mod_name)
-                            
-                        if hasattr(mod, 'tqdm'):
-                            original_external_tqdms[mod_name] = mod.tqdm
-                            mod.tqdm = TqdmCallbackWrapper
-                    except (ImportError, AttributeError):
-                        pass
-
-                try:
-                    # Determine Pipeline Class based on model
-                    if "flux.2" in self.model_id.lower() or "flux2" in self.model_id.lower():
-                         # FLUX.2
-                         is_quantized = "bnb" in self.model_id.lower() or "4bit" in self.model_id.lower()
-                         if is_quantized and device.type != "cuda":
-                             self._log_status("loading", 10, "⚠️ 4-bit quantized FLUX.2 requires CUDA. Fallback to full model with offload.")
-                             self.model_id = "black-forest-labs/FLUX.2-dev"
-                             flux2_dtype = torch.float32
-                             use_offload = False
-                         else:
-                             flux2_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
-                             use_offload = True if device.type == "cuda" else False
+                elif "qwen-image" in self.model_name.lower() and "edit" not in self.model_name.lower():
+                     # Qwen-Image
+                     qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
+                     self._log_status("loading", 15, "Loading Qwen-Image Pipeline...")
+                     
+                     if "lightning" in self.model_name.lower():
+                         # Load Base
+                         import warnings
+                         with warnings.catch_warnings():
+                             warnings.simplefilter("ignore")
+                             pipe = DiffusionPipeline.from_pretrained("Qwen/Qwen-Image", torch_dtype=qwen_dtype)
                          
-                         self._log_status("loading", 15, "Loading FLUX.2 Pipeline...")
-                         pipe = Flux2Pipeline.from_pretrained(self.model_id, torch_dtype=flux2_dtype)
-                         extra_kwargs = {"guidance_scale": 4.0, "num_inference_steps": 50}
-
-                    elif "stable-diffusion-3.5" in self.model_id.lower() or "sd3.5" in self.model_name.lower():
-                         # SD 3.5
-                         sd35_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
-                         self._log_status("loading", 15, "Loading Stable Diffusion 3.5 Pipeline...")
-                         pipe = StableDiffusion3Pipeline.from_pretrained(self.model_id, torch_dtype=sd35_dtype)
-                         if device.type == "cuda" or device.type == "mps":
-                             use_offload = True
-                         
-                         is_turbo = "turbo" in self.model_id.lower()
-                         extra_kwargs = {
-                             "guidance_scale": 0.0 if is_turbo else 4.5,
-                             "num_inference_steps": 4 if is_turbo else 40,
-                             "max_sequence_length": 512
-                         }
-
-                    elif "qwen-image" in self.model_name.lower() and "edit" not in self.model_name.lower():
-                         # Qwen-Image
-                         qwen_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
-                         self._log_status("loading", 15, "Loading Qwen-Image Pipeline...")
-                         
-                         if "lightning" in self.model_name.lower():
-                             # Load Base
-                             import warnings
-                             with warnings.catch_warnings():
-                                 warnings.simplefilter("ignore")
-                                 pipe = DiffusionPipeline.from_pretrained("Qwen/Qwen-Image", torch_dtype=qwen_dtype)
-                             
-                             # Apply Lightning
-                             try:
-                                 from huggingface_hub import hf_hub_download
-                                 filename = "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors"
-                                 self._log_status("loading", 20, "Downloading Lightning weights...")
-                                 checkpoint_path = hf_hub_download(repo_id=self.model_id, filename=filename)
-                                 pipe.load_lora_weights(checkpoint_path)
-                                 try: pipe.fuse_lora()
-                                 except: pass
-                                 
-                                 from diffusers import FlowMatchEulerDiscreteScheduler
-                                 # Simplified scheduler replacement
-                                 scheduler_config = dict(pipe.scheduler.config)
-                                 for key in ["mu", "sigma_min", "sigma_max", "sigma_data"]: 
-                                    if key in scheduler_config: del scheduler_config[key]
-                                 pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
-                                 self._log_status("loading", 30, "Switched to FlowMatchEulerDiscreteScheduler")
-                             except Exception as e:
-                                 self._log_status("loading", 30, f"⚠️ Lightning setup failed: {e}")
-                         else:
-                             # Suppress harmless warnings about quantization and config attributes
-                             import warnings
-                             with warnings.catch_warnings():
-                                 warnings.filterwarnings("ignore", message=".*no linear modules were found.*")
-                                 warnings.filterwarnings("ignore", message=".*pooled_projection_dim.*")
-                                 warnings.filterwarnings("ignore", message=".*torch_dtype is deprecated.*")
-                                 pipe = DiffusionPipeline.from_pretrained(self.model_id, torch_dtype=qwen_dtype)
-
-                         if device.type == "cuda": use_offload = True
-                         is_lightning = "lightning" in self.model_name.lower()
-                         steps = 4 if is_lightning else 30 
-                         extra_kwargs = {
-                             "true_cfg_scale": 4.0 if not is_lightning else 0, 
-                             "guidance_scale": 0 if is_lightning else 7.5,
-                             "num_inference_steps": steps
-                         }
-
-                    elif "flux" in self.model_id.lower():
-                         # Flux 1
-                         flux_dtype = torch.float32 if device.type == "mps" else dtype
-                         self._log_status("loading", 15, "Loading FLUX Pipeline...")
-                         pipe = FluxPipeline.from_pretrained(self.model_id, torch_dtype=flux_dtype)
-                         if device.type == "cuda": use_offload = True
-                         extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 4, "max_sequence_length": 256}
-
-                    elif "z-image" in self.model_name.lower() or "zimage" in self.model_name.lower():
-                         # Z-Image Turbo (Alibaba/Tongyi) - via diffusers
-                         from diffusers import ZImagePipeline
-                         zimage_dtype = torch.bfloat16 if device.type == "cuda" else torch.float16
-                         self._log_status("loading", 15, "Loading Z-Image Turbo Pipeline (PyTorch)...")
-                         pipe = ZImagePipeline.from_pretrained(self.model_id, torch_dtype=zimage_dtype)
-                         if device.type == "cuda": use_offload = True
-                         extra_kwargs = {"guidance_scale": 3.5, "num_inference_steps": 9}
-
-                    elif "sdxl-turbo" in self.model_id.lower() or "turbo" in self.model_id.lower():
-                         # SDXL Turbo
-                         sdxl_dtype = torch.float32 if device.type == "mps" else dtype
-                         self._log_status("loading", 15, "Loading SDXL Turbo Pipeline...")
-                         pipe = AutoPipelineForText2Image.from_pretrained(self.model_id, torch_dtype=sdxl_dtype, variant="fp16" if sdxl_dtype == torch.float16 else None)
-                         extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 4}
-
-                    else:
-                         # Generic
-                         run_dtype = torch.float32 if device.type == "mps" else dtype
-                         self._log_status("loading", 15, "Loading Pipeline...")
-                         pipe = AutoPipelineForText2Image.from_pretrained(self.model_id, torch_dtype=run_dtype, variant="fp16" if run_dtype == torch.float16 else None)
-                         extra_kwargs = {}
-                finally:
-                    # Restore TQDM
-                    tqdm.tqdm = original_tqdm
-                    if "tqdm.auto" in sys.modules:
-                        sys.modules["tqdm.auto"].tqdm = original_tqdm
-                        
-                    for mod_name, original in original_external_tqdms.items():
+                         # Apply Lightning
                          try:
-                             if mod_name in sys.modules:
-                                 sys.modules[mod_name].tqdm = original
-                         except:
-                             pass
+                             from huggingface_hub import hf_hub_download
+                             filename = "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors"
+                             self._log_status("loading", 20, "Downloading Lightning weights...")
+                             checkpoint_path = hf_hub_download(repo_id=self.model_id, filename=filename)
+                             pipe.load_lora_weights(checkpoint_path)
+                             try: pipe.fuse_lora()
+                             except: pass
+                             
+                             from diffusers import FlowMatchEulerDiscreteScheduler
+                             # Simplified scheduler replacement
+                             scheduler_config = dict(pipe.scheduler.config)
+                             for key in ["mu", "sigma_min", "sigma_max", "sigma_data"]: 
+                                if key in scheduler_config: del scheduler_config[key]
+                             pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
+                             self._log_status("loading", 30, "Switched to FlowMatchEulerDiscreteScheduler")
+                         except Exception as e:
+                             self._log_status("loading", 30, f"⚠️ Lightning setup failed: {e}")
+                     else:
+                         # Suppress harmless warnings about quantization and config attributes
+                         import warnings
+                         with warnings.catch_warnings():
+                             warnings.filterwarnings("ignore", message=".*no linear modules were found.*")
+                             warnings.filterwarnings("ignore", message=".*pooled_projection_dim.*")
+                             warnings.filterwarnings("ignore", message=".*torch_dtype is deprecated.*")
+                             pipe = DiffusionPipeline.from_pretrained(self.model_id, torch_dtype=qwen_dtype)
+
+                     if device.type == "cuda": use_offload = True
+                     is_lightning = "lightning" in self.model_name.lower()
+                     steps = 4 if is_lightning else 30 
+                     extra_kwargs = {
+                         "true_cfg_scale": 4.0 if not is_lightning else 0, 
+                         "guidance_scale": 0 if is_lightning else 7.5,
+                         "num_inference_steps": steps
+                     }
+
+                elif "flux" in self.model_id.lower():
+                     # Flux 1
+                     flux_dtype = torch.float32 if device.type == "mps" else dtype
+                     self._log_status("loading", 15, "Loading FLUX Pipeline...")
+                     pipe = FluxPipeline.from_pretrained(self.model_id, torch_dtype=flux_dtype)
+                     if device.type == "cuda": use_offload = True
+                     extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 4, "max_sequence_length": 256}
+
+                elif "z-image" in self.model_name.lower() or "zimage" in self.model_name.lower():
+                     # Z-Image Turbo (Alibaba/Tongyi) - via diffusers
+                     from diffusers import ZImagePipeline
+                     # Force bfloat16 for stability and lower memory on MPS/CUDA
+                     zimage_dtype = torch.bfloat16 if device.type in ["cuda", "mps"] else torch.float32
+                     if zimage_dtype != dtype:
+                         dtype_str = "bfloat16" if zimage_dtype == torch.bfloat16 else "float32"
+                         source_str = str(dtype).replace("torch.", "")
+                         msg = f"⚠️  Auto-upgrading stability precision: {source_str} -> {dtype_str}"
+                         self._log_status("loading", 15, msg)
+                         
+                     self._log_status("loading", 15, "Loading Z-Image Turbo Pipeline (PyTorch)...")
+                     pipe = ZImagePipeline.from_pretrained(self.model_id, torch_dtype=zimage_dtype)
+                     
+                     # Force CPU offloading for better RAM management
+                     use_offload = True
+                     extra_kwargs = {"guidance_scale": 3.5, "num_inference_steps": 9}
+
+                elif "sdxl-turbo" in self.model_id.lower() or "turbo" in self.model_id.lower():
+                     # SDXL Turbo
+                     sdxl_dtype = torch.float32 if device.type == "mps" else dtype
+                     self._log_status("loading", 15, "Loading SDXL Turbo Pipeline...")
+                     pipe = AutoPipelineForText2Image.from_pretrained(self.model_id, torch_dtype=sdxl_dtype, variant="fp16" if sdxl_dtype == torch.float16 else None)
+                     extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 4}
+
+                else:
+                     # Generic
+                     run_dtype = torch.float32 if device.type == "mps" else dtype
+                     self._log_status("loading", 15, "Loading Pipeline...")
+                     pipe = AutoPipelineForText2Image.from_pretrained(self.model_id, torch_dtype=run_dtype, variant="fp16" if run_dtype == torch.float16 else None)
         except Exception as e:
             self._log_status("error", 0, f"Error loading image pipeline: {e}")
             # Fallback (no capture)
@@ -601,9 +499,81 @@ class ImageGenerator:
             if "guidance" in supported_args:
                 gen_kwargs["guidance"] = guidance_scale
                 
-            self._log_status("loading", 50, f"Starting MLX Generation ({width}x{height}, steps: {requests_steps})...")
+            # Tqdm Patch for MLX Progress
+            import sys
+            from tqdm import tqdm as real_tqdm
+            outer_progress_callback = self.progress_callback
+            original_tqdms = {}
             
-            image = self.mlx_model.generate_image(**gen_kwargs)
+            class TqdmWrapper:
+                def __init__(self, iterable=None, desc=None, total=None, *args, **kwargs):
+                    self.iterable = iterable
+                    self.desc = desc or "Generating"
+                    self.total = total or (len(iterable) if iterable else None)
+                    self.n = 0
+                    self._start_time = time.time()
+                    self._tqdm = real_tqdm(iterable, desc=desc, total=total, *args, **kwargs)
+
+                def _report_progress(self):
+                    if outer_progress_callback and self.total and self.total > 0:
+                        percent = min(100, int((self.n / self.total) * 100))
+                        # Calculate ETA
+                        elapsed = time.time() - self._start_time
+                        if self.n > 0:
+                            avg_time = elapsed / self.n
+                            remaining = max(0, self.total - self.n)
+                            eta_secs = int(remaining * avg_time)
+                            mins, secs = divmod(eta_secs, 60)
+                            outer_progress_callback(percent, f"Generating: {percent}%, Remaining Time: {mins:02d}:{secs:02d}")
+                        else:
+                            outer_progress_callback(percent, f"Generating: {percent}%")
+
+                def update(self, n=1):
+                    self.n += n
+                    if self._tqdm: self._tqdm.update(n)
+                    self._report_progress()
+                
+                def __iter__(self):
+                    if self.iterable:
+                        for item in self._tqdm:
+                            yield item
+                            self.n += 1
+                            self._report_progress()
+
+                def __enter__(self): return self
+                def __exit__(self, *args): 
+                    if self._tqdm: self._tqdm.close()
+                
+                def close(self):
+                    if self._tqdm: self._tqdm.close()
+                
+                @property
+                def format_dict(self):
+                    if self._tqdm: return self._tqdm.format_dict
+                    return {"n": self.n, "total": self.total}
+                
+                def __getattr__(self, name):
+                    if self._tqdm:
+                        return getattr(self._tqdm, name)
+                    raise AttributeError(f"'TqdmWrapper' has no attribute '{name}'")
+
+            # Patch mflux modules
+            for name, module in sys.modules.items():
+                if name.startswith("mflux") and hasattr(module, "tqdm"):
+                    if module.tqdm != TqdmWrapper:
+                        original_tqdms[name] = module.tqdm
+                        module.tqdm = TqdmWrapper
+
+            try:
+                self._log_status("loading", 50, f"Starting MLX Generation ({width}x{height}, steps: {requests_steps})...")
+                
+                # Execute generation
+                image = self.mlx_model.generate_image(**gen_kwargs)
+            finally:
+                # Restore original TQDMs
+                for name, original in original_tqdms.items():
+                    if name in sys.modules:
+                        sys.modules[name].tqdm = original
             
             # Calculate duration
             duration = time.time() - start_time
@@ -705,7 +675,7 @@ class ImageGenerator:
             if self.use_mlx and not self.precision_override:
                  self.precision_override = "int4" # Default for MLX/mflux
 
-            framework_arg = "mlx" if self.use_mlx else None
+            framework_arg = "mlx" if self.use_mlx else "torch"
             device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, framework_force=framework_arg, precision_force=self.precision_override)
             
             if device is None and self.use_mlx:
@@ -875,196 +845,14 @@ class ImageGenerator:
 
                 # Start Resource Monitoring
                 with ResourceMonitor() as monitor:
-
-                    
-                    if self.use_mlx:
-                        # MLX / mflux Generation
-                        from mflux.utils.image_util import ImageUtil
-                        from mflux.models.common.config.config import Config
-                        
-                        # mflux model-specific defaults for steps
-                        short_name = self.model_name.lower()
-                        if not user_specified_steps:
-                            if "z-image" in short_name or "zimage" in short_name:
-                                steps = 9  # Z-Image Turbo optimal
-                            elif "flux" in short_name:
-                                steps = 4  # Flux Schnell default
-                            # else: keep the 30 default set earlier
-                        if not user_specified_guidance: 
-                            # All MLX turbo models (Flux, Z-Image) use 0 CFG by default
-                            guidance_scale = 0.0
-                        
-                        self._log_status("loading", 10, f"Starting MLX Generation ({width}x{height}, {steps} steps)...")
-                        
-                        # Initialize seed
-                        seed = int(time.time())
-                        
-                        # Dispatch based on model type
-                        # Flux1/ZImageTurbo/QwenImage have different signatures
-                        
-                        common_args = {
-                            "seed": seed,
-                            "prompt": prompt,
-                            "num_inference_steps": steps,
-                            "height": height,
-                            "width": width,
-                            #"image_path": output_file # Manual save to avoid [Errno 2] from library
-                        }
-                        
-                        # Tqdm Patch for MLX Progress
-                        import sys
-                        from tqdm import tqdm as real_tqdm
-                        
-                        # Capture callback reference for TqdmWrapper
-                        outer_progress_callback = progress_callback
-                        original_tqdms = {}
-                        
-                        class TqdmWrapper:
-                            def __init__(self, iterable=None, desc=None, total=None, *args, **kwargs):
-                                self.iterable = iterable
-                                self.desc = desc or "Generating"
-                                self.total = total or (len(iterable) if iterable else None)
-                                self.n = 0
-                                self._start_time = time.time()
-                                self._tqdm = real_tqdm(iterable, desc=desc, total=total, *args, **kwargs)
-
-                            def _report_progress(self):
-                                if outer_progress_callback and self.total and self.total > 0:
-                                    percent = min(100, int((self.n / self.total) * 100))
-                                    # Calculate ETA
-                                    elapsed = time.time() - self._start_time
-                                    if self.n > 0:
-                                        avg_time = elapsed / self.n
-                                        remaining = max(0, self.total - self.n)
-                                        eta_secs = int(remaining * avg_time)
-                                        mins, secs = divmod(eta_secs, 60)
-                                        outer_progress_callback(percent, f"Generating: {percent}%, Remaining Time: {mins:02d}:{secs:02d}")
-                                    else:
-                                        outer_progress_callback(percent, f"Generating: {percent}%")
-
-                            def update(self, n=1):
-                                self.n += n
-                                if self._tqdm: self._tqdm.update(n)
-                                self._report_progress()
-                            
-                            def __iter__(self):
-                                if self.iterable:
-                                    for item in self._tqdm:
-                                        yield item
-                                        self.n += 1
-                                        self._report_progress()
-
-                            def __enter__(self): return self
-                            def __exit__(self, *args): 
-                                if self._tqdm: self._tqdm.close()
-                            
-                            def close(self):
-                                if self._tqdm: self._tqdm.close()
-                            
-                            @property
-                            def format_dict(self):
-                                if self._tqdm: return self._tqdm.format_dict
-                                return {"n": self.n, "total": self.total}
-                            
-                            def __getattr__(self, name):
-                                # Delegate any other attribute access to underlying tqdm
-                                if self._tqdm:
-                                    return getattr(self._tqdm, name)
-                                raise AttributeError(f"'TqdmWrapper' has no attribute '{name}'")
-
-                        # Patch mflux modules
-                        for name, module in sys.modules.items():
-                            if name.startswith("mflux") and hasattr(module, "tqdm"):
-                                if module.tqdm != TqdmWrapper:
-                                    original_tqdms[name] = module.tqdm
-                                    module.tqdm = TqdmWrapper
-                        
-                        try:
-                            # Ensure directory exists immediately before saving
-                            os.makedirs(os.path.dirname(output_file), exist_ok=True)
-                            
-                            # Identify class name
-                            model_class_name = self.mlx_model.__class__.__name__
-                            
-                            if "Flux1" in model_class_name:
-                                 # Flux signature: guidance, negative_prompt
-                                 generated_image = self.mlx_model.generate_image(
-                                     **common_args,
-                                     guidance=guidance_scale,
-                                     negative_prompt=negative_prompt if negative_prompt else None
-                                 )
-                            elif "ZImageTurbo" in model_class_name:
-                                 # Z-Image Turbo (Alibaba) - no guidance/negative_prompt support
-                                 generated_image = self.mlx_model.generate_image(**common_args)
-                            elif "QwenImage" in model_class_name:
-                                 # Qwen signature
-                                 generated_image = self.mlx_model.generate_image(
-                                     **common_args,
-                                     guidance=guidance_scale,
-                                     negative_prompt=negative_prompt if negative_prompt else None
-                                 )
-                            else:
-                                 # Fallback
-                                 generated_image = self.mlx_model.generate_image(**common_args)
-                        
-                        finally:
-                            # Restore tqdm
-                            for name, original in original_tqdms.items():
-                                if name in sys.modules:
-                                    sys.modules[name].tqdm = original
-                        
-                        # Manual Save Logic
-                        pil_img = None
-                        if generated_image:
-                            if hasattr(generated_image, "image"): # Wrapper object (Flux)
-                                pil_img = generated_image.image
-                            elif hasattr(generated_image, "save"): # Is a PIL image
-                                pil_img = generated_image
-                        
-                        if pil_img:
-                            try:
-                                pil_img.save(output_file)
-                                print(f"✅ Saved MLX image manually to {output_file}")
-                            except Exception as e:
-                                print(f"❌ Manual save failed: {e}")
-                                raise e
-                        else:
-                            # If we didn't get an image back but file exists (fallback?), that's weird.
-                            # But since we removed image_path, we expect return.
-                            if not os.path.exists(output_file):
-                                 raise Exception(f"MLX generation returned {type(generated_image)} and no file was saved.")
-                             
-                        # Mock output object for compatibility
-                        # We populate with actual image so downstream can use it if needed
-                        class MockOutput:
-                             images = [pil_img] if pil_img else [None]
-                             
-                        output = MockOutput()
-
-                    else:
-                        # PyTorch / Diffusers Generation
-                        # Reverted: User found TqdmCapture here too noisy (dumps all stderr)
-                        # with contextlib.redirect_stderr(capture):
-                        output = pipe(
-                            prompt=prompt, 
-                            height=height, 
-                            width=width,
-                            callback_on_step_end=callback_on_step_end,
-                            **extra_kwargs
-                        )
-                    
-                    if self.use_mlx:
-                        # Post-process for MLX (metrics)
-                         duration = time.time() - start_time
-                         avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
-                         tracker.record_image(self.model_id, width, height, "mlx", duration, 
-                                             cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=self.precision_override or "int4")
-                         print(f"   ✓ Generated in {format_time(duration)} (RAM: {avg_ram:.1f}GB | "
-                               f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
-                         print(f"✅ Image saved to {output_file}")
-                         tracker.print_actual(duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
-                         print("")
-                         return [output_file]
+                    # PyTorch / Diffusers Generation
+                    output = pipe(
+                        prompt=prompt, 
+                        height=height, 
+                        width=width,
+                        callback_on_step_end=callback_on_step_end,
+                        **extra_kwargs
+                    )
                 
                 # Collect metrics
                 duration = time.time() - start_time
@@ -1121,29 +909,38 @@ class ImageGenerator:
             ])
             
             if is_gated_error:
-                # Check if this is the default model (SD 3.5 Turbo)
-                is_default = self.model_id == IMAGE_MODELS.get("default", "") or "stable-diffusion-3.5" in self.model_id.lower()
+                # Identify if the current model is one of the known gated models
+                # (Z-Image is NOT gated, while SD 3.5 and Flux are)
+                known_gated_patterns = ["stable-diffusion-3.5", "flux", "stabilityai", "black-forest-labs"]
+                is_known_gated = any(p in self.model_id.lower() for p in known_gated_patterns)
                 
                 log_warn(f"\n❌ Access Denied / Authentication Error")
                 log_warn(f"   Error Details: {e}")
                 log_warn(f"")
                 log_warn(f"   Possible causes:")
-                log_warn(f"   1. The model '{self.model_id}' is Gated and requires license acceptance.")
-                log_warn(f"   2. Your Hugging Face token is invalid or expired (triggers 401/403).")
+                if is_known_gated:
+                    log_warn(f"   1. The model '{self.model_id}' is Gated and requires license acceptance.")
+                    log_warn(f"   2. Your Hugging Face token is invalid or expired.")
+                else:
+                    log_warn(f"   1. Your Hugging Face token is invalid, expired, or missing.")
+                
                 log_warn(f"")
                 log_warn(f"   🔧 Troubleshooting:")
-                log_warn(f"      1. Visit: https://huggingface.co/{self.model_id}")
-                log_warn(f"         (If it asks to 'Agree', accept it. If not, it's open.)")
-                log_warn(f"      2. Run: huggingface-cli login (to refresh your token)")
+                if is_known_gated:
+                    log_warn(f"      1. Visit: https://huggingface.co/{self.model_id}")
+                    log_warn(f"         (You must Accept the License at HuggingFace to use this model.)")
+                    log_warn(f"      2. Run: huggingface-cli login (to refresh your token)")
+                else:
+                    log_warn(f"      1. Run: huggingface-cli login (to verify your authentication)")
                 log_warn(f"")
                 
-                if is_default:
-                    log_warn(f"   💡 Quick Alternative: Use an ungated model (no login required):")
-                    log_warn(f"      python ai-media.py -i -p \"your prompt\" --image-model sdxl")
+                if is_known_gated:
+                    log_warn(f"   💡 Quick Alternative: Use the default ungated model (no login required):")
+                    log_warn(f"      python ai-media.py -i -p \"your prompt\" --image-model z-image")
                     log_warn(f"")
                     log_warn(f"   📖 See README.md > Gated Models for full setup instructions.")
                 else:
-                    log_warn(f"   💡 Alternative: Use '--image-model sdxl' (ungated, no login required).")
+                    log_warn(f"   💡 Alternative: Try '--image-model sdxl' (widely compatible/ungated).")
             elif "divisible by 8" in err_str or "divisible by 16" in err_str:
                 # Extract the actual divisor from the error message
                 import re

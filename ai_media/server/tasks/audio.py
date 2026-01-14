@@ -16,6 +16,7 @@ def run_audio_generation(
     progress_queue: Queue = None,
 ):
     """Background task for audio generation. Runs in child process."""
+    from ai_media.generators.audio import generate_audio as gen_audio
     
     def send_update(**kwargs):
         """Send progress update to parent via queue."""
@@ -30,10 +31,25 @@ def run_audio_generation(
         
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
-        from ai_media.generators.audio import generate_audio as gen_audio
+        import datetime
+        generation_start_sent = False
         
-        send_update(status="generating", phase="generating", progress=30, message="Generating audio...")
-        
+        def on_progress(pct, msg):
+            nonlocal generation_start_sent
+            # Defer status change and timer until we see a "Synthesizing" or similar message
+            is_generating = any(k in msg.lower() for k in ["synthesizing", "generating"])
+            
+            update_kwargs = {
+                "status": "generating" if is_generating else "loading",
+                "phase": "generating" if is_generating else "loading",
+                "progress": pct,
+                "message": msg
+            }
+            if is_generating and not generation_start_sent:
+                update_kwargs["generation_started_at"] = datetime.datetime.utcnow().isoformat()
+                generation_start_sent = True
+            send_update(**update_kwargs)
+
         success = gen_audio(
             prompt=prompt,
             output_path=output_path,
@@ -42,6 +58,7 @@ def run_audio_generation(
             model_name=model,
             force=force,
             bypass_warning=bypass_warning,
+            progress_callback=on_progress
         )
         
         if success:

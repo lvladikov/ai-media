@@ -138,12 +138,12 @@ IMAGE_MODELS = {
     "flux-dev": "black-forest-labs/FLUX.1-dev",        # Higher quality, slower
     "flux2": "black-forest-labs/FLUX.2-dev",
     "flux2-full": "black-forest-labs/FLUX.2-pro",
-    "z-image": "Tongyi-MAI/Z-Image-Turbo",             # 6B params, fast (9 steps)
+    "z-image": "Tongyi-MAI/Z-Image-Turbo",             # 6B params, fast (9 steps) (DEFAULT)
     "sdxl": "stabilityai/sdxl-turbo",                  # Fast, good quality
     "sd-1.5": "stable-diffusion-v1-5/stable-diffusion-v1-5",        # Classic, lightweight (Mirror)
     "sd3.5-medium": "stabilityai/stable-diffusion-3.5-medium",    # SD 3.5 Medium (consumer-friendly)
     "sd3.5-large": "stabilityai/stable-diffusion-3.5-large",       # SD 3.5 Large (best quality)
-    "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps) (DEFAULT)
+    "sd3.5-turbo": "stabilityai/stable-diffusion-3.5-large-turbo", # SD 3.5 Turbo (fast, 4 steps)
     "qwen-image": "ovedrive/qwen-image-4bit",                      # Qwen-Image 4-bit (CUDA, 20GB)
     "qwen-image-auto": "ovedrive/qwen-image-4bit",                 # Auto alias (defaults to CUDA 4-bit ID, logic switches on MPS)
     "qwen-image-4bit": "ovedrive/qwen-image-4bit",                 # Explicit 4-bit alias
@@ -151,7 +151,7 @@ IMAGE_MODELS = {
     "qwen-image-2512": "Qwen/Qwen-Image",                          # Qwen-Image 2512 (Latest) (MPS, ~40GB RAM)
     "upscaler": "stabilityai/stable-diffusion-x4-upscaler",  # 4x Upscaling
     "upscaler_x2": "stabilityai/sd-x2-latent-upscaler",      # 2x Latent Upscaling
-    "default": "stabilityai/stable-diffusion-3.5-large-turbo"
+    "default": "Tongyi-MAI/Z-Image-Turbo"
 }
 
 # --- Edit/Transform Models ---
@@ -162,6 +162,7 @@ EDIT_MODELS = {
     "qwen-image-edit-mps": "Qwen/Qwen-Image-Edit-2511",     # Qwen-Image-Edit (MPS, float32)
     # The 'Lightning' 2512 model is hosted by lightx2v and uses LoRA/distillation
     "qwen-image-edit-lightning": "lightx2v/Qwen-Image-Edit-2512-Lightning",
+    "z-image": "Tongyi-MAI/Z-Image-Turbo",
     "z-image-edit": "Tongyi-MAI/Z-Image-Turbo",              # Z-Image Turbo for high-speed editing
     "remove-bg": "briaai/RMBG-1.4",
     "default": "timbrooks/instruct-pix2pix"
@@ -270,7 +271,7 @@ MODEL_REQUIREMENTS = {
     "ovedrive/qwen-image-4bit": {"vram": 20, "ram": 32, "max_resolution": (1664, 1664)},
     "lightx2v/Qwen-Image-2512-Lightning": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)}, # Base model size
     "Qwen/Qwen-Image": {"vram": 40, "ram": 80, "max_resolution": (1664, 1664)}, # Covers qwen-image-2512 too
-    "Tongyi-MAI/Z-Image-Turbo": {"vram": 16, "ram": 48, "max_resolution": (2048, 2048)}, # Alibaba Z-Image, 6B params
+    "Tongyi-MAI/Z-Image-Turbo": {"vram": 8, "ram": 16, "max_resolution": (1024, 1024)}, # Alibaba Z-Image, 6B params
     
     # Audio Models (max_duration in seconds, based on model architecture limits)
     "facebook/musicgen-small": {"vram": 4, "ram": 8, "max_duration": 30},

@@ -87,12 +87,13 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     3.  **Accept model licenses**: Visit each model page and click **"Agree and access repository"** (one-time per model):
         | Model | Accept License |
         | :--- | :--- |
+        | Alibaba Z-Image Turbo (`z-image`) | (Free, Fast) | **Default Model.** High quality, 9-step generation. |
+        | SD 3.5 Large Turbo (`sd3.5-turbo`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo) | High quality, 4-step generation. |
         | FLUX.1-schnell (`flux`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-schnell) |
         | FLUX.1-dev (`flux-dev`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.1-dev) |
         | FLUX.2 (`flux2`, `flux2-full`) | [Accept License](https://huggingface.co/black-forest-labs/FLUX.2-dev) |
         | SD 3.5 Medium (`sd3.5-medium`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium) |
         | SD 3.5 Large (`sd3.5-large`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-large) |
-        | SD 3.5 Large Turbo (`sd3.5-turbo`) | [Accept License](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo) |
         | Stable Audio Open (`stable-audio`) | [Accept License](https://huggingface.co/stabilityai/stable-audio-open-1.0) |
         | Llama 3.1 8B Instruct (`llama-3.1-8b`) | [Accept License](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) |
     
