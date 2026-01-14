@@ -63,7 +63,7 @@ async def health_check():
 async def get_system_info():
     """Get system information including device, VRAM, and RAM."""
     import torch
-    from ..utils.system import get_optimal_device_and_dtype
+    from ai_media.utils.system import get_optimal_device_and_dtype
     
     # Use centralized detection
     opt_device, opt_dtype = get_optimal_device_and_dtype(quiet=True)

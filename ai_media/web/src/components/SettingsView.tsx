@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { updateConfig } from '../hooks/useApi';
-import { Settings as SettingsIcon, Monitor, Cpu, Palette, Moon, Sun } from 'lucide-react';
+import { Settings as SettingsIcon, Monitor, Cpu, Palette, Moon, Sun, Trash2, HelpCircle } from 'lucide-react';
 import { API_BASE_URL as API_BASE } from '../config';
+import { CleanupModal } from './CleanupModal';
 
 export function SettingsView() {
-  const { systemInfo } = useAppStore();
+  const { systemInfo, openHelpSection } = useAppStore();
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [loading, setLoading] = useState(false);
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
 
   useEffect(() => {
     // Check current theme from DOM or fetch
@@ -74,6 +76,40 @@ export function SettingsView() {
                         Dark
                     </button>
                 </div>
+            </div>
+        </div>
+
+        {/* Cleanup Options */}
+        <div className="card">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-primary">
+                <Trash2 size={20} />
+                Cleanup Options
+            </h2>
+            
+            <div className="flex items-center justify-between p-4 bg-tertiary rounded-lg border border-border">
+                <div className="flex items-center gap-3">
+                    <Trash2 size={20} className="text-red-500" />
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <p className="font-medium text-primary">Manage Storage</p>
+                            <button
+                                onClick={() => openHelpSection('cleanup')}
+                                className="text-secondary hover:text-brand-500 transition-colors"
+                                title="Learn about cleanup options"
+                            >
+                                <HelpCircle size={14} />
+                            </button>
+                        </div>
+                        <p className="text-sm text-secondary">Clear cached models and output folders</p>
+                    </div>
+                </div>
+                
+                <button 
+                    onClick={() => setCleanupModalOpen(true)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white"
+                >
+                    Open Cleanup
+                </button>
             </div>
         </div>
       
@@ -146,6 +182,10 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+
+      {/* Cleanup Modal */}
+      <CleanupModal isOpen={cleanupModalOpen} onClose={() => setCleanupModalOpen(false)} />
     </div>
   );
 }
+

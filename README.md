@@ -267,6 +267,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | `--clear-data-output` | Clear `testing/data/outputs` folder. |
 | `--clear-media-output` | Clear configured `media_output` folder. |
 | `--clear-all-outputs` | Clear both `testing/data/outputs` and configured `media_output` folders. |
+| `--clear-hub-model` | Delete a specific model folder from the HuggingFace hub cache. [Read more](docs/cleaning-up.md). |
 
 ### Advanced Core Options
 
@@ -291,6 +292,7 @@ The script `ai-media.py` serves as the main entry point, relying on feature modu
 | **Upscale** | `python ai-media.py -ui photo.jpg -uf 4.0` |
 | **Convert** | `python ai-media.py -cv video.mov -cvt mp4` |
 | **Web UI** | `python ai-media.py --serve` (Web & Electron) |
+| **Inference** | `python ai-media.py --inference-server` (OpenAI API) |
 
 ### Feature Documentation
 
@@ -313,6 +315,7 @@ For detailed options, models, and examples for each feature, see the dedicated d
 | 🧪 **Testing & Codec Analysis** | [docs/testing.md](docs/testing.md) |
 | 🔧 **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | 📊 **Performance Tracking** | [docs/performance-tracking.md](docs/performance-tracking.md) |
+| 🧹 **Cleanup Options** | [docs/cleaning-up.md](docs/cleaning-up.md) |
 | 🛡️ **Safety & Resources** | [docs/safety-and-resources.md](docs/safety-and-resources.md) |
 
 

@@ -2,6 +2,53 @@ import os
 import shutil
 from pathlib import Path
 
+
+def format_size(size_bytes: int) -> str:
+    """
+    Format bytes into human-readable size (B, KB, MB, GB, TB).
+    
+    Args:
+        size_bytes: Size in bytes
+        
+    Returns:
+        Formatted string like "1.5 GB" or "256 KB"
+    """
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 ** 2:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 ** 3:
+        return f"{size_bytes / (1024 ** 2):.1f} MB"
+    elif size_bytes < 1024 ** 4:
+        return f"{size_bytes / (1024 ** 3):.1f} GB"
+    else:
+        return f"{size_bytes / (1024 ** 4):.1f} TB"
+
+
+def get_folder_size(path: str) -> int:
+    """
+    Recursively calculate the total size of a folder.
+    
+    Args:
+        path: Path to the folder
+        
+    Returns:
+        Total size in bytes
+    """
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except (OSError, FileNotFoundError):
+                    pass
+    except (OSError, PermissionError):
+        pass
+    return total_size
+
+
 def clear_directory(path: str) -> list[str]:
     """
     Clear all files and subdirectories in the given directory.

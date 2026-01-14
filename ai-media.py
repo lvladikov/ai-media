@@ -749,6 +749,7 @@ Supported Models (Code : Download Size | Description):
     cleanup_group.add_argument("--clear-data-output", action="store_true", help="Clear testing/data/outputs folder.")
     cleanup_group.add_argument("--clear-media-output", action="store_true", help="Clear configured media_output folder.")
     cleanup_group.add_argument("--clear-all-outputs", action="store_true", help="Clear both testing/data/outputs and configured media_output folders.")
+    cleanup_group.add_argument("--clear-hub-model", metavar="FOLDER", help="Delete a specific model folder from the HuggingFace hub cache.")
     
     parser.add_argument("--report-json", help="Path to write a JSON report of the generation stats")
     parser.add_argument("--list-models", action="store_true", help="List all available models and exit.")
@@ -781,6 +782,40 @@ Supported Models (Code : Download Size | Description):
             else:
                 console.print("   ✅ Directory already empty.")
             
+        sys.exit(0)
+    
+    # Handle Clear Hub Model
+    if args.clear_hub_model:
+        from ai_media.utils.cleanup import format_size, get_folder_size
+        import shutil
+        
+        hf_home = CONFIG["paths"].get("hf_home")
+        if not hf_home:
+            console.print("❌ hf_home not configured in config.json")
+            sys.exit(1)
+        
+        hub_path = os.path.join(hf_home, "hub")
+        folder_path = os.path.join(hub_path, args.clear_hub_model)
+        
+        if not os.path.exists(folder_path):
+            console.print(f"❌ Folder not found: {folder_path}")
+            sys.exit(1)
+        
+        if not os.path.isdir(folder_path):
+            console.print(f"❌ Not a directory: {folder_path}")
+            sys.exit(1)
+        
+        # Get size before deletion
+        size = get_folder_size(folder_path)
+        
+        console.print(f"🗑️  Deleting {args.clear_hub_model} ({format_size(size)})...")
+        try:
+            shutil.rmtree(folder_path)
+            console.print(f"   ✅ Successfully deleted {args.clear_hub_model}")
+        except Exception as e:
+            console.print(f"   ❌ Failed to delete: {e}")
+            sys.exit(1)
+        
         sys.exit(0)
     
     # List Models
@@ -871,7 +906,7 @@ Supported Models (Code : Download Size | Description):
                 def delayed_launch():
                     import socket
                     
-                    def wait_for_port(check_host, check_port, label, retries=30):
+                    def wait_for_port(check_host, check_port, label, retries=60):
                         console.print(f"⏳ Waiting for {label} to start...", end="")
                         ready = False
                         while retries > 0:

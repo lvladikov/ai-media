@@ -4,6 +4,9 @@ import {
   LayoutList,
   Mic,
   Code,
+  Trash2,
+  FolderOpen,
+  HardDrive,
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { useState, useEffect } from 'react';
@@ -1165,6 +1168,80 @@ function HelpPrecision() {
   );
 }
 
+function HelpCleanup() {
+  return (
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
+      <p className="text-base font-medium text-primary">
+        Manage disk space by clearing generated outputs and cached AI models.
+      </p>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Output Folders" icon={<FolderOpen size={16} className="text-blue-600 dark:text-blue-400" />}>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Test Outputs</strong>: Temporary files generated during testing. Safe to clear anytime.</li>
+            <li><strong>Media Output</strong>: Final generated images, videos, and audio. Back these up before clearing!</li>
+          </ul>
+        </InfoCard>
+
+        <InfoCard title="Model Cache" icon={<HardDrive size={16} className="text-orange-600 dark:text-orange-400" />}>
+          <p className="mb-2">AI models are downloaded from Hugging Face and stored in <code>HF_HOME</code>.</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li>Cached models can take up significant space (10GB-100GB+).</li>
+            <li>Deleting a model removes it from disk to free up space.</li>
+            <li>Models will be <strong>re-downloaded automatically</strong> if you use them again.</li>
+          </ul>
+        </InfoCard>
+      </div>
+
+      <div className="bg-primary/50 p-4 rounded-lg border border-border">
+        <h4 className="text-primary font-bold mb-3 flex items-center gap-2">
+          <Trash2 size={16} className="text-red-500" />
+          Cleanup Options
+        </h4>
+        <Table
+          headers={['Action', 'Description', 'Risk']}
+          rows={[
+            [
+              <span className="font-bold text-primary">Clear Test Outputs</span>,
+              'Removes all files in testing/data/outputs',
+              <span className="text-emerald-500">Safe</span>
+            ],
+            [
+              <span className="font-bold text-primary">Clear Media Output</span>,
+              'Removes all generated media files',
+              <span className="text-yellow-500">Data Loss</span>
+            ],
+            [
+              <span className="font-bold text-primary">Clear All Outputs</span>,
+              'Clears BOTH test and media folders',
+              <span className="text-yellow-500">Data Loss</span>
+            ],
+            [
+              <span className="font-bold text-primary">Delete Model</span>,
+              'Removes specific model from cache',
+              <span className="text-blue-500">Re-download needed</span>
+            ]
+          ]}
+        />
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex items-start gap-4">
+        <div className="p-2 bg-blue-500/20 rounded shrink-0 text-blue-600 dark:text-blue-400">
+          <Info size={20} />
+        </div>
+        <div>
+          <h4 className="font-bold text-primary text-sm mb-1">Tip: Auto-Redownload</h4>
+          <p className="text-xs text-secondary leading-normal">
+            Don't worry about deleting models to save space. If you delete a model (e.g., <code>flux.1</code>) and then try to generate an image with it later, 
+            AI-Media will simply download it again automatically.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 
 
@@ -1471,6 +1548,7 @@ function HelpGeneral({ onNavigate }: HelpSectionProps) {
     { id: 'multimedia', title: 'Converters', icon: <FileType className="text-slate-600 dark:text-slate-400" size={24} />, desc: 'Format conversion & OCR' },
     { id: 'translate', title: 'Translation', icon: <Globe className="text-teal-600 dark:text-teal-400" size={24} />, desc: 'NLLB & Seamless models' },
     { id: 'upscale', title: 'Upscaling', icon: <TrendingUp className="text-cyan-600 dark:text-cyan-400" size={24} />, desc: 'AI & Lanczos enlargement' },
+    { id: 'cleanup', title: 'Cleanup', icon: <Trash2 className="text-red-500" size={24} />, desc: 'Manage storage & space' },
   ];
 
   return (
@@ -1585,6 +1663,7 @@ const SECTIONS = [
   { id: 'multimedia', label: 'Converters', icon: <FileType size={18} />, component: HelpMultimedia },
   { id: 'translate', label: 'Translation', icon: <Globe size={18} />, component: HelpTranslate },
   { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
+  { id: 'cleanup', label: 'Cleanup', icon: <Trash2 size={18} />, component: HelpCleanup },
   { id: 'precision', label: 'Precision & Framework', icon: <Cpu size={18} />, component: HelpPrecision },
 ];
 

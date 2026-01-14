@@ -3425,6 +3425,95 @@ class TestCleanupUtility(unittest.TestCase):
         self.assertTrue(found_rmtree)
 
 
+class TestHubCleanupFunctions(unittest.TestCase):
+    """Tests for hub cleanup functions in routes/cleanup.py."""
+    
+    def test_format_size_bytes(self):
+        """Test format_size with byte values."""
+        from ai_media.server.routes.cleanup import format_size
+        self.assertEqual(format_size(0), "0 B")
+        self.assertEqual(format_size(500), "500 B")
+        self.assertEqual(format_size(1023), "1023 B")
+    
+    def test_format_size_kilobytes(self):
+        """Test format_size with kilobyte values."""
+        from ai_media.server.routes.cleanup import format_size
+        self.assertEqual(format_size(1024), "1.0 KB")
+        self.assertEqual(format_size(2048), "2.0 KB")
+        self.assertIn("KB", format_size(500 * 1024))
+    
+    def test_format_size_megabytes(self):
+        """Test format_size with megabyte values."""
+        from ai_media.server.routes.cleanup import format_size
+        self.assertIn("MB", format_size(1024 ** 2))
+        self.assertIn("MB", format_size(500 * 1024 ** 2))
+    
+    def test_format_size_gigabytes(self):
+        """Test format_size with gigabyte values."""
+        from ai_media.server.routes.cleanup import format_size
+        self.assertIn("GB", format_size(1024 ** 3))
+        self.assertIn("GB", format_size(50 * 1024 ** 3))
+    
+    def test_format_size_terabytes(self):
+        """Test format_size with terabyte values."""
+        from ai_media.server.routes.cleanup import format_size
+        self.assertIn("TB", format_size(1024 ** 4))
+        self.assertIn("TB", format_size(2 * 1024 ** 4))
+    
+    @patch("os.walk")
+    def test_get_folder_size_empty(self, mock_walk):
+        """Test get_folder_size with empty folder."""
+        from ai_media.server.routes.cleanup import get_folder_size
+        mock_walk.return_value = []
+        self.assertEqual(get_folder_size("/fake/path"), 0)
+    
+    @patch("os.path.getsize")
+    @patch("os.walk")
+    def test_get_folder_size_with_files(self, mock_walk, mock_getsize):
+        """Test get_folder_size calculates total size correctly."""
+        from ai_media.server.routes.cleanup import get_folder_size
+        
+        mock_walk.return_value = [
+            ("/fake/path", [], ["file1.bin", "file2.bin"])
+        ]
+        mock_getsize.return_value = 1000
+        
+        result = get_folder_size("/fake/path")
+        self.assertEqual(result, 2000)  # 2 files * 1000 bytes
+    
+    @patch("os.path.exists")
+    def test_get_folder_stats_nonexistent(self, mock_exists):
+        """Test get_folder_stats with nonexistent folder."""
+        from ai_media.server.routes.cleanup import get_folder_stats
+        mock_exists.return_value = False
+        
+        result = get_folder_stats("/fake/path")
+        self.assertEqual(result["file_count"], 0)
+        self.assertEqual(result["size"], 0)
+        self.assertEqual(result["size_formatted"], "0 B")
+    
+    @patch("os.path.getsize")
+    @patch("os.path.isdir")
+    @patch("os.path.isfile")
+    @patch("os.listdir")
+    @patch("os.path.exists")
+    def test_get_folder_stats_with_files(self, mock_exists, mock_listdir, mock_isfile, mock_isdir, mock_getsize):
+        """Test get_folder_stats counts files and calculates size."""
+        from ai_media.server.routes.cleanup import get_folder_stats
+        
+        mock_exists.return_value = True
+        mock_listdir.return_value = ["file1.txt", "file2.txt", ".hidden"]
+        mock_isfile.return_value = True
+        mock_isdir.return_value = False
+        mock_getsize.return_value = 500
+        
+        result = get_folder_stats("/fake/path")
+        self.assertEqual(result["file_count"], 2)  # Excludes hidden
+        self.assertEqual(result["size"], 1000)  # 2 files * 500 bytes
+        self.assertIn("B", result["size_formatted"])
+
+
+
 # =============================================================================
 # Prompt Parsing Tests
 # =============================================================================

@@ -1974,8 +1974,8 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             
             import re
             current_class = None
-            class_pattern = r'^class\s+(Test\w+)\s*\(\s*(?:unittest\.)?TestCase\s*\)\s*:'
-            method_pattern = r'^\s+def\s+(test_\w+)\s*\('
+            class_pattern = r'^class\s+(Test\w+)\s*\(\s*(?:unittest\.)?(?:TestCase|IsolatedAsyncioTestCase)\s*\)\s*:'
+            method_pattern = r'^\s+(?:async\s+)?def\s+(test_\w+)\s*\('
             
             for line in lines:
                 # Check for class definition
@@ -2285,14 +2285,118 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             options = [
                 ("🧹  Clear testing/data/outputs", "--clear-data-output"),
                 ("🗑️   Clear media_output", "--clear-media-output"),
-                ("🔥  Clear All Output Data", "--clear-all-outputs")
+                ("🔥  Clear All Output Data", "--clear-all-outputs"),
+                ("🗃️   Clear Hub Model", "HUB_MODEL"),
             ]
             
             choice = prompt_choice("Select cleanup action:", options, allow_back=True)
             if choice is None: return
             
-            # Execute cleanup
-            run_self_command(choice)
+            if choice == "HUB_MODEL":
+                hub_model_menu()
+            else:
+                # Execute cleanup
+                run_self_command(choice)
+                wait_for_back(None)
+    
+    def hub_model_menu():
+        """Browse and delete cached HuggingFace hub models."""
+        from .server.config import CONFIG
+        from .utils.cleanup import format_size, get_folder_size, clear_directory
+        
+        while True:
+            clear_screen()
+            show_header("Clear Hub Model")
+            
+            # Get hub path from config
+            hf_home = CONFIG["paths"].get("hf_home")
+            if not hf_home:
+                print("❌ hf_home not configured in config.json")
+                wait_for_back(None)
+                return
+            
+            hub_path = os.path.join(hf_home, "hub")
+            if not os.path.exists(hub_path):
+                print(f"❌ Hub folder not found: {hub_path}")
+                wait_for_back(None)
+                return
+            
+            # Show loading indicator
+            print("⏳ Loading hub models information...", end="", flush=True)
+            
+            # Scan folders
+            folders = []
+            try:
+                for item in os.listdir(hub_path):
+                    # Skip hidden folders like .locks
+                    if item.startswith("."):
+                        continue
+                    item_path = os.path.join(hub_path, item)
+                    if os.path.isdir(item_path):
+                        size = get_folder_size(item_path)
+                        folders.append((item, size))
+            except OSError as e:
+                print(f"\r❌ Error scanning hub folder: {e}" + " " * 20)
+                wait_for_back(None)
+                return
+            
+            # Clear loading indicator
+            print("\r" + " " * 50 + "\r", end="", flush=True)
+            
+            if not folders:
+                print("📭 No models found in hub folder.")
+                wait_for_back(None)
+                return
+            
+            # Sort by size (largest first)
+            folders.sort(key=lambda x: x[1], reverse=True)
+            
+            # Calculate total size
+            total_size = sum(size for _, size in folders)
+            
+            # Build menu options
+            options = []
+            for name, size in folders:
+                display = f"{name} ({format_size(size)})"
+                options.append((display, name))
+            
+            # Show info panel
+            console.print(Panel(
+                f"[bold cyan]📁 Hub Path:[/bold cyan] {hub_path}\n"
+                f"[bold cyan]📊 Total Size:[/bold cyan] {format_size(total_size)} ({len(folders)} models)",
+                border_style="blue",
+                padding=(0, 2),
+                width=80
+            ))
+            print()
+            
+            choice = prompt_choice("Select a model to delete:", options, allow_back=True)
+            if choice is None: return
+            
+            # Confirmation warning
+            clear_screen()
+            show_header("Clear Hub Model")
+            console.print(f"⚠️  You are about to delete: [bold]{choice}[/bold]")
+            print()
+            print("This model's folder will be permanently removed.")
+            print("You will need to redownload it again next time the model needs to be used.")
+            print()
+            
+            try:
+                confirm = input("Continue? [y/N]: ").lower().strip()
+            except KeyboardInterrupt:
+                print("\n❌ Cancelled.")
+                continue
+                
+            if confirm != 'y':
+                print("❌ Cancelled.")
+                import time
+                time.sleep(0.5)
+                continue
+            
+            # Delete the folder
+            folder_path = os.path.join(hub_path, choice)
+            run_self_command(f'--clear-hub-model "{choice}"')
             wait_for_back(None)
 
     # Main loop
