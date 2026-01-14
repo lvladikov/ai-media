@@ -63,8 +63,8 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **SDXL Turbo** | `sdxl` | ~8GB (16GB on Mac) | ~8GB (~16GB on Mac) | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. Uses float32 on Apple Silicon. |
-| **Z-Image Turbo** | `z-image` | ~31GB | ~31GB | Alibaba model. Fast (9 steps). MLX-native on Mac, also CUDA/MPS. |
+| **SDXL Turbo** | `sdxl` | ~8GB | ~8GB | Fast, reasonable quality, older model - use this as Default if you haven't yet Accepted License at HuggingFace for the Gated current Default sd3.5-turbo. Uses float32 on Apple Silicon. |
+| **Z-Image Turbo** | `z-image` | ~31GB | ~31GB | Alibaba model. Fast (9 steps) and high quality. MLX-native on Mac, also CUDA/MPS. |
 | **SD 1.5** | `sd-1.5` | ~4GB | ~4GB | Lightweight, lower VRAM. ⚠️ NSFW filter issues on non-CUDA. Older model. |
 | **SD 3.5 Medium** | `sd3.5-medium` | ~10GB | ~10GB | Consumer-friendly, high quality. 🔒 **Gated**. |
 | **SD 3.5 Large** | `sd3.5-large` | ~19GB | ~19GB | Best quality. 🔒 **Gated**. |
@@ -73,8 +73,8 @@ To ensure the highest quality and exact dimensions, the script uses a **multi-st
 | **Qwen 2.5 Img (Lightning)** | `qwen-image-lightning` | ~40GB | ~40GB | **Fastest Qwen**. 8 steps. Works on **MPS (Mac)** & CUDA. |
 | **Qwen 2.5 Img (4-bit)** | `qwen-image-4bit` | ~20GB | ❌ N/A | **Low VRAM (CUDA Only)**. 4-bit quantized. 8 steps. |
 | **Qwen 2.5 Img (Full)** | `qwen-image-2512` | ~40GB | ~40GB | Manual Full Model selection. Float32. |
-| **Flux Schnell** | `flux` | ~33GB | ~12GB+ (~70GB on Mac) | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
-| **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ (~80GB on Mac) | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
+| **Flux Schnell** | `flux` | ~33GB | ~12GB+ | High quality. 🔒 **Gated**. **⚠️ Impractical on Mac (Slow)**. |
+| **Flux Dev** | `flux-dev` | ~33GB | ~16GB+ | Professional creative work. 🔒 **Gated**. **⚠️ Impractical on Mac**. |
 | **FLUX.2 (4-bit)** | `flux2` | ~18GB | ~20GB VRAM | State-of-the-art. 4K capable. 🔒 **Gated**. **NVIDIA RTX 3090+ recommended**. |
 | **FLUX.2 (Full)** | `flux2-full` | ~65GB | ~90GB+ VRAM/RAM | Maximum quality. 🔒 **Gated**. ⚠️ Mac: 128GB+ RAM required. |
 
@@ -175,7 +175,7 @@ Different models have different strengths and resource requirements.
 
 ```bash
 # SDXL Turbo - Fast & High Quality
-# Uses ~8GB VRAM (or ~16GB RAM on Mac). Best all-rounder without login.
+# Uses ~8GB VRAM. Best all-rounder without login.
 python ai-media.py -i -p "Cinematic portrait of an astronaut" --image-model sdxl
 
 # Stable Diffusion 1.5 - Low Resource / Vintage Style

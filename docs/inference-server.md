@@ -230,7 +230,7 @@ To see the exact model IDs to use in your configuration, you can:
 **Recommended Models for Image Generation:**
 - `flux`: FLUX.1 (Schnell) - Fast and high quality
 - `sdxl`: SDXL Turbo - Very fast
-- `z-image`: Z-Image Turbo (Alibaba) - Fast (9 steps), MLX-native
+- `z-image`: Z-Image Turbo (Alibaba) - Fast (9 steps) and high quality
 - `sd3.5-large`: Stable Diffusion 3.5 Large
 
 ---
