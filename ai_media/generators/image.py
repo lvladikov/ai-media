@@ -449,11 +449,11 @@ class ImageGenerator:
         if self.precision_override:
             # Normalize precision string
             p = self.precision_override.lower()
-            if "4" in p or "int4" in p: target_precision = "int4"
-            elif "6" in p or "int6" in p: target_precision = "int6"
-            elif "8" in p or "int8" in p: target_precision = "int8"
-            elif "16" in p or "float16" in p or "fp16" in p: target_precision = "float16" # mflux often uses float16
-            elif "bf16" in p: target_precision = "bf16" # Not all mflux support bf16, but check mappings
+            if "bf16" in p or "bfloat16" in p: target_precision = "bf16" 
+            elif "float16" in p or "fp16" in p or "16" in p: target_precision = "float16"
+            elif "int8" in p or "8" in p: target_precision = "int8"
+            elif "int6" in p or "6" in p: target_precision = "int6"
+            elif "int4" in p or "4" in p: target_precision = "int4"
             
         mlx_model_id = get_mlx_model_id(self.model_id, target_precision)
         
