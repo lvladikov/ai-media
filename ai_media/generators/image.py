@@ -289,7 +289,7 @@ class ImageGenerator:
                      
                      # Force CPU offloading for better RAM management
                      use_offload = True
-                     extra_kwargs = {"guidance_scale": 3.5, "num_inference_steps": 9}
+                     extra_kwargs = {"guidance_scale": 0.0, "num_inference_steps": 9}
 
                 elif "sdxl-turbo" in self.model_id.lower() or "turbo" in self.model_id.lower():
                      # SDXL Turbo
