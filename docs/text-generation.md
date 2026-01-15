@@ -131,8 +131,12 @@ When no precision is specified, AI-Media automatically selects optimal settings:
 | **MPS (Mac PyTorch)** | `float16` | PyTorch | Stable, no quantization on MPS |
 | **MLX (Mac Native)** | `int4` | MLX | Fastest inference on Apple Silicon |
 
-> [!NOTE]
-> **Why bfloat16 on Mac?** MPS doesn't support 4-bit quantization natively. Use MLX (`-mf mlx`) for quantized models on Apple Silicon.
+> [!IMPORTANT]
+> **Mac M-Series Optimization (`mlx-lm`)**:
+> When you select **MLX** (`-mf mlx`), the system utilizes the **`mlx-lm`** library. developed by Apple's research team.
+> *   **What it does**: It is a specialized high-performance engine exclusively for LLMs (Llama, Qwen, Mistral) on Apple Silicon.
+> *   **Benefit**: It runs models in **Native 4-bit** (int4) by default, which is ~3x faster and uses 50% less RAM than the standard PyTorch (MPS) backend.
+> *   **Why bfloat16?** If you need higher precision, MLX supports `bfloat16` natively. Note that PyTorch (MPS) does *not* support 4-bit quantization, making MLX the only choice for running large models on most Macs.
 
 ### CLI Examples
 

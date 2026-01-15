@@ -85,7 +85,9 @@ def run_video_generation(
             image_input=input_image,
             force=force,
             bypass_warning=bypass_warning,
-            progress_callback=on_progress
+            progress_callback=on_progress,
+            use_mlx=framework,
+            precision=precision
         )
         
         if success:

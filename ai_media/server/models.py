@@ -75,6 +75,7 @@ class ImageGenerateRequest(BaseModel):
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
     framework: Optional[str] = Field(None, description="Force specific ML framework ('torch', 'mlx')")
     precision: Optional[str] = Field(None, description="Force specific precision ('int4', 'float16', etc.)")
+    format: Optional[str] = Field(None, description="Output format: jpg, png. Defaults to jpg.")
 
 
 class VideoGenerateRequest(BaseModel):
@@ -91,6 +92,7 @@ class VideoGenerateRequest(BaseModel):
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
     framework: Optional[str] = Field(None, description="Force specific ML framework ('torch', 'mlx')")
     precision: Optional[str] = Field(None, description="Force specific precision ('int4', 'float16', etc.)")
+    format: Optional[str] = Field(None, description="Output format: mp4, webm, mov, gif. Defaults to mp4.")
 
 
 class AudioGenerateRequest(BaseModel):
@@ -98,9 +100,11 @@ class AudioGenerateRequest(BaseModel):
     prompt: str = Field(..., description="Text prompt for audio generation")
     model: str = Field("default", description="Model name")
     duration: float = Field(10.0, description="Duration in seconds")
+    sampling_rate: Optional[str] = Field(None, description="Sampling rate (e.g. 32000, 44100)")
     output_filename: Optional[str] = Field(None, description="Custom output filename")
     force: bool = Field(False, description="Force execution, skipping confirmations (overwrites and warnings)")
     bypass_warning: bool = Field(False, description="Specifically skip resource warning prompts")
+    format: Optional[str] = Field(None, description="Output format: mp3, wav, flac, ogg. Defaults to mp3.")
 
 
 class ArticleGenerateRequest(BaseModel):

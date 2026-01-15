@@ -30,7 +30,8 @@ Automatically synchronize video generation with audio. You provide an Audio Prom
 | `-ii, --input-image` | Source image path for **Image-to-Video** generation (SVD, CogVideoX I2V). |
 | `-ap, --audio-prompt` | **Text prompt** for generating background audio (e.g., "Techno beat"). Automatically muxes with video. Use `-am` to select audio model. |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. Default: mp4. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
+| `-o, --output` | Output filename/path. Auto-generated from prompt if omitted. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
+| `-f, --format` | Output format: `mp4` (default), `webm`, `mov`, `mkv`, `avi`, `flv`, `ts`, `gif`. See [Output Formats](#output-formats---o-or---output). |
 
 See [Video Generation Examples](#examples) and [Models](#models).
 
@@ -45,29 +46,96 @@ The tool supports natural language and object-style inputs:
 - **Objects**: `{m: 1, s: 30}`, `{hours: 1, minutes: 15}`
 - **Numeric**: `30` (interpreted as seconds)
 
+### Output Formats (`-o` or `--output`)
+
+The output format is determined by the file extension you specify. The tool generates video internally, then **automatically converts** to your desired format using ffmpeg.
+
+**Supported Formats:**
+| Format | Extension | Notes |
+| :--- | :--- | :--- |
+| MP4 | `.mp4` | **Default**. H.264 codec, universal compatibility. |
+| WebM | `.webm` | VP9 codec. Great for web. |
+| MOV | `.mov` | Apple QuickTime. Good for editing. |
+| MKV | `.mkv` | Matroska. Flexible container. |
+| AVI | `.avi` | Legacy format. Wide compatibility. |
+| FLV | `.flv` | Flash Video. Legacy streaming format. |
+| TS | `.ts` | MPEG-TS. Broadcast/streaming format. |
+| GIF | `.gif` | Animated GIF. Large files, no audio. |
+
+**Examples:**
+```bash
+# MP4 (default) - using -o with extension
+python ai-media.py -v -p "Ocean waves" -o my_video.mp4
+
+# MP4 - using -f flag (explicit format)
+python ai-media.py -v -p "Ocean waves" -f mp4
+
+# WebM (web-optimized)
+python ai-media.py -v -p "Ocean waves" -f webm
+python ai-media.py -v -p "Ocean waves" --format webm
+
+# GIF (animated, no audio)
+python ai-media.py -v -p "Ocean waves" -f gif
+
+# MOV (QuickTime)
+python ai-media.py -v -p "Ocean waves" -f mov
+```
+
+> [!TIP]
+> If no output is specified, a unique filename with `.mp4` extension is generated automatically.
+
+ 
+## Precision & Framework Control
+
+AI-Media supports fine-grained control over model precision and ML framework. For a deep dive into precision types and their trade-offs, see **[Precisions Explained](precisions-explained.md)**.
+
+### Quick Reference
+
+| Option | Description |
+|--------|-------------|
+| `--precision-force`, `-pf` | Force precision: `int4`, `int6`, `int8`, `float16`, `bfloat16`, `float32` |
+| `--ml-framework`, `-mf` | Force framework (Mac): `mlx` (native) or `torch` (PyTorch MPS) |
+ 
+## Platform Defaults (Video Models)
+ 
+When no precision is specified, AI-Media selects the best settings for your hardware:
+ 
+| Platform | Default Precision | Default Framework | Notes |
+|----------|-------------------|-------------------|-------|
+| **CUDA (NVIDIA)** | `float16` | PyTorch | Standard backend. Fast on 30/40-series cards. |
+| **MPS (Mac PyTorch)**| `float16` | PyTorch | Legacy default. Used when MLX port is unavailable. |
+| **MLX (Mac Native)** | `int4` | MLX | Optimized for Apple Silicon. Requires `mlx-vlm`. |
+
+---
+
 ## Models
 
-| Model | Code | Resolution | Download | VRAM | Best For |
+| Model | Code | Resolution | MLX Support | VRAM (Est) | Best For |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Wan 2.2** | `wan2.2` | Any | ~30GB | ~24GB | **SOTA (2025)**. Excellent quality. ⚠️ **Impractical on Mac** (Too slow). |
-| **LTX-Video** | `ltx-video` | Any (x32) | ~12GB | ~12GB | Balanced speed/quality (~35s for 2s on Mac). Good motion. |
-| **Mochi 1** | `mochi-1` | Any (x16) | ~19GB | ~20GB | High motion fidelity. ⚠️ **Slow on Mac** (Sequential Offload). |
-| **HunyuanVideo** | `hunyuan` | Any | ~25GB | ~80GB+ | Massive scale. ❌ **Incompatible with <64GB Mac**. |
-| **Zeroscope** | `zeroscope` | 576×320 (native) | ~4GB | ~6GB | **Default**. Fast, no watermarks. Auto-upscales with XL. |
-| **Zeroscope XL** | `zeroscope-xl` | 1024×576 | ~6GB | ~10GB | *Internal V2V upscaler*. |
-| **CogVideoX** | `cogvideox` | Any | ~22GB | ~50GB+ | High fidelity. **WARNING: Very Heavy on all Systems**. |
-| **Stable Video Diffusion** | `svd` | Any | ~4GB | ~8GB | **I2V Only**. ⚠️ *Very slow on Apple Silicon (CPU only).* |
-| **ModelScope** | `ms-1.7b` | Any | ~10GB | ~12GB | **Legacy**. General purpose (has watermark issues). |
+| **Wan 2.2** | `wan2.2` | Any | ✅ **Native** (int4) | ~16GB (Mac) | **SOTA (2025)**. Excellent quality. Now fast on M1/M2/M3 via MLX. |
+| **LTX-Video** | `ltx-video` | Any (x32) | ✅ **Native** (int4) | ~12GB | Balanced speed/quality (~35s for 2s). Good motion. |
+| **HunyuanVideo** | `hunyuan` | Any | ✅ **Native** (int4) | ~24GB (Mac) | Massive scale. Requires 32GB+ Unified Memory. |
+| **CogVideoX** | `cogvideox` | Any | ✅ **Native** (int4) | ~18GB (Mac) | High fidelity. Heavy on CUDA/PyTorch, manageable on MLX. |
+| **Mochi 1** | `mochi-1` | Any (x16) | ❌ **No** (Runs on PyTorch)* | ~20GB | High motion fidelity. Uses standard (slower) PyTorch backend. |
+| **Zeroscope** | `zeroscope` | 576×320 | ❌ No | ~6GB | **Default**. Fast, no watermarks. Auto-upscales with XL. |
+| **Stable Video Diffusion** | `svd` | Any | ❌ No | ~8GB | **I2V Only**. Slower on Mac (CPU fallback). |
+| **ModelScope** | `ms-1.7b` | Any | ❌ No | ~12GB | Legacy. |
+
+> [!NOTE]
+> ***Mochi 1 (PyTorch Only)**: While a "Partial" MLX port exists in the community (DiT-only), it requires a complex hybrid setup (MLX DiT + PyTorch VAE) that causes severe memory swapping and bottlenecks. For stability and reliability, we strictly use the **unified PyTorch (MPS)** pipeline for Mochi 1.
 
 > [!IMPORTANT]
-> **Mac M-Series (MPS) Performance Note:**
-> Massive video models require enormous unified memory and specific optimizations on Mac:
-> *   **LTX-Video**: ✅ Runs great natively (~35s total for 2s video). Best choice for Mac.
-> *   **Mochi 1**: ⚠️ Works but is slow (~50s/step, ~25m total) due to required **Sequential CPU Offload**.
-> *   **Wan 2.2**: ⚠️ Technically runs but is **impractical** (4+ hours for 2s video).
-> *   **HunyuanVideo**: ❌ **Fails** on 64GB Macs. Attempts to allocate >80GB buffer even with offloading.
-> *   **XL V2V**: ⚠️ **Diffusion is skipped (CPU-only = hours per video). Goes directly: 576×320 → Real-ESRGAN → FFmpeg resize. Faster but may have slight frame-to-frame variation.
-> *   **Text-to-Video** models use **Float32** on MPS (Metal). Float16 produces corrupted/black frames.
+> **Mac M-Series (Apple Silicon) Performance:**
+> We offer two backends for Mac users:
+> 1.  **MLX Native (Recommended)**: Utilizes `mlx-community` 4-bit quantized models. fast, low memory, and optimized for M1/M2/M3 chips.
+>     *   **Why `mlx-vlm`?** To these new models, a video is just a sequence of visual tokens, just like text is a sequence of word tokens. Because `mlx-vlm` is already built to pipe "Images + Text" into a Transformer, it became the natural home for these advanced video models on Apple Silicon.
+>     *   **Wan 2.2**: ✅ Runs native via `mlx-vlm`. (Use `int4` precision).
+>     *   **LTX-Video**: ✅ Runs native.
+>     *   **HunyuanVideo**: ✅ Runs native (4-bit).
+>     *   **CogVideoX**: ✅ Runs native (4-bit).
+> 2.  **PyTorch (MPS Fallback)**: Uses standard Diffusers.
+>     *   **Text-to-Video** models use **Float32** on MPS (Metal) to avoid artifacts, which is slower and memory-hungry.
+>     *   **Legacy Models**: Zeroscope and SVD currently use this fallback as native MLX ports are not yet standard.
 
 > [!NOTE]
 > **Zeroscope Dynamic Upscaling:** When you request a resolution higher than 576×320 with the `zeroscope` model (e.g., `-s 1080p`), the script automatically:
@@ -104,17 +172,18 @@ python ai-media.py -v -p "Ocean waves crashing" --size 1080p
 Choose the right tool for the job.
 
 ```bash
-# LTX-Video (Balanced Choice for Mac/Consumer GPU)
-# Good quality, reasonable speed (~35s for 2s on Mac M1/M2 Max).
+# LTX-Video (Native Mac Speed & Quality)
+# Runs natively on specialized MLX backend (if chosen or default on Mac).
 python ai-media.py -v -p "A cinematic drone shot of a forest" -vm ltx-video
 python ai-media.py -v -p "A cinematic drone shot of a forest" --video-model ltx-video
 
-# Wan 2.2 (State-of-the-Art Quality)
-# ⚠️ WARNING: Extremely slow on Mac (Hours). Best for NVIDIA 24GB+ cards.
-python ai-media.py -v -p "Hollywood movie scene, explosion" --video-model wan2.2
+# Wan 2.2 (SOTA Quality)
+# Now runs EFFICIENTLY on Mac via Native MLX (int4).
+# No longer extremely slow.
+python ai-media.py -v -p "Hollywood movie scene, explosion" --video-model wan2.2 -mf mlx -pf int4
 
 # Mochi 1 (High Motion Fidelity)
-# Great for fluid dynamics, but requires sequential offload (Slow on Mac).
+# ⚠️ Note: Still uses slower PyTorch backend on Mac (Partial support).
 python ai-media.py -v -p "Milk pouring into coffee, slow motion" -vm mochi-1
 ```
 
@@ -153,8 +222,8 @@ python ai-media.py -v -p "Cyberpunk dancers" --audio-prompt "Heavy techno beat" 
 python ai-media.py -v -p "Clouds passing" -l "{m:1, s:30}"
 
 # HunyuanVideo (Massive Scale)
-# ❌ Likely to crash on <64GB RAM systems.
-python ai-media.py -v -p "Panda custom generation" -vm hunyuan -s 720p -o panda.mp4
+# Now accessible on 32GB+ Macs via MLX (int4).
+python ai-media.py -v -p "Panda custom generation" -vm hunyuan -mf mlx -pf int4 -s 720p -o panda.mp4
 ```
 
 ### Zeroscope Dynamic Upscaling Pipeline

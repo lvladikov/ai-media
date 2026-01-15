@@ -210,6 +210,7 @@ export async function generateImage(params: {
   negative_prompt?: string;
   framework?: string;
   precision?: string;
+  format?: string;
   force?: boolean;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/image`, {
@@ -226,6 +227,11 @@ export async function generateVideo(params: {
   width?: number;
   height?: number;
   duration?: number;
+  input_image?: string;
+  framework?: string;
+  precision?: string;
+  format?: string;
+  force?: boolean;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/video`, {
     method: 'POST',
@@ -235,10 +241,28 @@ export async function generateVideo(params: {
   return response.json();
 }
 
+export async function uploadFile(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE()}/api/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error('Upload failed');
+  }
+
+  return response.json();
+}
+
 export async function generateAudio(params: {
   prompt: string;
   model?: string;
   duration?: number;
+  sampling_rate?: string | number;
+  format?: string;
 }) {
   const response = await fetch(`${API_BASE()}/api/generate/audio`, {
     method: 'POST',

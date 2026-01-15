@@ -57,6 +57,22 @@ IMAGE_MODEL_PARAMS = {
     'qwen-image-edit-lightning': 14,
 }
 
+# Video parameter counts (in billions)
+VIDEO_MODEL_PARAMS = {
+    'wan-2.2': 14,
+    'wan-2.2-5b': 5,       # 5B variant
+    'wan2.2': 14,
+    'wan2.2-5b': 5,        # 5B variant
+    'cogvideox': 5,        # 5B variant
+    'hunyuan': 13,         # ~13B
+    'ltx-video': 2,        # ~2B (DiT)
+    'mochi-1': 10,         # ~10B
+    'svd': 2,              # ~1.5-3B UNet
+    'zeroscope': 1.7,      # ~1.7B
+    'zeroscope-xl': 1.7,
+    'ms-1.7b': 1.7,
+}
+
 # Display names for models (without RAM info)
 TEXT_MODEL_NAMES = {
     "deepseek-r1-qwen-7b": "DeepSeek R1-Qwen-7B",
@@ -106,6 +122,32 @@ def calculate_model_ram(model_id: str, precision: str = "auto") -> float:
         Estimated RAM in GB
     """
     # Resolve "auto" to actual precision for calculation
+    # Identify model type and params first
+    model_type = "text"
+    params_b = TEXT_MODEL_PARAMS.get(model_id)
+    
+    if params_b is None:
+        params_b = IMAGE_MODEL_PARAMS.get(model_id)
+        if params_b is not None:
+            model_type = "image"
+    
+    if params_b is None:
+        params_b = VIDEO_MODEL_PARAMS.get(model_id)
+        if params_b is not None:
+            model_type = "video"
+
+    # Partial matches for video (e.g. wan-2.2 aliases)
+    if params_b is None:
+        for k, v in VIDEO_MODEL_PARAMS.items():
+            if k in model_id.lower():
+                params_b = v
+                model_type = "video"
+                break
+    
+    if params_b is None:
+        params_b = 8  # Default to 8B if unknown
+
+    # Resolve "auto" to actual precision for calculation
     resolved_precision = precision
     if precision == "auto":
         from .precision import resolve_precision
@@ -126,13 +168,11 @@ def calculate_model_ram(model_id: str, precision: str = "auto") -> float:
         resolved_precision = resolve_precision(
              device_type=device_type, 
              framework=framework,
-             model_type="text"
+             model_type=model_type
         )
 
-    # Check Image params first if not found in Text
-    params_b = TEXT_MODEL_PARAMS.get(model_id)
     if params_b is None:
-        params_b = IMAGE_MODEL_PARAMS.get(model_id, 8)  # Default to 8B if unknown
+        params_b = 8  # Default to 8B if unknown
         
     bytes_per = BYTES_PER_WEIGHT.get(resolved_precision, 2.0)
     base_ram = params_b * bytes_per
@@ -396,4 +436,36 @@ def get_transform_model_options(precision: str = "auto", system_ram_gb: float = 
     # Z-Image
     add_opt("z-image-edit", "Z-Image Turbo (Alibaba, Fast)")
 
+    return options
+
+
+def get_video_model_options(precision: str = "auto", system_ram_gb: float = 0, is_mac: bool = False, is_cuda: bool = False) -> list:
+    """
+    Generate video model options list for interactive menus.
+    
+    Args:
+        precision: Selected precision for RAM calculation
+        system_ram_gb: System RAM in GB
+        is_mac: Whether running on macOS
+        is_cuda: Whether running with CUDA
+    
+    Returns:
+        List of tuples: (display_name, model_id)
+    """
+    options = []
+    
+    def add_opt(mid, base_label):
+        ram_str = format_ram_warning(mid, precision, system_ram_gb)
+        options.append((f"{base_label} {ram_str}", mid))
+
+    add_opt("zeroscope", "Zeroscope (Default, No Watermarks)")
+    add_opt("ms-1.7b", "ModelScope (General Purpose, Has Watermarks)")
+    add_opt("cogvideox", "CogVideoX (State of the Art, Slow)")
+    add_opt("wan-2.2", "Wan 2.2 (Alibaba, 14B, High Quality)")
+    add_opt("wan-2.2-5b", "Wan 2.2 (Alibaba, 5B, Fast)")
+    add_opt("ltx-video", "LTX-Video (Lightricks, Fast DiT)")
+    add_opt("mochi-1", "Mochi 1 (Genmo, Motion SOTA)")
+    add_opt("hunyuan", "HunyuanVideo (Tencent, Cinematic)")
+    add_opt("svd", "Stable Video Diffusion (Image-to-Video only)")
+    
     return options

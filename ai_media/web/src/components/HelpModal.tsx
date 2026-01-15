@@ -198,6 +198,16 @@ function HelpImage({ onNavigate }: HelpSectionProps) {
         </div>
       </div>
 
+      <SectionTitle icon={<Cpu size={20} />}>Platform Defaults</SectionTitle>
+      <Table
+        headers={['Platform', 'Default Precision', 'Default Framework', 'Notes']}
+        rows={[
+          [<span className="font-bold text-primary">CUDA (NVIDIA)</span>, <CodeBadge>float16</CodeBadge>, 'PyTorch', 'Standard backend'],
+          [<span className="font-bold text-primary">MPS (Mac)</span>, <CodeBadge>float16</CodeBadge>, 'PyTorch', 'Standard backend'],
+          [<span className="font-bold text-primary">MLX (Mac)</span>, <CodeBadge>int4</CodeBadge>, 'MLX (Native)', <span className="text-emerald-500 font-bold">Fastest for Z-Image</span>]
+        ]}
+      />
+
       <SectionTitle icon={<Cpu size={20} />}>Model Comparison</SectionTitle>
       <Table
         headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
@@ -323,42 +333,92 @@ function HelpVideo() {
         </div>
       </div>
 
+      <SectionTitle icon={<Cpu size={20} />}>Platform Defaults</SectionTitle>
+      <Table
+        headers={['Platform', 'Default Precision', 'Default Framework', 'Notes']}
+        rows={[
+          [<span className="font-bold text-primary">CUDA (NVIDIA)</span>, <CodeBadge>float16</CodeBadge>, 'PyTorch', 'Standard backend'],
+          [<span className="font-bold text-primary">MPS (Mac)</span>, <CodeBadge>float16</CodeBadge>, 'PyTorch', 'Legacy default / Fallback'],
+          [<span className="font-bold text-primary">MLX (Mac)</span>, <CodeBadge>int4</CodeBadge>, 'MLX (Native)', <span className="text-emerald-500 font-bold">Recommended for Speed</span>]
+        ]}
+      />
+
       <SectionTitle icon={<Film size={20} />}>Model Comparison</SectionTitle>
       <Table
-        headers={['Model', 'VRAM', 'RAM', 'Speed', 'Platform', 'Best For']}
+        headers={['Model', 'Variant', 'MLX Support', 'VRAM', 'Best For']}
         rows={[
           [
-            <span className="font-bold text-primary">LTX-Video</span>,
-            '~12GB', '16GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Perfect speed/motion balance'
-          ],
-          [
-            <span className="font-bold text-primary">Zeroscope</span>,
-            '~4GB', '8GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'Mac/CUDA', 'Stable, no watermark loops'
+            <span className="font-bold text-primary">Wan 2.2</span>,
+            '14B (T2V)',
+            <span className="text-emerald-500 font-bold">✅ Native (int4)</span>, '~16GB', 'SOTA Cinematic (Text-to-Video)'
           ],
           [
             <span className="font-bold text-primary">Wan 2.2</span>,
-            '~24GB', '32GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'CUDA Best', 'State-of-the-Art realism'
+            '5B (T2V/I2V)',
+            <span className="text-emerald-500 font-bold">✅ Native (int4)</span>, '~6-8GB', 'Fast, efficient, supports I2V'
           ],
           [
-            <span className="font-bold text-primary">Mochi 1</span>,
-            '~19GB', '32GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'CUDA Best', 'Fluid physics & high motion'
+            <span className="font-bold text-primary">LTX-Video</span>,
+            'Standard',
+            <span className="text-emerald-500 font-bold">✅ Native (int4)</span>, '~12GB', 'Fastest Mac Native (DiT)'
           ],
           [
-            <span className="font-bold text-primary">SVD</span>,
-            '~8GB', '16GB+', <span className="text-red-600 dark:text-red-400">🐢 Slow on Mac</span>, 'Mac/CUDA', 'Image-to-Video specialist'
+            <span className="font-bold text-primary">HunyuanVideo</span>,
+            '13B (T2V)',
+            <span className="text-emerald-500 font-bold">✅ Native (int4)</span>, '~24GB', 'Massive Scale / Production'
           ],
           [
             <span className="font-bold text-primary">CogVideoX</span>,
-            '~38GB', '48GB+', <span className="text-red-600 dark:text-red-400">🐢 Heavy</span>, 'CUDA Best', 'High fidelity production'
+            '5B',
+            <span className="text-emerald-500 font-bold">✅ Native (int4)</span>, '~18GB', 'High Fidelity'
           ],
           [
-            <span className="font-bold text-primary">Hunyuan</span>,
-            '~80GB+', '64GB+', <span className="text-red-600 dark:text-red-400">🐢 Very heavy</span>, 'CUDA only', 'Cinematic scale (13B)'
+            <span className="font-bold text-primary">Mochi 1</span>,
+            'Preview',
+            <span className="text-red-500 font-bold">❌ No (PyTorch)</span>, '~20GB', 'Fluid Mechanics / High Motion'
+          ],
+          [
+            <span className="font-bold text-primary">Zeroscope</span>,
+            'v2 576w',
+            <span className="text-red-500 font-bold">❌ No (PyTorch)</span>, '~4GB', 'Fast loops, no watermark'
+          ],
+          [
+            <span className="font-bold text-primary">Zeroscope</span>,
+            'v2 XL',
+            <span className="text-red-500 font-bold">❌ No (PyTorch)</span>, '~6GB', 'High-Res Upscaling'
+          ],
+          [
+            <span className="font-bold text-primary">SVD</span>,
+            'XT 1.1',
+            <span className="text-red-500 font-bold">❌ No (PyTorch)</span>, '~8GB', 'Dedicated Image-to-Video'
           ]
         ]}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+      <div className="space-y-4 mt-6">
+        <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg">
+          <h4 className="text-amber-600 dark:text-amber-400 font-medium mb-2 flex items-center gap-2">
+            <Info size={16} /> Mochi 1 & MLX
+          </h4>
+          <p className="mb-2">
+            <strong>Why isn't Mochi 1 native on Mac?</strong><br />
+            While a "Partial" MLX port exists in the community, it requires a complex hybrid setup (MLX DiT + PyTorch VAE) that causes severe memory swapping and instability.
+            For reliability, we strictly use the <strong>unified PyTorch (MPS)</strong> pipeline for Mochi 1, which ensures it runs correctly, albeit slower than native MLX models.
+          </p>
+        </div>
+
+        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg">
+          <h4 className="text-blue-600 dark:text-blue-400 font-medium mb-2 flex items-center gap-2">
+            <Cpu size={16} /> Mac Performance Tip
+          </h4>
+          <p className="mb-2">
+            For the best experience on Apple Silicon, use <strong>Wan 2.2</strong> or <strong>LTX-Video</strong>.
+            These models run natively on the Neural Engine via <code>mlx-community</code> (4-bit), offering 2-3x faster speeds than PyTorch-based models like Zeroscope or Mochi.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
         <InfoCard title="Generation Modes" icon={<Film size={16} className="text-purple-600 dark:text-purple-400" />}>
           <ul className="list-disc pl-4 space-y-1">
             <li><strong>Text-to-Video</strong>: Create from prompts ("A forest drone shot").</li>
@@ -414,8 +474,8 @@ function HelpAudio({ onNavigate }: HelpSectionProps) {
         </div>
         <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
           <div className="text-purple-600 dark:text-purple-400 font-medium text-xs mb-1">🗣️ Voice Engine</div>
-          <div className="text-primary font-bold text-sm">Bark</div>
-          <div className="text-secondary text-xs">Speech with emotion</div>
+          <div className="text-primary font-bold text-sm">Bark & SpeechT5</div>
+          <div className="text-secondary text-xs">Expressive TTS</div>
         </div>
         <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex flex-col justify-between">
           <div>
@@ -447,7 +507,11 @@ function HelpAudio({ onNavigate }: HelpSectionProps) {
           ],
           [
             <span className="font-bold text-primary">Bark</span>,
-            '~6GB', '12GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'Speech', 'Natural TTS with prosody'
+            '~12GB', '16GB+', <span className="text-yellow-600 dark:text-yellow-400">🕐 Medium</span>, 'TTS', 'Audio/FX & Emotion'
+          ],
+          [
+            <span className="font-bold text-primary">SpeechT5</span>,
+            '~2GB', '4GB+', <span className="text-emerald-600 dark:text-emerald-400">⚡ Fast</span>, 'TTS', 'Efficient / Low VRAM'
           ],
           [
             <span className="font-bold text-primary">Stable Audio <GatedLock onClick={() => onNavigate('gated-models')} /></span>,
@@ -459,9 +523,9 @@ function HelpAudio({ onNavigate }: HelpSectionProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
         <InfoCard title="Audio Features" icon={<Wand2 size={16} className="text-violet-600 dark:text-violet-400" />}>
           <ul className="list-disc pl-4 space-y-1">
-            <li><strong>Auto-Chunking</strong>: Models generate up to 30s at once; this tool automatically chains prompts for unlimited length (Bark/MusicGen).</li>
+            <li><strong>Voice Control</strong>: Bark supports expressive tokens like [laugh], [sighs] to steer the style.</li>
+            <li><strong>Auto-Chunking</strong>: Automatically handles long text inputs for TTS (Bark, SpeechT5) by splitting into stable chunks, ensuring consistent voice quality for long scripts.</li>
             <li><strong>Visual-to-Audio</strong>: Uses an internal "Vision" description of your image/video to prompt the audio model automatically.</li>
-            <li><strong>Voice Presets</strong>: Support for 100+ native speakers in Bark (`v2/en_speaker_x`).</li>
           </ul>
         </InfoCard>
 
@@ -522,6 +586,16 @@ function HelpChat({ onNavigate }: HelpSectionProps) {
           <div className="text-xs text-secondary opacity-80">Better in Article Tab</div>
         </div>
       </div>
+
+      <SectionTitle icon={<Cpu size={20} />}>Platform Defaults</SectionTitle>
+      <Table
+        headers={['Platform', 'Default Precision', 'Default Framework', 'Notes']}
+        rows={[
+          [<span className="font-bold text-primary">CUDA (NVIDIA)</span>, <CodeBadge>int4</CodeBadge>, 'PyTorch (BnB)', 'Auto-quantized'],
+          [<span className="font-bold text-primary">MPS (Mac)</span>, <CodeBadge>float16</CodeBadge>, 'PyTorch', 'Stable, no quantization'],
+          [<span className="font-bold text-primary">MLX (Mac)</span>, <CodeBadge>int4</CodeBadge>, 'MLX (Native)', <span className="text-emerald-500 font-bold">Fastest Inference</span>]
+        ]}
+      />
 
       {/* 3. Model Table */}
       <SectionTitle icon={<Cpu size={20} />}>Model Comparison</SectionTitle>
@@ -1153,7 +1227,7 @@ function HelpPrecision() {
         <InfoCard title="Inference Server" icon={<Globe size={16} className="text-emerald-600 dark:text-emerald-400" />}>
           <p className="mb-2">Use <code className="text-xs bg-tertiary px-1 rounded">model:precision</code> syntax:</p>
           <div className="bg-tertiary p-2 rounded text-xs font-mono">
-            llama-3.1-8b:int4<br/>
+            llama-3.1-8b:int4<br />
             qwen-coder-14b:bfloat16
           </div>
         </InfoCard>
@@ -1166,9 +1240,167 @@ function HelpPrecision() {
         <div>
           <h4 className="font-bold text-primary text-sm mb-1">Mac Users: MLX Recommended</h4>
           <p className="text-xs text-secondary leading-normal">
-            For text generation on Apple Silicon, use <strong>MLX with int4</strong> for fastest speeds and lowest memory.
+            For <strong>Text, Image, and Video</strong> generation on Apple Silicon, use <strong>MLX with int4</strong> for fastest speeds and lowest memory.
             MLX is optimized for Apple's Neural Engine and provides significantly better performance than PyTorch/MPS.
+            <br /><br />
+            <em>Note: If MLX fails to load for any reason, the system will automatically fallback to PyTorch (MPS) and upgrade precision to float16 to ensure generation succeeds.</em>
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HelpInference() {
+  return (
+    <div className="space-y-6 max-w-4xl text-secondary text-sm">
+      <SectionTitle icon={<Globe size={20} />}>OpenAI-Compatible Server</SectionTitle>
+      <p className="text-base">
+        AI-Media includes a built-in inference server that exposes an OpenAI-compatible API (`/v1`).
+        This allows you to use your local AI-Media models with third-party tools like <strong>Continue</strong>, <strong>LM Studio</strong>, <strong>Cursor</strong>, or any application that supports the OpenAI API specification.
+      </p>
+
+      <InfoCard title="How to Start" icon={<Terminal size={16} className="text-blue-600 dark:text-blue-400" />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="font-bold text-primary mb-2 flex items-center gap-2">
+              <Terminal size={14} /> CLI Mode (Recommended)
+            </div>
+            <p className="mb-2 text-xs">Run directly from your terminal:</p>
+            <div className="bg-tertiary p-2 rounded font-mono text-xs mb-3 text-primary">
+              python ai-media.py --inference-server
+            </div>
+
+            <p className="text-xs mb-2"><strong>Custom Port:</strong></p>
+            <div className="bg-tertiary p-2 rounded font-mono text-xs mb-3 text-primary">
+              python ai-media.py --inference-server --port 8090
+            </div>
+
+            <div className="font-bold text-primary mb-1 text-xs">Verbose Mode (Debug)</div>
+            <p className="text-xs mb-2">
+              To see detailed reasoning logs and token streaming in your terminal:
+            </p>
+            <div className="bg-tertiary p-2 rounded font-mono text-xs text-primary">
+              python ai-media.py --inference-server-verbose
+            </div>
+          </div>
+
+          <div>
+            <div className="font-bold text-primary mb-2 flex items-center gap-2">
+              <LayoutList size={14} /> Interactive Mode
+            </div>
+            <p className="mb-3">
+              Select <strong>"Web Server Mode"</strong> &rarr; <strong>"Start Inference Server"</strong> from the interactive menu.
+            </p>
+
+            <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded text-xs text-blue-600 dark:text-blue-400">
+              <strong>Tip:</strong> The server will stay running until you press <code>Ctrl+C</code> or send a "stop server" message in chat.
+            </div>
+          </div>
+        </div>
+      </InfoCard>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Connection Details" icon={<Globe size={16} className="text-emerald-600 dark:text-emerald-400" />}>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Base URL</strong>: <code className="bg-tertiary px-1 rounded">http://localhost:8000/v1</code></li>
+            <li><strong>API Key</strong>: Any string (e.g. <code className="bg-tertiary px-1 rounded">local</code>)</li>
+            <li><strong>Chat Endpoint</strong>: <code className="bg-tertiary px-1 rounded">/v1/chat/completions</code></li>
+            <li><strong>Models Endpoint</strong>: <code className="bg-tertiary px-1 rounded">/v1/models</code></li>
+            <li><strong>Responses Endpoint</strong>: <code className="bg-tertiary px-1 rounded">/v1/responses</code> (Agent Mode)</li>
+          </ul>
+        </InfoCard>
+
+        <InfoCard title="Memory Management" icon={<Cpu size={16} className="text-purple-600 dark:text-purple-400" />}>
+          <p className="mb-2">The server enforces a <strong>Single Active Model</strong> policy to prevent OOM errors.</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li>Switching from Text to Image automatically unloads the Text model.</li>
+            <li>Use <code className="bg-tertiary px-1 rounded">unload model</code> in chat to free RAM manually.</li>
+            <li>Use <code className="bg-tertiary px-1 rounded">flush memory</code> to force garbage collection.</li>
+          </ul>
+        </InfoCard>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard title="Stopping the Server" icon={<X size={16} className="text-red-500" />}>
+          <ul className="list-disc pl-4 space-y-1 text-sm text-secondary">
+            <li><strong>Terminal</strong>: Press <code className="bg-tertiary px-1 rounded">Ctrl+C</code> in the terminal.</li>
+            <li><strong>Chat Command</strong>: Send <code className="bg-tertiary px-1 rounded">stop inference server</code> in chat.</li>
+            <li><strong>Kill Command</strong>: Run <code className="bg-tertiary px-1 rounded">kill &lt;pid&gt;</code>.</li>
+          </ul>
+        </InfoCard>
+
+        <InfoCard title="Random Prompts" icon={<Sparkles size={16} className="text-yellow-500" />}>
+          <p className="text-sm text-secondary mb-2">
+            Send specific keywords in chat to get creative prompts:
+          </p>
+          <ul className="list-disc pl-4 space-y-1 text-sm text-secondary">
+            <li>Send <code className="bg-tertiary px-1 rounded">rndPr</code> or <code className="bg-tertiary px-1 rounded">random prompt</code>.</li>
+            <li><strong>Image Models</strong>: Returns creative scene descriptions.</li>
+            <li><strong>Text Models</strong>: Returns coding tasks or article ideas.</li>
+          </ul>
+        </InfoCard>
+      </div>
+
+      <div className="mt-4">
+        <InfoCard title="Using with Continue (VS Code / JetBrains)" icon={<Code size={16} className="text-blue-500" />}>
+          <p className="text-sm text-secondary mb-3">
+            <a href="https://continue.dev" target="_blank" rel="noreferrer" className="text-primary hover:underline">Continue</a> is an open-source AI code assistant. You can configure it to use AI-Media as its backend.
+          </p>
+          <div className="bg-tertiary p-3 rounded text-xs border border-border/50">
+            <strong className="text-primary block mb-1">🚀 Quick Setup:</strong>
+            Use the included sample config file found in this repository:
+            <code className="block my-2 p-2 bg-black/10 dark:bg-black/30 rounded font-mono text-primary select-all">extras/continue-dev-example-config/config.sample.yaml</code>
+            <p className="text-secondary">
+              Simply copy its contents to your <code className="bg-black/10 dark:bg-black/30 px-1 rounded">~/.continue/config.yaml</code> to get all AI-Media models pre-configured instantly.
+            </p>
+          </div>
+        </InfoCard>
+      </div>
+
+      <div className="mt-4">
+        <InfoCard title="Adding Context (Files, Folders, Workspace)" icon={<FolderOpen size={16} className="text-orange-500" />}>
+          <p className="text-sm text-secondary mb-2">
+            The server supports full context awareness. Clients like Continue resolve references into text <em>before</em> sending to the server.
+          </p>
+          <ul className="list-disc pl-4 space-y-1 text-xs text-secondary mb-3">
+            <li><strong>@File / @Open Files</strong>: Attaches specific file contents.</li>
+            <li><strong>@Folder</strong>: Attaches an entire directory.</li>
+            <li><strong>@Codebase</strong>: Uses embeddings to find relevant code snippets.</li>
+            <li><strong>@Docs</strong>: Attaches external documentation.</li>
+          </ul>
+          <div className="bg-yellow-500/10 border border-yellow-500/20 p-2 rounded text-xs text-yellow-600 dark:text-yellow-400">
+            <strong>Important:</strong> You must <strong>select</strong> the context item from the dropdown menu (so it becomes a "chip") for it to work. Typing <code>@file.py</code> without selecting it sends raw text, not the file content.
+          </div>
+        </InfoCard>
+      </div>
+
+      <div className="mt-4">
+        <InfoCard title="Supported Models" icon={<Book size={16} className="text-primary" />}>
+          <p className="text-sm text-secondary mb-2">
+            The server automatically exposes all available models. See their respective sections for details:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div className="bg-tertiary p-2 rounded border border-border">
+              <strong className="block text-primary mb-1">Text Models (Chat, Code, Articles)</strong>
+              <p className="text-secondary">See <strong>"Chat Interface"</strong> or <strong>"Code Generator"</strong> sections.</p>
+            </div>
+            <div className="bg-tertiary p-2 rounded border border-border">
+              <strong className="block text-primary mb-1">Image Models</strong>
+              <p className="text-secondary">See <strong>"Image Generation"</strong> section.</p>
+            </div>
+          </div>
+        </InfoCard>
+      </div>
+
+      <div className="bg-secondary/50 p-4 rounded-lg border border-border mt-4">
+        <h4 className="text-primary-600 dark:text-primary-400 font-medium mb-2">Compatible Clients</h4>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="bg-secondary px-2 py-1 rounded border border-border">VS Code (Continue)</span>
+          <span className="bg-secondary px-2 py-1 rounded border border-border">JetBrains (Continue)</span>
+          <span className="bg-secondary px-2 py-1 rounded border border-border">LM Studio</span>
+          <span className="bg-secondary px-2 py-1 rounded border border-border">Cursor</span>
+          <span className="bg-secondary px-2 py-1 rounded border border-border">Open WebUI</span>
         </div>
       </div>
     </div>
@@ -1240,7 +1472,7 @@ function HelpCleanup() {
         <div>
           <h4 className="font-bold text-primary text-sm mb-1">Tip: Auto-Redownload</h4>
           <p className="text-xs text-secondary leading-normal">
-            Don't worry about deleting models to save space. If you delete a model (e.g., <code>flux.1</code>) and then try to generate an image with it later, 
+            Don't worry about deleting models to save space. If you delete a model (e.g., <code>flux.1</code>) and then try to generate an image with it later,
             AI-Media will simply download it again automatically.
           </p>
         </div>
@@ -1556,6 +1788,8 @@ function HelpGeneral({ onNavigate }: HelpSectionProps) {
     { id: 'translate', title: 'Translation', icon: <Globe className="text-teal-600 dark:text-teal-400" size={24} />, desc: 'NLLB & Seamless models' },
     { id: 'upscale', title: 'Upscaling', icon: <TrendingUp className="text-cyan-600 dark:text-cyan-400" size={24} />, desc: 'AI & Lanczos enlargement' },
     { id: 'cleanup', title: 'Cleanup', icon: <Trash2 className="text-red-500" size={24} />, desc: 'Manage storage & space' },
+    { id: 'precision', title: 'Precision & Framework', icon: <Cpu className="text-slate-600 dark:text-slate-400" size={24} />, desc: 'Quantization & MLX/CUDA' },
+    { id: 'inference', title: 'Inference Server', icon: <Globe className="text-green-600 dark:text-green-400" size={24} />, desc: 'OpenAI API & Clients' },
   ];
 
   return (
@@ -1672,6 +1906,7 @@ const SECTIONS = [
   { id: 'upscale', label: 'Upscaling', icon: <TrendingUp size={18} />, component: HelpUpscale },
   { id: 'cleanup', label: 'Cleanup', icon: <Trash2 size={18} />, component: HelpCleanup },
   { id: 'precision', label: 'Precision & Framework', icon: <Cpu size={18} />, component: HelpPrecision },
+  { id: 'inference', label: 'Inference Server', icon: <Globe size={18} />, component: HelpInference },
 ];
 
 export function HelpModal() {

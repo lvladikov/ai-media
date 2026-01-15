@@ -247,12 +247,12 @@ export function CodeGenerator() {
         {/* Instructions */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-secondary">Instructions</label>
+            <label className="label">Instructions</label>
             <RandomPrompt type="code" onPromptSelect={setPrompt} />
           </div>
           <textarea
             className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[160px]"
-            placeholder="Create a To-Do list app with HTML, CSS, and JavaScript..."
+            placeholder="Enter your coding instructions or use the Random Prompt tool..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
@@ -261,11 +261,11 @@ export function CodeGenerator() {
         {/* Model Selector */}
         {/* Model Selector Section */}
         <div className="space-y-4">
-          
-            {/* 1. Precision Selector */}
+
+          {/* 1. Precision Selector */}
           {/* 1. Framework Selector (First on list, hidden if not Mac) */}
           <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
-             <label className="text-sm font-medium text-secondary block">Platform</label>
+            <label className="label">Platform</label>
             <select
               className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
               value={framework}
@@ -281,7 +281,7 @@ export function CodeGenerator() {
           {/* 2. Precision Selector */}
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-secondary">Precision</label>
+              <label className="label">Precision</label>
               <button
                 onClick={() => useAppStore.getState().openHelpSection('precision')}
                 className="text-tertiary hover:text-brand-500 transition-colors"
@@ -316,7 +316,7 @@ export function CodeGenerator() {
 
           {/* 3. Model Selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-secondary flex items-center">
+            <label className="label flex items-center">
               Model
               <ModelHelpLink section="code" />
             </label>
@@ -335,7 +335,7 @@ export function CodeGenerator() {
                   const vram = getDynamicRam(name, precision, framework);
                   // Add warning if RAM is very high (e.g. > 32GB)
                   const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
-                  
+
                   return (
                     <option key={name} value={name}>
                       {info ? `${isHighRam ? '⚠️ ' : ''}${info.label} (${vram})` : name}
@@ -360,7 +360,7 @@ export function CodeGenerator() {
 
         {/* Output Name */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-secondary">
+          <label className="label">
             Output Name (Optional)
           </label>
           <input

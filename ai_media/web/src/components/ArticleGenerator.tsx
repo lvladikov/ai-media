@@ -222,12 +222,12 @@ export function ArticleGenerator() {
         {/* Topic */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-secondary">Topic</label>
+            <label className="label">Topic</label>
             <RandomPrompt type="article" onPromptSelect={setTopic} />
           </div>
           <textarea
             className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[120px]"
-            placeholder="The future of renewable energy technologies..."
+            placeholder="Enter your article topic or use the Random Prompt tool..."
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
           />
@@ -235,7 +235,7 @@ export function ArticleGenerator() {
 
         {/* Filename */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-secondary">
+          <label className="label">
             Filename (Optional)
           </label>
           <input
@@ -250,10 +250,10 @@ export function ArticleGenerator() {
         {/* Model Selector */}
         {/* Model Selector Section */}
         <div className="space-y-4">
-          
-            {/* 1. Framework Selector (First on list, hidden if not Mac) */}
+
+          {/* 1. Framework Selector (First on list, hidden if not Mac) */}
           <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
-             <label className="text-sm font-medium text-secondary block">Platform</label>
+            <label className="label">Platform</label>
             <select
               className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
               value={framework}
@@ -269,7 +269,7 @@ export function ArticleGenerator() {
           {/* 2. Precision Selector */}
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-secondary">Precision</label>
+              <label className="label">Precision</label>
               <button
                 onClick={() => useAppStore.getState().openHelpSection('precision')}
                 className="text-tertiary hover:text-brand-500 transition-colors"
@@ -304,7 +304,7 @@ export function ArticleGenerator() {
 
           {/* 3. Model Selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-secondary flex items-center">
+            <label className="label flex items-center">
               Model
               <ModelHelpLink section="article" />
             </label>
@@ -340,7 +340,7 @@ export function ArticleGenerator() {
         {/* Format & Length */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-secondary">Format</label>
+            <label className="label">Format</label>
             <select
               className="select w-full bg-primary border-border text-sm focus:border-brand-500"
               value={format}
@@ -355,7 +355,7 @@ export function ArticleGenerator() {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-secondary">Length</label>
+            <label className="label">Length</label>
             <select
               className="select w-full bg-primary border-border text-sm focus:border-brand-500"
               value={length}

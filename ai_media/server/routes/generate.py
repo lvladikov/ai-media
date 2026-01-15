@@ -36,7 +36,8 @@ async def generate_image(request: ImageGenerateRequest):
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = request.output_filename or f"image_{timestamp}.png"
+    ext = request.format or "jpg"
+    filename = request.output_filename or f"image_{timestamp}.{ext}"
     output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
@@ -82,7 +83,8 @@ async def generate_video(request: VideoGenerateRequest):
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = request.output_filename or f"video_{timestamp}.mp4"
+    ext = request.format or "mp4"
+    filename = request.output_filename or f"video_{timestamp}.{ext}"
     output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
@@ -120,7 +122,8 @@ async def generate_audio(request: AudioGenerateRequest):
     )
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = request.output_filename or f"audio_{timestamp}.wav"
+    ext = request.format or "mp3"
+    filename = request.output_filename or f"audio_{timestamp}.{ext}"
     output_path = os.path.join(CONFIG["paths"]["media_output"], filename)
     
     spawn_job_process(
@@ -134,6 +137,8 @@ async def generate_audio(request: AudioGenerateRequest):
             request.model,
             request.force,
             True, # Always bypass warning in server mode
+            None, # progress_queue (will be attached by process manager)
+            request.sampling_rate
         ),
     )
     

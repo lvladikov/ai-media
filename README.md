@@ -65,6 +65,8 @@ Designed for personal use and experimentation, AI-Media demonstrates that state-
     - **bitsandbytes**: 4-bit quantization for reducing VRAM usage (FLUX.2, LTX)
     - **opencv-python**: Video frame processing & manipulation
     - **scipy**: Audio signal processing & file handling
+    - **speechbrain**: Speaker embedding extraction for SpeechT5 (voice cloning)
+    - **datasets**: Access to Hugging Face datasets for speaker vectors
     - **realesrgan**: Real-ESRGAN for faster, high-quality image/video upscaling
     - **imageio-ffmpeg**: FFmpeg bindings for video export (used by diffusers)
     - **faster-whisper**: High-performance speech recognition for subtitles & transcription
@@ -335,7 +337,9 @@ This project uses the following open-source libraries:
 | [sentencepiece](https://github.com/google/sentencepiece) | Tokenization for text processing | [google/sentencepiece](https://github.com/google/sentencepiece) |
 | [safetensors](https://github.com/huggingface/safetensors) | Safe model loading format | [huggingface/safetensors](https://github.com/huggingface/safetensors) |
 | [scipy](https://github.com/scipy/scipy) | Audio processing mathematics | [scipy/scipy](https://github.com/scipy/scipy) |
-| [opencv-python](https://github.com/opencv/opencv-python) | Video frame processing | [opencv/opencv](https://github.com/opencv/opencv) |
+| [speechbrain](https://github.com/speechbrain/speechbrain) | Speaker embedding extraction | [speechbrain/speechbrain](https://github.com/speechbrain/speechbrain) |
+| [datasets](https://github.com/huggingface/datasets) | HF Datasets access | [huggingface/datasets](https://github.com/huggingface/datasets) |
+| [opencv-python](https://github.com/opencv/opencv-python) | Video frame processing | [opencv/opencv-python](https://github.com/opencv/opencv-python) |
 | [timm](https://github.com/huggingface/pytorch-image-models) | Image models (Required for Florence-2) | [huggingface/pytorch-image-models](https://github.com/huggingface/pytorch-image-models) |
 | [einops](https://github.com/arogozhnikov/einops) | Tensor operations (Required for Florence-2) | [arogozhnikov/einops](https://github.com/arogozhnikov/einops) |
 | [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Real-ESRGAN upscaling | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
@@ -388,11 +392,14 @@ This project uses the following open-source libraries:
 - **AudioLDM 2** by Haohe Liu etc. - [haoheliu/AudioLDM2](https://github.com/haoheliu/AudioLDM2)
 - **Stable Audio Open** by Stability AI - [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0)
 - **Bark** by Suno - [suno-ai/bark](https://github.com/suno-ai/bark)
+
+- **SpeechT5** by Microsoft - [microsoft/speecht5_tts](https://huggingface.co/microsoft/speecht5_tts)
 - **ModelScope** by Alibaba - [modelscope/modelscope](https://github.com/modelscope/modelscope)
 - **Zeroscope** by Cerspense - [cerspense/zeroscope](https://huggingface.co/cerspense/zeroscope_v2_576w)
 - **CogVideoX** by THUDM - [THUDM/CogVideo](https://github.com/THUDM/CogVideo)
-- **Wan 2.2** by Alibaba PAI - [Wan-AI/Wan2.2-T2V-A14B-Diffusers](https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B-Diffusers)
-- **LTX-Video** by Lightricks - [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)
+- **Wan 2.2 (14B)** by Alibaba - [Wan-AI/Wan2.2-T2V-A14B-Diffusers](https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B-Diffusers)
+- **Wan 2.2 (5B)** by Alibaba - [Wan-AI/Wan2.2-TI2V-5B-Diffusers](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers)
+- **LTX-Video** by Lightricks - [Lightricks/LTX-Video](https://huggingface.co/Lightricks/LTX-Video)
 - **Mochi 1** by Genmo - [genmo/mochi-1-preview](https://huggingface.co/genmo/mochi-1-preview)
 - **HunyuanVideo** by Tencent - [Tencent/HunyuanVideo](https://github.com/Tencent/HunyuanVideo)
 - **Stable Video Diffusion** by Stability AI - [Stability-AI/generative-models](https://github.com/Stability-AI/generative-models)

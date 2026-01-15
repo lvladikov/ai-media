@@ -177,6 +177,7 @@ AUDIO_MODELS = {
     "audioldm2": "cvssp/audioldm2",                    # General audio/SFX
     "stable-audio": "stabilityai/stable-audio-open-1.0",  # Variable length, high quality (Gated)
     "bark": "suno/bark",                               # TTS / Audio (Transformer)
+    "speecht5": "microsoft/speecht5_tts",              # Fast TTS (Microsoft)
     "default": "facebook/musicgen-medium"
 }
 
@@ -188,6 +189,8 @@ VIDEO_MODELS = {
     "cogvideox": "THUDM/CogVideoX-5b",                 # High quality (requires high VRAM)
     "wan-2.2": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",     # Alibaba Wan 2.2 (14B)
     "wan2.2": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",      # (Alias)
+    "wan-2.2-5b": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",   # Alibaba Wan 2.2 (5B)
+    "wan2.2-5b": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",    # (Alias)
     "ltx-video": "Lightricks/LTX-Video",               # Lightricks LTX-Video (Fast, High Res)
     "mochi-1": "genmo/mochi-1-preview",                # Mochi 1 (Physics/Motion SOTA)
     "hunyuan": "hunyuanvideo-community/HunyuanVideo",  # HunyuanVideo (13B, Cinematic)
@@ -280,6 +283,7 @@ MODEL_REQUIREMENTS = {
     "cvssp/audioldm2": {"vram": 8, "ram": 12, "max_duration": 60},
     "stabilityai/stable-audio-open-1.0": {"vram": 10, "ram": 16, "max_duration": 47},
     "suno/bark": {"vram": 4, "ram": 12, "max_duration": 30},
+    "microsoft/speecht5_tts": {"vram": 2, "ram": 4, "max_duration": None},         # Very lightweight
     
     # Video Models (max_resolution based on training data)
     "damo-vilab/text-to-video-ms-1.7b": {"vram": 12, "ram": 16, "max_resolution": (1280, 720)},
@@ -289,6 +293,7 @@ MODEL_REQUIREMENTS = {
     "stabilityai/stable-video-diffusion-img2vid-xt": {"vram": 8, "ram": 12, "max_resolution": (1024, 576)},
     "Wan-AI/Wan2.2-T2V-A14B-Diffusers": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},
     "Wan-AI/Wan2.2-I2V-A14B-Diffusers": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},
+    "Wan-AI/Wan2.2-TI2V-5B-Diffusers": {"vram": 10, "ram": 24, "max_resolution": (1280, 720)}, # 5B is lighter
     "Lightricks/LTX-Video": {"vram": 16, "ram": 32, "max_resolution": (1216, 704)},
     "genmo/mochi-1-preview": {"vram": 19, "ram": 48, "max_resolution": (848, 480)},
     "hunyuanvideo-community/HunyuanVideo": {"vram": 24, "ram": 64, "max_resolution": (1280, 720)},
@@ -552,7 +557,56 @@ MLX_MODEL_MAPPINGS = {
         "int8": "lightx2v/Qwen-Image-Edit-2512-Lightning",
         "float16": "lightx2v/Qwen-Image-Edit-2512-Lightning",
         "bfloat16": "lightx2v/Qwen-Image-Edit-2512-Lightning",
-    }
+    },
+
+    # --- Video Models (MLX) ---
+    # Mapped to base or community variants where available.
+    # Note: As of Jan 2026, many video models run best on MPS via Diffusers, 
+    # but we map here to enable potential MLX-native pipelines.
+
+    # Wan 2.2 (Alibaba)
+    "Wan-AI/Wan2.2-T2V-A14B-Diffusers": {
+        "default": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "int4": "mlx-community/Wan2.2-T2V-A14B-4bit", # Native MLX (via mlx-vlm)
+        "int8": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+    },
+    "Wan-AI/Wan2.2-TI2V-5B-Diffusers": {
+        "default": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+        "int4": "mlx-community/Wan2.2-TI2V-5B-4bit",  # Native MLX (via mlx-vlm)
+        "int8": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+    },
+
+    # CogVideoX
+    "THUDM/CogVideoX-5b": {
+        "default": "THUDM/CogVideoX-5b",
+        "int4": "mlx-community/CogVideoX-5b-4bit",   # Native MLX
+        "int8": "THUDM/CogVideoX-5b",
+    },
+
+    # Stable Video Diffusion
+    "stabilityai/stable-video-diffusion-img2vid-xt": {
+        "default": "stabilityai/stable-video-diffusion-img2vid-xt",
+        "int4": "stabilityai/stable-video-diffusion-img2vid-xt",
+        "int8": "stabilityai/stable-video-diffusion-img2vid-xt",
+    },
+    
+    # HunyuanVideo
+    "hunyuanvideo-community/HunyuanVideo": {
+        "default": "hunyuanvideo-community/HunyuanVideo",
+        "int4": "mlx-community/HunyuanVideo-4bit",   # Native MLX (via mlx-vlm)
+        "int8": "hunyuanvideo-community/HunyuanVideo",
+    },
+    
+    # LTX-Video
+    "Lightricks/LTX-Video": {
+        "default": "Lightricks/LTX-Video",
+        "int4": "mlx-community/LTX-Video-4bit",      # Native MLX
+        "int8": "Lightricks/LTX-Video",
+    },
+    "cerspense/zeroscope_v2_576w": {
+        "default": "cerspense/zeroscope_v2_576w",
+        "int4": "cerspense/zeroscope_v2_576w",
+    },
 }
 
 

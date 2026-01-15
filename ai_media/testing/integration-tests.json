@@ -528,6 +528,12 @@
       "description": "Generate video using Wan 2.2 T2V model"
     },
     {
+        "name": "Video - Wan 2.2 (5B)",
+        "command": "python ai-media.py -v -p \"A cinematic drone shot of a futuristic cyberpunk city at night with neon lights and flying cars\" -vm wan-2.2-5b -l 2 -s 1280x720 --force",
+        "description": "Generates a 2-second video using the Wan 2.2 5B model at 720p.",
+        "expect_file": "video_Wan_2.2_(5B).mp4"
+    },
+    {
       "name": "Video - LTX-Video",
       "runOn": "cuda",
       "timeout": 7200,

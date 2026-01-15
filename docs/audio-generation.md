@@ -17,7 +17,14 @@ A text-to-audio model that can speak in multiple languages with emotion, laughte
 *   **Usage**: "Hello world [laughs]", podcasts, storytelling, or character voices.
 *   **Unique Feature**: Unlike standard TTS, Bark understands mood tags like `[sighs]`, `[music]`, and `[gasps]`.
 
-### 4. Visual-to-Audio (Media scoring)
+
+
+### 4. Efficient Baseline TTS (SpeechT5)
+A lightweight TTS model from Microsoft suitable for fast, low-resource speech synthesis.
+*   **Usage**: Quick voice synthesis for applications where speed and efficiency matter.
+*   **Best For**: Low-VRAM environments (~2GB), rapid prototyping.
+
+### 5. Visual-to-Audio (Media scoring)
 Automatically generate a soundtrack for an image or video.
 *   **How it works**: The AI analyzes the visual content (e.g., sees a "Beach"), and automatically generates matching audio (e.g., "Ocean waves and seagulls").
 
@@ -35,7 +42,8 @@ Automatically generate a soundtrack for an image or video.
 | `-r, --bit-rate` | Target bitrate (e.g. `128k`, `320kbps`). |
 | `--voice-preset` | Bark voice preset (e.g. `v2/en_speaker_6`, `v2/fr_speaker_1`). Default: v2/en_speaker_6. |
 | `-p, --prompt` | Text description of content to generate. |
-| `-o, --output` | Output filename/path. Default: mp3. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
+| `-o, --output` | Output filename/path. Auto-generated from prompt if omitted. The folder where files are generated is configured in `config.json` under `paths.media_output`. |
+| `-f, --format` | Output format: `mp3` (default), `wav`, `flac`, `ogg`, `m4a`, `opus`, `wma`, `aiff`. See [Output Formats](#output-formats---o-or---output). |
 
 See [Audio Generation Examples](#examples) and [Models](#models).
 
@@ -44,16 +52,77 @@ See [Audio Generation Examples](#examples) and [Models](#models).
 - **Objects**: `{m: 1, s: 30}`, `{hours: 1, minutes: 15}`
 - **Numeric**: `30` (interpreted as seconds)
 
+### Output Formats (`-o` or `--output`)
+
+The output format is determined by the file extension you specify. The tool generates audio in WAV format internally, then **automatically converts** to your desired format using ffmpeg.
+
+**Supported Formats:**
+| Format | Extension | Notes |
+| :--- | :--- | :--- |
+| MP3 | `.mp3` | **Default**. Lossy, small files, universal compatibility. |
+| WAV | `.wav` | Lossless, uncompressed. No conversion needed. |
+| FLAC | `.flac` | Lossless, compressed. Great for archival. |
+| OGG | `.ogg` | Lossy, open format. Good browser support. |
+| M4A/AAC | `.m4a`, `.aac` | Lossy. Better quality than MP3 at same bitrate. |
+| OPUS | `.opus` | Modern, efficient. Excellent quality at low bitrates. |
+| WMA | `.wma` | Windows Media Audio. Legacy format. |
+| AIFF | `.aiff` | Apple lossless. Similar to WAV. |
+
+**Examples:**
+```bash
+# MP3 (default) - using -o with extension
+python ai-media.py -a -p "Lo-fi hip hop beat" -o my_audio.mp3
+
+# MP3 - using -f flag (explicit format)
+python ai-media.py -a -p "Lo-fi hip hop beat" -f mp3
+
+# WAV (lossless, no conversion)
+python ai-media.py -a -p "Lo-fi hip hop beat" -f wav
+python ai-media.py -a -p "Lo-fi hip hop beat" --format wav
+
+# FLAC (lossless, compressed)
+python ai-media.py -a -p "Lo-fi hip hop beat" -f flac
+
+# OGG
+python ai-media.py -a -p "Lo-fi hip hop beat" -o my_audio.ogg
+```
+
+> [!TIP]
+> If no output is specified, a unique filename with `.mp3` extension is generated automatically.
+
+## Long Input Handling (Automatic Chunking)
+
+The tool automatically handles long text inputs for TTS models by splitting them into smaller, stable chunks. This prevents audio truncation and ensures consistent quality for long scripts.
+
+- **Bark**: Splits at ~200 characters.
+- **SpeechT5**: Splits at ~180 characters.
+- **SpeechT5**: Splits at ~180 characters.
+
+Audio chunks are concatenated with a brief silence gap (0.2s) for a natural pacing.
+
+
+
 ## Models
+
+### Music & Sound Effects
 
 | Model | Code | Download | VRAM | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **MusicGen Small** | `musicgen-small` | ~2GB | ~4GB | Fast, lightweight. Good for quick sketches. |
 | **MusicGen Medium** | `musicgen-medium` | ~6GB | ~8GB | **(Default)** Balanced quality/speed. |
 | **MusicGen Large** | `musicgen-large` | ~10GB | ~16GB | High fidelity. Slower. |
-| **AudioLDM2** | `audioldm2` | ~4GB | ~6GB | Specialized in Sound Effects (SFX), foley, environmental. |
-| **Stable Audio** | `stable-audio` | ~10GB | ~10GB | 🔒 **Gated**. Variable-length, high-quality music/SFX. Top-tier. |
-| **Bark** | `bark` | ~4GB | ~6GB | Realistic speech, music, sound effects. Multi-language TTS. |
+| **AudioLDM2** | `audioldm2` | ~4GB | ~6GB | Sound Effects (SFX), foley, environmental. |
+| **Stable Audio** | `stable-audio` | ~10GB | ~10GB | 🔒 **Gated**. Variable-length, high-quality music/SFX. |
+
+### Text-to-Speech (TTS)
+
+| Model | Code | Download | VRAM | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Bark** | `bark` | ~4GB | ~12GB | Expressive speech, sound effects, multi-language. |
+
+| **SpeechT5** | `speecht5` | ~1GB | ~2GB | Fast, efficient, low-VRAM baseline TTS. |
+
+
 
 ## Bark Configuration
 

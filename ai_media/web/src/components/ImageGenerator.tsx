@@ -50,6 +50,7 @@ export function ImageGenerator() {
   const [negativePrompt, setNegativePrompt] = useState("");
   const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
   const [precision, setPrecision] = useState("auto");
+  const [format, setFormat] = useState("jpg");
 
   const [isLoading, setIsLoading] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
@@ -86,8 +87,8 @@ export function ImageGenerator() {
 
     // Steps defaults
     if (model === 'z-image') {
-       setSteps(9);
-       setGuidanceScale(0);
+      setSteps(9);
+      setGuidanceScale(0);
     } else if (model.includes('turbo') || model.includes('flux')) {
       setSteps(4);
       setGuidanceScale(0);
@@ -141,6 +142,7 @@ export function ImageGenerator() {
         negative_prompt: negativePrompt,
         framework: framework === 'auto' ? undefined : framework,
         precision: precision === 'auto' ? undefined : precision,
+        format,
         force,
       });
 
@@ -314,12 +316,12 @@ export function ImageGenerator() {
         {/* Prompt */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-secondary">Prompt</label>
+            <label className="label">Prompt</label>
             <RandomPrompt type="image" onPromptSelect={setPrompt} />
           </div>
           <textarea
             className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-brand-500 resize-y min-h-[100px]"
-            placeholder="A majestic mountain landscape at sunset with dramatic clouds..."
+            placeholder="Enter your image prompt or use the Random Prompt tool..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
@@ -328,7 +330,7 @@ export function ImageGenerator() {
         {/* Negative Prompt */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className={`text-sm font-medium ${supportsNegativePrompt ? 'text-secondary' : 'text-tertiary'} flex items-center gap-1`}>
+            <label className="label flex items-center gap-1">
               Negative Prompt (Optional)
               <Tooltip content="List items to exclude (e.g., 'blur, text'). Do NOT use 'no' or 'without'. Note: This may be disabled for some models. If so, please describe what to exclude in the main prompt instead." />
             </label>
@@ -346,10 +348,10 @@ export function ImageGenerator() {
         {/* Model Selector */}
         {/* Model Selector Section */}
         <div className="space-y-4">
-          
+
           {/* 1. Framework Selector (First on list, hidden if not Mac) */}
           <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
-             <label className="text-sm font-medium text-secondary block">Platform</label>
+            <label className="label block">Platform</label>
             <select
               className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
               value={framework}
@@ -365,7 +367,7 @@ export function ImageGenerator() {
           {/* 2. Precision Selector */}
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-secondary">Precision</label>
+              <label className="label">Precision</label>
               <button
                 onClick={() => useAppStore.getState().openHelpSection('precision')}
                 className="text-tertiary hover:text-brand-500 transition-colors"
@@ -400,7 +402,7 @@ export function ImageGenerator() {
 
           {/* 3. Model Selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-secondary flex items-center">
+            <label className="label flex items-center">
               Model
               <ModelHelpLink section="image" />
             </label>
@@ -450,6 +452,24 @@ export function ImageGenerator() {
             height={height}
             onChange={(w, h) => { setWidth(w); setHeight(h); }}
           />
+        </div>
+
+        {/* Output Format */}
+        <div className="space-y-2">
+          <label className="label">Output Format</label>
+          <select
+            className="select w-full bg-primary border-border text-sm focus:border-brand-500"
+            value={format}
+            onChange={(e) => setFormat(e.target.value)}
+            disabled={isLoading}
+          >
+            <option value="jpg">JPG (Smaller, Lossy)</option>
+            <option value="png">PNG (Lossless)</option>
+            <option value="webp">WebP (Modern, Smaller)</option>
+            <option value="tiff">TIFF (Lossless, Large)</option>
+            <option value="bmp">BMP (Uncompressed)</option>
+            <option value="gif">GIF (Limited Colors)</option>
+          </select>
         </div>
 
         {/* Advanced Settings */}

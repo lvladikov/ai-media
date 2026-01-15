@@ -295,7 +295,7 @@ export function ConvertView() {
                         <p className={`font-medium text-sm transition-colors ${isDragging ? 'text-blue-200' : ''}`}>Click or Drag & Drop</p>
                       </>
                     )}
-                    <p className="text-[10px] text-tertiary mt-1">Supports img, vid, audio, docs</p>
+                    <p className="text-[10px] text-tertiary mt-1">Supports images, videos, audio, documents</p>
                   </>
                 )}
               </>

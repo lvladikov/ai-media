@@ -79,7 +79,26 @@ Once running, the server provides:
 - **Base URL**: `http://localhost:8000/v1` (or your custom port)
 - **API Key**: Any string (e.g. `local` or `sk-test`). The server accepts anything.
 - **Models Endpoint**: `http://localhost:8000/v1/models` (Lists all available **Text** and **Image** models in AI-Media)
-- **Chat Endpoint**: `http://localhost:8000/v1/chat/completions`
+- **Chat Endpoint**: `http://localhost:8000/v1/chat/completions` (Standard)
+- **Responses Endpoint**: `http://localhost:8000/v1/responses` (Agent Mode / Advanced)
+
+---
+
+## Responses API (Agent Mode)
+
+This server supports the newer **OpenAI Responses API** (`/v1/responses`), a more advanced endpoint designed specifically for **Agentic Workflows**.
+
+### Why use `/v1/responses` over `/chat/completions`?
+
+While `chat/completions` is the industry standard for simple text generation, the Responses API is preferred by advanced clients like **Continue (in Agent Mode)** because:
+
+1.  **Granular Feedback**: It provides detailed status events (`response.created`, `response.in_progress`, `response.output_text.delta`) that allow clients to show better UI states like "Thinking...", "Loading Model...", or "Processing Tools".
+2.  **Heartbeats**: Prevents timeouts during long operations (like loading a massive 32B model) by sending keep-alive signals.
+3.  **Agent-Centric**: Designed to handle multi-step reasoning loops and tool usage more natively than the rigid message-response loop of chat completions.
+4.  **Better UI Experience**: In clients like Continue, using this endpoint enables features like the "Thinking" dropdown to see the model's internal reasoning or loading progress bars.
+
+> [!TIP]
+> **Client Configuration**: If your client supports the "Responses API" or "Agent Mode" (specifically Continue), ensure it is configured to use the `v1` base URL. The client will automatically detect and use the `responses` endpoint if it's built to do so.
 
 ---
 

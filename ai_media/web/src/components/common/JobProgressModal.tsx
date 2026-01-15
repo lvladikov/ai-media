@@ -112,14 +112,14 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
               )}
               {(() => {
                 if (isComplete && job.generation_started_at && job.updated_at) {
-                   const start = new Date(job.generation_started_at).getTime();
-                   const end = new Date(job.updated_at).getTime();
-                   const dur = Math.max(0, Math.round((end - start) / 1000));
-                   return dur > 0 ? ` (${formatDuration(dur * 1000)})` : '';
+                  const start = new Date(job.generation_started_at).getTime();
+                  const end = new Date(job.updated_at).getTime();
+                  const dur = Math.max(0, Math.round((end - start) / 1000));
+                  return dur > 0 ? ` (${formatDuration(dur * 1000)})` : '';
                 }
                 return elapsed > 0 && job.status === 'generating' ? ` (${formatDuration(elapsed * 1000)})` : '';
               })()}
-              </span>
+            </span>
           </h3>
           {/* Only allow closing if complete/failed/cancelled, or if user explicitly wants to background it */}
           {(isComplete || isFailed || isCancelled) && onClose && (
@@ -135,15 +135,19 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
           {/* Status Header - Compact */}
           <div className="text-center">
             <p className="text-lg font-medium text-primary">
-              {job.phase === 'loading' ? `Loading ${getFriendlyModelName(job.model)}...` :
-                job.phase === 'generating' ? (job.message || 'Generating...') :
+              {job.phase === 'loading' && percent === 0 ? `Loading ${getFriendlyModelName(job.model)}...` :
+                job.phase === 'generating' || (job.phase === 'loading' && percent > 0) ? (
+                  percent > 0 ? (job.type === 'video' ? `Rendering Video...` : `Generating...`) :
+                    (job.message || 'Generating...')
+                ) :
                   job.phase === 'complete' ? 'Complete!' :
                     job.phase === 'failed' ? 'Failed' :
                       'Processing...'}
             </p>
             {!['complete', 'failed'].includes(job.phase) && (
               <p className="text-xs text-secondary uppercase tracking-wider mt-1">
-                {job.phase}
+                {(job.phase === 'loading' && percent > 0) ? 'RENDERING' :
+                  (job.phase === 'loading' ? `LOADING${dots}` : job.phase)}
               </p>
             )}
           </div>
@@ -192,7 +196,7 @@ export function JobProgressModal({ jobId, onClose, onViewResult, title }: JobPro
                 {percent < 100 && (
                   <span>
                     {/* Extract remaining time from message like "Generating: 50%, Remaining Time: 00:15" */}
-                    {job.message?.match(/Remaining Time:\s*(\d+:\d+)/)?.[1] 
+                    {job.message?.match(/Remaining Time:\s*(\d+:\d+)/)?.[1]
                       ? `Remaining: ${job.message.match(/Remaining Time:\s*(\d+:\d+)/)?.[1]}`
                       : 'Please wait...'}
                   </span>

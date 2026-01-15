@@ -497,7 +497,9 @@ Supported Models (Code : Download Size | Description):
     - ms-1.7b                    : ~10GB | General purpose (has watermark issues).
     - cogvideox                  : ~15GB | High fidelity.
     - svd                        : ~4GB  | I2V Only.
-    - wan2.2                     : ~30GB | SOTA (2025). Excellent quality.
+    - svd                        : ~4GB  | I2V Only.
+    - wan2.2                     : ~30GB | Wan 2.2 14B (SOTA). Excellent quality.
+    - wan-2.2-5b                 : ~12GB | Wan 2.2 5B. Efficient, good quality.
     - ltx-video                  : ~12GB | Balanced speed/quality. Good motion.
     - mochi-1                    : ~19GB | High motion fidelity.
     - hunyuan                    : ~25GB | Massive scale.
@@ -1308,12 +1310,12 @@ Supported Models (Code : Download Size | Description):
                  full_prompt = f"{args.prompt}. {caption}"
              
              console.print(f"   🎶 Generating audio for: '{full_prompt}'")
-             success = pkg_generate_audio(full_prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             success = pkg_generate_audio(full_prompt, outfile, dur, sr, model_name=args.audio_model, force=args.force, bypass_warning=args.bypass_warning, report_json=args.report_json)
              if not success:
                  sys.exit(1)
              
         else:
-             success = pkg_generate_audio(args.prompt, outfile, dur, sr, model_name=args.audio_model, report_json=args.report_json)
+             success = pkg_generate_audio(args.prompt, outfile, dur, sr, model_name=args.audio_model, force=args.force, bypass_warning=args.bypass_warning, report_json=args.report_json)
              if not success:
                  sys.exit(1)
 
@@ -1348,7 +1350,9 @@ Supported Models (Code : Download Size | Description):
             width=w, 
             height=h,
             audio_prompt=args.audio_prompt,
-            image_input=args.input_image
+            image_input=args.input_image,
+            use_mlx=args.ml_framework, 
+            precision=args.precision_force
         )
         if not success:
             sys.exit(1)

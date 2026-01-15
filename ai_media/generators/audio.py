@@ -7,6 +7,7 @@ Supports: MusicGen, AudioLDM2, Stable Audio, and Bark (TTS/SFX).
 import os
 import re
 import time
+import threading
 
 from ..models import AUDIO_MODELS, get_model_id
 from ..utils.system import get_optimal_device_and_dtype, check_resources_and_warn
@@ -67,12 +68,101 @@ def generate_long_bark(prompt, processor, model, device, voice_preset, sample_ra
         
         # Independent generation (Best stability)
         inputs = processor(text_chunk, voice_preset=voice_preset).to(device)
-        audio_array = model.generate(**inputs, do_sample=True)
+        
+        # Ensure attention_mask is set to avoid warnings
+        if "attention_mask" not in inputs:
+             import torch
+             inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+             
+        # Suppress warnings inside the loop too
+        import warnings
+        from transformers import logging as tf_logging
+        previous_level = tf_logging.get_verbosity()
+        tf_logging.set_verbosity_error()
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            print(f"      🎵 Synthesizing...")
+            audio_array = model.generate(
+                **inputs, 
+                pad_token_id=10000,
+                max_length=None,
+                do_sample=True,
+                min_eos_p=0.05
+            )
+        
+        tf_logging.set_verbosity(previous_level)
         audio_array = audio_array.cpu().numpy().squeeze()
         full_audio.append(audio_array)
         
         # Add a short silence between sentences for natural pacing (0.25s)
         silence_len = int(sample_rate * 0.25)
+        full_audio.append(np.zeros(silence_len))
+
+    # Concatenate all
+    if not full_audio:
+        return np.array([])
+    return np.concatenate(full_audio)
+
+
+def generate_long_speecht5(prompt, processor, model, vocoder, device, speaker_embeddings):
+    """
+    Generate long-form audio with SpeechT5 by splitting text into sentences.
+    Avoids truncation by ensuring each chunk is within SpeechT5 limits (~180 chars).
+    """
+    import numpy as np
+    import torch
+    
+    # Smart split by sentence ending punctuation
+    sentences = re.split(r'([.?!]+|\n+)', prompt)
+    
+    # Recombine split text
+    chunks = []
+    current_chunk = ""
+    
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        
+        if re.match(r'^[.?!]+$', s) or re.match(r'^\n+$', s):
+            if chunks:
+                chunks[-1] += s
+            else:
+                current_chunk += s
+        else:
+            if len(current_chunk) + len(s) > 180:
+                chunks.append(current_chunk)
+                current_chunk = s
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = s
+                else:
+                    current_chunk = s
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+        
+    print(f"   ✂️  Splitting long text into {len(chunks)} chunks for stable generation...")
+    full_audio = []
+    
+    for i, text_chunk in enumerate(chunks):
+        if not text_chunk.strip():
+            continue
+        print(f"   ▶️  Generating chunk {i+1}/{len(chunks)}: '{text_chunk[:30]}...'")
+        
+        inputs = processor(text=text_chunk, return_tensors="pt").to(device)
+        
+        with torch.no_grad():
+            speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
+        
+        full_audio.append(speech.cpu().numpy())
+        
+        # Add a short silence between sentences for natural pacing (0.2s)
+        # SpeechT5 default sample rate is 16000Hz
+        silence_len = int(16000 * 0.2)
         full_audio.append(np.zeros(silence_len))
 
     # Concatenate all
@@ -146,8 +236,8 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
     if image_input:
         print(f"   Input Img: {image_input}")
     
-    if "bark" in model_id.lower():
-        print(f"   Duration: Auto (Text-based)")
+    if "bark" in model_id.lower() or "speecht5" in model_id.lower():
+        print(f"   Duration: Text-dependent")
     else:
         print(f"   Duration: {duration}s")
         
@@ -280,14 +370,35 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
             src_path = output_path + ".tmp.wav"
             
         elif "bark" in model_id.lower():
-            from transformers import BarkModel, AutoProcessor
+            from transformers import BarkModel, AutoProcessor, BarkConfig
             print(f"   Loading Bark models...")
             
             # Bark requires float32 on all platforms
             bark_dtype = torch.float32
                 
             processor = AutoProcessor.from_pretrained(model_id)
-            model = BarkModel.from_pretrained(model_id, torch_dtype=bark_dtype).to(device)
+            
+            # 1. Load Config first to fix "tied weights" warning explicitly
+            config = BarkConfig.from_pretrained(model_id)
+            config.tie_word_embeddings = False
+            # Also apply to sub-models if they inherit this property or have it set
+            if hasattr(config, "fine_acoustics_config"):
+                 config.fine_acoustics_config.tie_word_embeddings = False
+            if hasattr(config, "coarse_acoustics_config"):
+                 config.coarse_acoustics_config.tie_word_embeddings = False
+            if hasattr(config, "semantic_config"):
+                 config.semantic_config.tie_word_embeddings = False
+            
+            # use_safetensors=False is required to avoid crash on some systems/versions
+            model = BarkModel.from_pretrained(model_id, config=config, torch_dtype=bark_dtype, use_safetensors=False).to(device)
+            
+            # 2. Fix "max_length" vs "max_new_tokens" conflict and pad_token_id globally
+            # We must apply this to the main model AND its sub-models if they support it.
+            # (Note: fine_acoustics does not have a generation_config, so we check first)
+            for m in [model, model.semantic, model.coarse_acoustics, model.fine_acoustics]:
+                if hasattr(m, "generation_config"):
+                    m.generation_config.max_length = None
+                    m.generation_config.pad_token_id = 10000 
             
             print(f"🎵 Synthesizing audio... (Bark)")
             if progress_callback:
@@ -296,25 +407,74 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                 print(f"   (Note: Bark generates max ~14s sequences per history block. "
                       f"Output will be shorter than {duration}s)")
             
-            print(f"""   💡 Tip:
-   *  Lyrics: Use '♪' for singing (e.g., `♪ Hello World ♪`).
-   *  Effects: Use tags like `[laughter]`, `[cheers]`, `[music]`, `[sighs]`, `[gasps]`, `[clears throat]`, `—` (hesitation).
-   *  Plain text without these tokens will usually be spoken as speech.
-   *  Voice: Using preset '{voice_preset}'. Change with --voice-preset (e.g. 'v2/fr_speaker_1').
-   *  Example: `python ai-media.py -a --audio-model bark -p "♪ Hello World ♪ [laughter]"`""")
+#             print(f"""   💡 Tip:
+#    *  Lyrics: Use '♪' for singing (e.g., `♪ Hello World ♪`).
+#    *  Effects: Use tags like `[laughter]`, `[cheers]`, `[music]`, `[sighs]`, `[gasps]`, `[clears throat]`, `—` (hesitation).
+#    *  Plain text without these tokens will usually be spoken as speech.
+#    *  Voice: Using preset '{voice_preset}'. Change with --voice-preset (e.g. 'v2/fr_speaker_1').
+#    *  Example: `python ai-media.py -a --audio-model bark -p "♪ Hello World ♪ [laughter]"`""")
             
             # Decide if Long-Form is needed
             is_long = len(prompt) > 150 or duration > 15.0
 
             start_time = time.time()
+            import warnings
+            import logging
+            from transformers import logging as tf_logging
+            
             with ResourceMonitor() as monitor:
-                if is_long:
-                    print(f"   📜 Long text detected. Using chunked generation.")
-                    audio_array = generate_long_bark(prompt, processor, model, device, voice_preset)
-                else:
-                    inputs = processor(prompt, voice_preset=voice_preset).to(device)
-                    audio_array = model.generate(**inputs)
-                    audio_array = audio_array.cpu().numpy().squeeze()
+                # Suppress the persistent HuggingFace warnings for Bark
+                # These are known issues with the library's internal handling of Bark's sub-models
+                # We use both warnings filter AND transformers logging control
+                previous_level = tf_logging.get_verbosity()
+                tf_logging.set_verbosity_error()
+                
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore") # Ignore ALL warnings in this block to be absolutely sure
+                    
+                    if is_long:
+                        print(f"   📜 Long text detected. Using chunked generation.")
+                        audio_array = generate_long_bark(prompt, processor, model, device, voice_preset)
+                    else:
+                        inputs = processor(prompt, voice_preset=voice_preset).to(device)
+                        
+                        # Explicitly create attention mask
+                        if "attention_mask" not in inputs:
+                             inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+                        
+                        # Use a keep-alive printer to provide feedback during long generation
+                        stop_event = threading.Event()
+                        def keep_alive():
+                            dots = ""
+                            while not stop_event.is_set():
+                                time.sleep(5)
+                                if not stop_event.is_set():
+                                    dots += "."
+                                    if len(dots) > 10: dots = "." # Reset dots for long generations
+                                    print(f"\r   ⏳ {dots}", end="", flush=True)
+                                    if progress_callback: 
+                                        progress_callback(None, f"Synthesizing{dots}")
+                        
+                        keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+                        keep_alive_thread.start()
+                        
+                        try:
+                            # Explicitly pass all parameters to ensure correctness, overriding config defaults
+                            audio_array = model.generate(
+                                **inputs, 
+                                pad_token_id=10000, 
+                                do_sample=True,
+                                min_eos_p=0.05,
+                                max_length=None 
+                            )
+                        finally:
+                            stop_event.set()
+                            print("\r" + " " * 20 + "\r", end="", flush=True) # Clear dots
+                        
+                        audio_array = audio_array.cpu().numpy().squeeze()
+                
+                # Restore verbosity
+                tf_logging.set_verbosity(previous_level)
             
             gen_duration = time.time() - start_time
             avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
@@ -330,6 +490,60 @@ def generate_audio(prompt, output_path, duration, sampling_rate, model_name="def
                 write_report_json(report_json, stats)
             
             rate = model.generation_config.sample_rate
+            scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio_array)
+            src_path = output_path + ".tmp.wav"
+            
+        elif "speecht5" in model_id.lower():
+            from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+            from datasets import load_dataset
+            
+            print(f"   Loading SpeechT5 components...")
+            from transformers import logging as tf_logging
+            prev_log_level = tf_logging.get_verbosity()
+            tf_logging.set_verbosity_error()
+            
+            try:
+                processor = SpeechT5Processor.from_pretrained(model_id)
+                model = SpeechT5ForTextToSpeech.from_pretrained(model_id).to(device)
+                vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(device)
+            finally:
+                tf_logging.set_verbosity(prev_log_level)
+            
+            # Load speaker embeddings (defaulting to a specific speaker from cmu-arctic-xvectors)
+            print(f"   Loading default speaker embeddings...")
+            embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation", revision="refs/convert/parquet")
+            speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0).to(device)
+            
+            print(f"🎵 Synthesizing audio... (SpeechT5)")
+            if progress_callback:
+                progress_callback(30, "Synthesizing audio... (SpeechT5)")
+            
+            is_long = len(prompt) > 180
+            
+            start_time = time.time()
+            with ResourceMonitor() as monitor:
+                if is_long:
+                    audio_array = generate_long_speecht5(prompt, processor, model, vocoder, device, speaker_embeddings)
+                else:
+                    inputs = processor(text=prompt, return_tensors="pt").to(device)
+                    with torch.no_grad():
+                        audio_array = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
+                    audio_array = audio_array.cpu().numpy()
+            
+            gen_duration = time.time() - start_time
+            avg_cpu, avg_ram, avg_vram, avg_gpu = monitor.get_averages()
+            tracker.record_linear("audio", model_id, device, duration, gen_duration,
+                                 cpu=avg_cpu, ram=avg_ram, vram=avg_vram, gpu=avg_gpu, dtype=dtype_name)
+            print(f"   ✓ Generated in {format_time(gen_duration)} (RAM: {avg_ram:.1f}GB | "
+                  f"VRAM: {avg_vram:.1f}GB | CPU: {avg_cpu:.1f}% | GPU: {avg_gpu:.1f}%)")
+            tracker.print_actual(gen_duration, avg_cpu, avg_ram, avg_vram, avg_gpu)
+            
+            if report_json:
+                stats = {"time": gen_duration, "ram": avg_ram, "vram": avg_vram,
+                        "cpu": avg_cpu, "gpu": avg_gpu}
+                write_report_json(report_json, stats)
+            
+            rate = 16000
             scipy.io.wavfile.write(output_path + ".tmp.wav", rate, audio_array)
             src_path = output_path + ".tmp.wav"
             

@@ -52,66 +52,94 @@ JUMP_POINTS = {
 }
 
 
-def run_self_command(cmd_string):
-    """Run ai-media.py with the given command arguments. Returns exit code."""
+def run_self_command(cmd):
+    """Run ai-media.py with the given command arguments (string or list)."""
     import subprocess
     import shlex
     
     script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'ai-media.py'))
     
-    print(f"\n🚀 Running: ai-media.py {cmd_string}\n")
-    
-    if os.name == 'nt':
-        escaped = cmd_string.replace('\\', '\\\\')
-        try:
-            args = shlex.split(escaped, posix=True)
-            args = [arg.replace('\\\\', '\\') for arg in args]
-        except ValueError:
-            args = cmd_string.split()
+    if isinstance(cmd, list):
+        # The robust way: passing a list directly to Popen
+        args = cmd
+        
+        # OS-specific safe string representation for logging
+        if os.name == 'nt':
+            import subprocess as sp
+            cmd_log = sp.list2cmdline(args)
+        else:
+            # POSIX safe join
+            import shlex
+            cmd_log = shlex.join(args)
+            
+        print(f"\n🚀 Running: ai-media.py {cmd_log}\n")
     else:
-        args = shlex.split(cmd_string)
+        # Legacy/String way (deprecated, use lists for prompt safety)
+        cmd_string = cmd
+        print(f"\n🚀 Running: ai-media.py {cmd_string}\n")
+        
+        if os.name == 'nt':
+            escaped = cmd_string.replace('\\', '\\\\')
+            try:
+                args = shlex.split(escaped, posix=True)
+                args = [arg.replace('\\\\', '\\') for arg in args]
+            except ValueError:
+                args = cmd_string.split()
+        else:
+            args = shlex.split(cmd_string)
     
+    # Passing the list directly is handled natively by the OS (CreateProcess on Win, exec on POSIX)
     p = subprocess.Popen([sys.executable, script_path] + args)
     
     try:
         return p.wait()
     except KeyboardInterrupt:
-        # On Ctrl+C, the child also receives the signal.
-        # Wait for it to shutdown gracefully.
         try:
             return p.wait()
         except KeyboardInterrupt:
-            # Force kill if mashed
             p.kill()
             return -999
 
-def run_shell_command(cmd_string, cwd=None):
+
+def run_shell_command(cmd, cwd=None):
     """Run a generic shell command. Returns exit code."""
     import subprocess
     import shlex
     
-    print(f"\n🚀 Running: {cmd_string}\n")
-    
+    p = None
     try:
-        if os.name == 'nt':
-            p = subprocess.Popen(cmd_string, shell=True, cwd=cwd)
-        else:
-            args = shlex.split(cmd_string)
+        if isinstance(cmd, list):
+            args = cmd
+            if os.name == 'nt':
+                import subprocess as sp
+                cmd_log = sp.list2cmdline(args)
+            else:
+                cmd_log = shlex.join(args)
+            print(f"\n🚀 Running: {cmd_log}\n")
             p = subprocess.Popen(args, cwd=cwd)
-            
-        try:
-            return p.wait()
-        except KeyboardInterrupt:
-            # Wait for child to shutdown gracefully
+        else:
+            cmd_string = cmd
+            print(f"\n🚀 Running: {cmd_string}\n")
+            if os.name == 'nt':
+                p = subprocess.Popen(cmd_string, shell=True, cwd=cwd)
+            else:
+                args = shlex.split(cmd_string)
+                p = subprocess.Popen(args, cwd=cwd)
+        
+        return p.wait()
+    except KeyboardInterrupt:
+        if p:
             try:
                 return p.wait()
             except KeyboardInterrupt:
                 p.kill()
                 return -999
-                
+        return -999
     except Exception as e:
         print(f"❌ Error running command: {e}")
         return 1
+
+
 def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
     """Run interactive mode.
     
@@ -143,11 +171,14 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         'video/cogvideox': ('video', 'cogvideox'),
         'video/svd': ('video', 'svd'),
         'audio': ('audio', None),
+        'audio/music': ('audio', 'music'),
+        'audio/tts': ('audio', 'tts'),
         'audio/musicgen': ('audio', 'musicgen-medium'),
         'audio/musicgen-small': ('audio', 'musicgen-small'),
         'audio/musicgen-large': ('audio', 'musicgen-large'),
         'audio/audioldm2': ('audio', 'audioldm2'),
         'audio/bark': ('audio', 'bark'),
+        'audio/speecht5': ('audio', 'microsoft/speecht5_tts'),
         'analysis': ('analysis', None),
         'article': ('article', None),
         'article/offline': ('article', 'offline'),
@@ -186,11 +217,14 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         '2/3': ('video', 'cogvideox'),
         '2/4': ('video', 'svd'),
         '3': ('audio', None),
-        '3/1': ('audio', 'musicgen-medium'),
-        '3/2': ('audio', 'musicgen-small'),
-        '3/3': ('audio', 'musicgen-large'),
-        '3/4': ('audio', 'audioldm2'),
-        '3/5': ('audio', 'bark'),
+        '3/1': ('audio', 'music'),
+        '3/2': ('audio', 'tts'),
+        '3/1/1': ('audio', 'musicgen-medium'),
+        '3/1/2': ('audio', 'musicgen-small'),
+        '3/1/3': ('audio', 'musicgen-large'),
+        '3/1/4': ('audio', 'audioldm2'),
+        '3/2/1': ('audio', 'bark'),
+        '3/2/2': ('audio', 'microsoft/speecht5_tts'),
         '4': ('analysis', None),
         '5': ('article', None),
         '5/1': ('article', 'offline'),
@@ -589,28 +623,44 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         if orientation is None:
             return
         
+        # Output Format
+        print("\n📄 Select Output Format:\n")
+        format_options = [
+            ("JPG (Smaller, Lossy)", "jpg"),
+            ("PNG (Lossless)", "png"),
+            ("WebP (Modern, Smaller)", "webp"),
+            ("TIFF (Lossless, Large)", "tiff"),
+            ("BMP (Uncompressed)", "bmp"),
+            ("GIF (Limited Colors)", "gif"),
+        ]
+        fmt = prompt_choice("Format", format_options)
+        if fmt is None:
+            return
+        
         # Output
         print()
         output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
         
-        # Build command
-        cmd = f'-i -p "{prompt}"'
+        # Build command list
+        cmd = ['-i', '-p', prompt]
         if model:
-             cmd += f' --image-model {model}'
+             cmd += ['--image-model', model]
         if neg_prompt:
-             cmd += f' --negative-prompt "{neg_prompt}"'
+             cmd += ['--negative-prompt', neg_prompt]
         if size:
-             cmd += f' -s {size}'
+             cmd += ['-s', size]
         if orientation and orientation != "landscape":
-             cmd += f' -otn {orientation}'
+             cmd += ['-otn', orientation]
+        if fmt:
+             cmd += ['-f', fmt]
         if output:
-             cmd += f' -o "{output}"'
+             cmd += ['-o', output]
         
         # Add Framework/Precision params
         if precision and precision != "auto":
-             cmd += f' -pf {precision}'
+             cmd += ['-pf', precision]
         if framework and framework != "auto":
-             cmd += f' --ml-framework {framework}'
+             cmd += ['--ml-framework', framework]
              
         # Run
         run_self_command(cmd)
@@ -622,22 +672,90 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         clear_screen()
         show_header("Video Generation")
         
+        
+        # Framework selection FIRST
+        import platform
+        is_mac = platform.system() == "Darwin"
+        framework = "auto"
+        precision = "auto"
+        
+        # Check Platform & CLI overrides
+        is_cuda = False
+        try:
+            import torch
+            if torch.cuda.is_available(): is_cuda = True
+        except: pass
+
+        # Framework Prompt (Mac only)
+        if not preset_model and is_mac:
+            from ai_media.utils.precision import is_mlx_available
+            if is_mlx_available():
+                if ml_framework:
+                     framework = ml_framework
+                     print(f"🏗️  Framework: {framework.upper()} (Pre-selected via CLI)")
+                else:
+                    print("🏗️  Select Framework:\n")
+                    fw_options = [
+                        ("MLX (Native Apple Silicon) [Default]", "mlx"),
+                        ("PyTorch (MPS/CPU)", "torch")
+                    ]
+                    sel_fw = prompt_choice("Framework", fw_options)
+                    if sel_fw is None: return
+                    framework = sel_fw
+
+        # Precision selection
+        if not preset_model:
+            if precision_force:
+                 precision = precision_force
+                 print(f"\n⚙️  Precision: {precision} (Pre-selected via CLI)")
+            else:
+                print("\n⚙️  Select Precision:\n")
+            
+                from ai_media.utils.precision import get_supported_precisions
+                device_type = "cpu"
+                if is_cuda: device_type = "cuda"
+                elif is_mac: device_type = "mps"
+                
+                supported_precs = get_supported_precisions(device_type, framework)
+                
+                # Determine auto label
+                auto_label = "Auto (Platform Default)"
+                if framework == "mlx": auto_label = "Auto (int4/float16)"
+                elif is_cuda: auto_label = "Auto (float16)"
+                elif is_mac: auto_label = "Auto (float16)"
+                
+                all_options = [
+                    ("int4 (4-bit, Fastest)", "int4"),
+                    ("int6 (6-bit, Balanced Speed)", "int6"),
+                    ("int8 (8-bit, Balanced Quality)", "int8"),
+                    ("bfloat16 (Brain Float)", "bfloat16"),
+                    ("float16 (Half)", "float16"),
+                    ("float32 (Full)", "float32"),
+                ]
+                
+                precision_options = [(auto_label, "auto")]
+                for label, val in all_options:
+                    if val in supported_precs:
+                        precision_options.append((label, val))
+                
+                precision = prompt_choice("Precision", precision_options)
+                if precision is None: return
+
         # Model selection (skip if preset)
         if preset_model:
             model = preset_model
             print(f"📦 Model: {model}\n")
         else:
+            # Model selection with dynamic RAM
             print("📦 Select Model:\n")
-            model_options = [
-                ("Zeroscope (Default, No Watermarks)", "zeroscope"),
-                ("ModelScope (General Purpose, Has Watermarks)", "ms-1.7b"),
-                ("CogVideoX (State of the Art, Slow) ~15GB", "cogvideox"),
-                ("Wan 2.2 (Alibaba, 14B, High Quality) ~24GB", "wan-2.2"),
-                ("LTX-Video (Lightricks, Fast DiT) ~16GB", "ltx-video"),
-                ("Mochi 1 (Genmo, Motion SOTA) ~19GB", "mochi-1"),
-                ("HunyuanVideo (Tencent, Cinematic) ~24GB", "hunyuan"),
-                ("Stable Video Diffusion (Image-to-Video only)", "svd"),
-            ]
+
+            from ai_media.utils.model_resources import get_video_model_options
+            from ai_media.utils.system import get_system_resources
+            sys_resources = get_system_resources()
+            sys_ram = sys_resources.get("ram_total", 0)
+
+            model_options = get_video_model_options(precision, system_ram_gb=sys_ram, is_mac=is_mac, is_cuda=is_cuda)
+
             model = prompt_choice("Model", model_options)
             if model is None:
                 return
@@ -653,9 +771,29 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                  return
         else:
             print()
-            prompt = prompt_text("📝 Enter prompt")
+            print()
+            from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+            triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+            print(f"🎲 Tip: Enter {triggers_str} for a surprise Video prompt!\n")
+            print(f"   (Leave empty for random prompt)")
+
+            prompt = prompt_text("📝 Enter prompt", required=False)
             if prompt is None:
                 return
+
+            # Handle random prompt trigger (keyword or empty)
+            from ai_media.utils.prompts import maybe_replace_with_random, get_random_prompt
+            was_random = False
+            
+            if not prompt:
+                # Empty input -> Force random
+                prompt = get_random_prompt("video")
+                was_random = True
+            else:
+                prompt, was_random = maybe_replace_with_random(prompt, "video")
+
+            if was_random:
+                print(f"🎲 Using random prompt: {prompt}")
         
         # Duration
         print("\n⏱️ Select Duration:\n")
@@ -735,90 +873,258 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
              ]
              audio_model = prompt_choice("Audio Model", audio_model_options)
 
-        # Output
-        print()
-        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
-        
-        # Build Command
-        cmd = f"-v -l {length} --video-model {model}"
+        # Output Format
+        print("\n📄 Select Output Format:\n")
+        format_options = [
+            ("MP4 (H.264, Universal)", "mp4"),
+            ("WebM (VP9, Web)", "webm"),
+            ("MOV (QuickTime)", "mov"),
+            ("MKV (Matroska)", "mkv"),
+            ("AVI (Legacy)", "avi"),
+            ("FLV (Flash)", "flv"),
+            ("TS (MPEG-TS)", "ts"),
+            ("GIF (Animated, No Audio)", "gif"),
+        ]
+        fmt = prompt_choice("Format", format_options)
+        if fmt is None:
+            return
+
+        # Build Command List
+        cmd = ['-v', '-l', str(length), '--video-model', model]
         if size:
-            cmd += f" -s {size}"
+            cmd += ["-s", size]
         if prompt:
-            cmd += f" -p \"{prompt}\""
+            cmd += ["-p", prompt]
         if input_image:
-            cmd += f" -ii \"{input_image}\""
+            cmd += ["-ii", input_image]
         if audio_prompt:
-            cmd += f" -ap \"{audio_prompt}\""
+            cmd += ["-ap", audio_prompt]
             if audio_model:
-                cmd += f" -am {audio_model}"
+                cmd += ["-am", audio_model]
+        if fmt:
+             cmd += ["-f", fmt]
         if output:
-             cmd += f" -o \"{output}\""
+             cmd += ["-o", output]
+        
+        # Add Framework/Precision params
+        if precision and precision != "auto":
+             cmd += f' -pf {precision}'
+        if framework and framework != "auto":
+             cmd += f' --ml-framework {framework}'
              
         run_self_command(cmd)
         wait_for_back()
 
     
-    def audio_menu(preset_model=None):
-        """Audio generation submenu."""
-        clear_screen()
-        show_header("Audio Generation")
+    def audio_menu(preset_category=None, preset_model=None):
+        """Audio generation submenu (Music & TTS)."""
         
-        # Model selection (skip if preset)
-        if preset_model:
-            model = preset_model
-            print(f"📦 Model: {model}\n")
-        else:
-            print("📦 Select Model:\n")
-            model_options = [
-                ("MusicGen Medium (Default)", "musicgen-medium"),
-                ("MusicGen Small (Fast)", "musicgen-small"),
-                ("MusicGen Large (High Quality)", "musicgen-large"),
-                ("AudioLDM2 (Sound Effects)", "audioldm2"),
-                ("Bark (Speech/TTS)", "bark"),
-            ]
-            model = prompt_choice("Model", model_options)
-            if model is None:
-                return
-        
-        # Prompt
-        print()
-        if model == "bark":
-            prompt = prompt_text("📝 Enter text to speak")
-        else:
-            prompt = prompt_text("📝 Enter audio description")
-        if prompt is None:
-            return
-        
-        # Duration (not for Bark)
-        length = "10s"
-        if model != "bark":
-            print("\n⏱️ Select Duration:\n")
-            length_options = [
-                ("5 seconds", "5s"),
-                ("10 seconds", "10s"),
-                ("30 seconds", "30s"),
-                ("Custom Duration", "custom"),
-            ]
-            length = prompt_choice("Duration", length_options)
-            if length is None:
-                return
-            if length == "custom":
-                print()
-                length = prompt_text("Enter duration (e.g. 8s, 1m)")
-                if not length:
+        while True:
+            # If preset_model is provided, determine category and jump straight in
+            if preset_model:
+                # Simple heuristic mapping
+                if any(x in preset_model for x in ["musicgen", "audioldm", "stable"]):
+                    category = "music"
+                else:
+                    category = "tts"
+            elif preset_category:
+                category = preset_category
+            else:
+                clear_screen()
+                show_header("Audio Generation")
+                print("🎵 Select Category:\n")
+                cat_options = [
+                    ("Audio / Music (MusicGen, AudioLDM)", "music"),
+                    ("Text-to-Speech (Bark, SpeechT5)", "tts"),
+                ]
+                category = prompt_choice("Category", cat_options)
+                if category is None:
                     return
-        
-        # Output
-        print()
-        output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
-        
-        # Build and run command
-        cmd = f"-a -p \"{prompt}\" -l {length} --audio-model {model}"
-        if output:
-            cmd += f" -o \"{output}\""
-        
-        run_self_command(cmd)
-        wait_for_back()
+
+            # --- Audio / Music Submenu ---
+            if category == "music":
+                clear_screen()
+                show_header("Audio / Music Generator")
+                
+                # Model Selection
+                if preset_model:
+                    model = preset_model
+                    print(f"📦 Model: {model}\n")
+                else:
+                    print("📦 Select Music/Audio Model:\n")
+                    model_options = [
+                        ("MusicGen Medium (Default)", "musicgen-medium"),
+                        ("MusicGen Small (Fast)", "musicgen-small"),
+                        ("MusicGen Large (High Quality)", "musicgen-large"),
+                        ("AudioLDM2 (Sound Effects)", "audioldm2"),
+                    ]
+                    model = prompt_choice("Model", model_options)
+                    if model is None: 
+                        if preset_category: return # Go back if jumped here
+                        continue # Go back to category select commonly
+
+                # Prompt
+                print()
+                from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+                triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+                print(f"🎲 Tip: Enter {triggers_str} for a surprise Music prompt!\n")
+                
+                prompt = prompt_text("📝 Enter audio description (e.g. 'Lo-fi hip hop beat')", required=False)
+                if prompt is None: return
+
+                # Handle random prompt
+                from ai_media.utils.prompts import maybe_replace_with_random, get_random_prompt
+                
+                was_random = False
+                if not prompt:
+                    prompt = get_random_prompt("audio")
+                    was_random = True
+                else:
+                    prompt, was_random = maybe_replace_with_random(prompt, "audio")
+                
+                if was_random:
+                    print(f"🎲 Using random prompt: {prompt}")
+
+                # Duration
+                print("\n⏱️ Select Duration:\n")
+                length_options = [
+                    ("5 seconds", "5s"),
+                    ("10 seconds (Default)", "10s"),
+                    ("30 seconds", "30s"),
+                    ("Custom Duration", "custom"),
+                ]
+                length = prompt_choice("Duration", length_options)
+                if length is None: return
+                
+                if length == "custom":
+                    print()
+                    length = prompt_text("Enter duration (e.g. 8s, 1m)")
+                    if not length: return
+
+                # Sampling Rate
+                print("\n🔊 Select Sampling Rate:\n")
+                sampling_options = [
+                    ("16000 Hz (Standard TTS)", "16000"),
+                    ("24000 Hz (Bark Standard)", "24000"),
+                    ("32000 Hz (Default)", "32000"),
+                    ("44100 Hz (High Quality)", "44100"),
+                    ("48000 Hz (Professional)", "48000"),
+                ]
+                sampling = prompt_choice("Sampling", sampling_options, default_index=2)
+                if sampling is None: return
+                
+                # Output Format
+                print("\n📄 Select Output Format:\n")
+                format_options = [
+                    ("MP3 (Compressed, Universal)", "mp3"),
+                    ("WAV (Lossless)", "wav"),
+                    ("FLAC (Lossless, Compressed)", "flac"),
+                    ("OGG (Open, Lossy)", "ogg"),
+                    ("M4A/AAC (Apple, Lossy)", "m4a"),
+                    ("OPUS (Modern, Efficient)", "opus"),
+                    ("WMA (Windows)", "wma"),
+                    ("AIFF (Apple Lossless)", "aiff"),
+                ]
+                fmt = prompt_choice("Format", format_options)
+                if fmt is None: return
+                
+                # Output
+                print()
+                output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+                
+                # Build Command
+                cmd = ['-a', '-p', prompt, '-l', str(length), '--audio-model', model]
+                if sampling: cmd += ["-m", sampling]
+                if fmt: cmd += ["-f", fmt]
+                if output: cmd += ["-o", output]
+                
+                run_self_command(cmd)
+                wait_for_back()
+                if preset_model or preset_category: return
+
+            # --- Text-to-Speech Submenu ---
+            elif category == "tts":
+                clear_screen()
+                show_header("Text-to-Speech (TTS)")
+                
+                # Model Selection
+                if preset_model:
+                    model = preset_model
+                    print(f"📦 Model: {model}\n")
+                else:
+                    print("📦 Select TTS Model:\n")
+                    model_options = [
+                        ("Bark (Expressive, Multi-speaker)", "bark"),
+                        ("SpeechT5 (Fast, Efficient)", "microsoft/speecht5_tts"),
+                    ]
+                    model = prompt_choice("Model", model_options)
+                    if model is None:
+                        if preset_category: return
+                        continue
+
+                # Prompt (Text content)
+                print()
+                from ai_media.utils.prompts import RANDOM_PROMPT_TRIGGERS
+                triggers_str = ", ".join([f"'{t}'" for t in RANDOM_PROMPT_TRIGGERS])
+                print(f"🎲 Tip: Enter {triggers_str} for a surprise Speech prompt!\n")
+                
+                prompt = prompt_text("📝 Enter text to speak", required=False)
+                if prompt is None: return
+                
+                # Handle random/empty prompt
+                from ai_media.utils.prompts import maybe_replace_with_random, get_random_prompt
+                is_bark = model == "bark"
+                
+                was_random = False
+                if not prompt:
+                    prompt = get_random_prompt("tts", strip_tokens=not is_bark)
+                    was_random = True
+                else:
+                    prompt, was_random = maybe_replace_with_random(prompt, "tts", strip_tokens=not is_bark)
+                
+                if was_random:
+                    print(f"🎲 Using random conversation: {prompt}")
+
+                # Output Format
+                print("\n📄 Select Output Format:\n")
+                format_options = [
+                    ("MP3 (Compressed, Universal)", "mp3"),
+                    ("WAV (Lossless)", "wav"),
+                    ("FLAC (Lossless, Compressed)", "flac"),
+                    ("OGG (Open, Lossy)", "ogg"),
+                    ("M4A/AAC (Apple, Lossy)", "m4a"),
+                    ("OPUS (Modern, Efficient)", "opus"),
+                    ("WMA (Windows)", "wma"),
+                    ("AIFF (Apple Lossless)", "aiff"),
+                ]
+                fmt = prompt_choice("Format", format_options)
+                if fmt is None: return
+
+                # Sampling Rate
+                print("\n🔊 Select Sampling Rate:\n")
+                sampling_options = [
+                    ("16000 Hz (Standard TTS)", "16000"),
+                    ("24000 Hz (Bark Standard)", "24000"),
+                    ("32000 Hz (Default)", "32000"),
+                    ("44100 Hz (High Quality)", "44100"),
+                    ("48000 Hz (Professional)", "48000"),
+                ]
+                sampling = prompt_choice("Sampling", sampling_options, default_index=2)
+                if sampling is None: return
+
+                # Output
+                print()
+                output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
+                
+                # Build Command List
+                cmd = ['-a', '-p', prompt, '--audio-model', model]
+                if sampling: cmd += ["-m", sampling]
+                if fmt: cmd += ["-f", fmt]
+                if output: cmd += ["-o", output]
+                
+                run_self_command(cmd)
+                wait_for_back()
+                if preset_model or preset_category: return
     
     def transform_menu(preset_operation=None):
         """Image transformation submenu."""
@@ -958,28 +1264,24 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             
             edit_model_options = get_transform_model_options(precision, system_ram_gb=sys_ram, is_mac=is_mac, is_cuda=is_cuda)
             
-            edit_model = prompt_choice("Edit Model", edit_model_options)
-            if edit_model is None:
-                return
-            
-            cmd = f'-ti "{input_file}" -tp "{instruction}" --edit-model {edit_model}'
+            cmd = ['-ti', input_file, '-tp', instruction, '--edit-model', edit_model]
             
             # Add Framework/Precision params
             if precision and precision != "auto":
-                 cmd += f' -pf {precision}'
+                 cmd += ['-pf', precision]
             if framework and framework != "auto":
-                 cmd += f' --ml-framework {framework}'
+                 cmd += ['--ml-framework', framework]
                  
         elif operation == "rembg":
-            cmd = f'-ti "{input_file}" --remove-background'
+            cmd = ['-ti', input_file, '--remove-background']
         elif operation == "silhouette":
-            cmd = f'-ti "{input_file}" --remove-background --silhouette'
+            cmd = ['-ti', input_file, '--remove-background', '--silhouette']
         
         # Output
         print()
         output = prompt_text("💾 Output filename (or press Enter for auto)", required=False)
         if output:
-            cmd += f' -o "{output}"'
+            cmd += ['-o', output]
         
         run_self_command(cmd)
         wait_for_back()
@@ -1058,21 +1360,21 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                 if video_codec is None:
                     return
 
-        # Build command
+        # Build command list
         if media_type == "image":
-            cmd = f"-ui \"{input_file}\" -uf {factor}"
+            cmd = ["-ui", input_file, "-uf", factor]
             if method == "ai":
-                cmd += f" -iu {ai_model}"
+                cmd += ["-iu", ai_model]
             else:
-                cmd += " -su"
+                cmd += ["-su"]
         else:
-            cmd = f"-uv \"{input_file}\" -uf {factor}"
+            cmd = ["-uv", input_file, "-uf", factor]
             if method == "ai":
-                cmd += f" -vu {ai_model}"
+                cmd += ["-vu", ai_model]
                 if video_codec != "auto":
-                    cmd += f" -vc {video_codec}"
+                    cmd += ["-vc", video_codec]
             else:
-                cmd += " -su"
+                cmd += ["-su"]
         
         run_self_command(cmd)
         wait_for_back()
@@ -1131,7 +1433,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         if target_format is None:
             return
         
-        # Build command
+        # Build command list
         doc_formats = ['txt', 'md', 'pdf', 'docx', 'html']
         if media_type == "image" and target_format in doc_formats:
             # Image to document (OCR) - prompt for OCR model
@@ -1143,13 +1445,13 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             ocr_model = prompt_choice("OCR Model", ocr_options)
             if ocr_model is None:
                 return
-            cmd = f"-cd \"{input_file}\" -cdt {target_format} -om {ocr_model}"
+            cmd = ["-cd", input_file, "-cdt", target_format, "-om", ocr_model]
         elif media_type == "image":
-            cmd = f"-ci \"{input_file}\" -cit {target_format}"
+            cmd = ["-ci", input_file, "-cit", target_format]
         elif media_type == "video":
-            cmd = f"-cv \"{input_file}\" -cvt {target_format}"
+            cmd = ["-cv", input_file, "-cvt", target_format]
         else:
-            cmd = f"-ca \"{input_file}\" -cat {target_format}"
+            cmd = ["-ca", input_file, "-cat", target_format]
         
         run_self_command(cmd)
         wait_for_back()
@@ -1190,8 +1492,8 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         if target_format is None:
             return
         
-        # Build command
-        cmd = f"-cd \"{input_file}\" -cdt {target_format}"
+        # Build command list
+        cmd = ["-cd", input_file, "-cdt", target_format]
         
         # Determine if OCR model selection is needed
         input_ext = Path(input_file).suffix.lower().lstrip('.')
@@ -1207,7 +1509,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             ocr_model = prompt_choice("OCR Model", ocr_options)
             if ocr_model is None:
                 return
-            cmd += f" -om {ocr_model}"
+            cmd += ["-om", ocr_model]
         
         run_self_command(cmd)
         wait_for_back()
@@ -1322,16 +1624,16 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
 
         # Build Command based on detected type
         if detected_type == "text":
-            cmd = f'-tr --target-language {target_lang} --translation-model {model} -p "{input_data}"'
+            cmd = ['-tr', '--target-language', target_lang, '--translation-model', model, '-p', input_data]
         elif detected_type == "image":
             # Image translation uses document convert with OCR + translate
-            cmd = f'-cd "{input_data}" -cdt png --translate --target-language {target_lang} --translation-model {model} -om {ocr_model}'
+            cmd = ['-cd', input_data, '-cdt', 'png', '--translate', '--target-language', target_lang, '--translation-model', model, '-om', ocr_model]
         elif detected_type == "audio":
             # Audio uses speech translation
-            cmd = f'-tr --target-language {target_lang} --translation-model {model} -ii "{input_data}"'
+            cmd = ['-tr', '--target-language', target_lang, '--translation-model', model, '-ii', input_data]
         else:
             # Document translation
-            cmd = f'-tr --target-language {target_lang} --translation-model {model} -ii "{input_data}"'
+            cmd = ['-tr', '--target-language', target_lang, '--translation-model', model, '-ii', input_data]
              
         run_self_command(cmd)
         wait_for_back()
@@ -1375,7 +1677,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                 if model is None:
                     return
             
-            cmd = f"-gd \"{input_file}\" -cm {model}"
+            cmd = ["-gd", input_file, "-cm", model]
             run_self_command(cmd)
             wait_for_back()
 
@@ -1432,11 +1734,12 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                 print("   Common: es (Spanish), fr (French), de (German), ja (Japanese), zh (Chinese)")
                 target_langs = prompt_text("Target Languages (e.g. 'fr,es')")
             
-            cmd = f"-gs -ii \"{input_file}\" --whisper-model {w_model} --subtitle-format {sub_format}"
+            cmd = ['-gs', '-ii', input_file, '--whisper-model', w_model, '--subtitle-format', sub_format]
             if vad_preset != "normal":
-                cmd += f" --subtitle-vad-preset {vad_preset}"
+                cmd += ['--subtitle-vad-preset', vad_preset]
+            
             if target_langs:
-                cmd += f" --subtitle-translate-to \"{target_langs}\""
+                cmd += ['--subtitle-translate-to', target_langs]
 
             run_self_command(cmd)
             wait_for_back()
@@ -1622,17 +1925,17 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             print("\n📁 Output file path (leave empty for auto-name):\n")
             output_path = prompt_text("File path", required=False)
             
-            # Build command
+            # Build command list
             flag = "-gr" if online else "-ga"
-            cmd = f'{flag} -p "{topic}" -atm {model} --output-format {output_format} -al {length}'
+            cmd = [flag, "-p", topic, "-atm", model, "--output-format", output_format, "-al", length]
             if precision != "auto":
-                cmd += f" -pf {precision}"
+                cmd += ["-pf", precision]
             if framework:
-                cmd += f" --ml-framework {framework}"
+                cmd += ["--ml-framework", framework]
             if online:
-                cmd += f" -ri {research_iter}"
+                cmd += ["-ri", str(research_iter)]
             if output_path:
-                cmd += f' -o "{output_path}"'
+                cmd += ["-o", output_path]
             
             run_self_command(cmd)
             
@@ -1759,14 +2062,14 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             print("   (Filename: override output name if single file)\n")
             output_path = prompt_text("Output path", required=False)
             
-            # Build command
-            cmd = f'-gc -p "{description}" -cdm {model}'
+            # Build command list
+            cmd = ['-gc', '-p', description, '-cdm', model]
             if precision != "auto":
-                cmd += f' -pf {precision}'
+                cmd += ['-pf', precision]
             if framework:
-                cmd += f' --ml-framework {framework}'
+                cmd += ['--ml-framework', framework]
             if output_path:
-                cmd += f' -o "{output_path}"'
+                cmd += ['-o', output_path]
             
             run_self_command(cmd)
             wait_for_back()
@@ -1861,12 +2164,12 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             if model is None:
                 return
         
-        # Build command and run
-        cmd = f"-c --chat-model {model}"
+        # Build command list and run
+        cmd = ["-c", "--chat-model", model]
         if precision != "auto":
-            cmd += f" -pf {precision}"
+            cmd += ["-pf", precision]
         if framework:
-            cmd += f" --ml-framework {framework}"
+            cmd += ["--ml-framework", framework]
         
         run_self_command(cmd)
         # No "Press Enter" needed - chat exits naturally
@@ -2033,17 +2336,17 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                 # Run all unit tests (Quiet)
                 print("\n🧪 Running all unit tests (Summary)...\n")
                 print("=" * 60)
-                os.system(f'"{sys.executable}" -m unittest ai_media.testing.unit_tests')
+                run_shell_command([sys.executable, "-m", "unittest", "ai_media.testing.unit_tests"])
             elif choice == "ALL_VERBOSE":
                 # Run all unit tests (Verbose)
                 print("\n🧪 Running all unit tests (Verbose)...\n")
                 print("=" * 60)
-                os.system(f'"{sys.executable}" -m unittest ai_media.testing.unit_tests -v')
+                run_shell_command([sys.executable, "-m", "unittest", "ai_media.testing.unit_tests", "-v"])
             else:
                 # Run specific test class (Always Verbose)
                 print(f"\n🧪 Running {choice}...\n")
                 print("=" * 60)
-                os.system(f'"{sys.executable}" -m unittest ai_media.testing.unit_tests.{choice} -v')
+                run_shell_command([sys.executable, "-m", "unittest", f"ai_media.testing.unit_tests.{choice}", "-v"])
 
             wait_for_back(prompt=None)
 
@@ -2108,25 +2411,16 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
                 clear_screen()
                 show_header("App Run Tests - Custom Pattern")
                 print("Enter a glob pattern to match test names.\n")
-                print("Supported patterns:")
-                print("  • *     matches everything")
-                print("  • ?     matches single character")
-                print("  • [seq] matches characters in seq")
-                print("\nExamples:")
-                print("  • Interactive*    - all interactive tests")
-                print("  • Image*          - all image tests")
-                print("  • *SDXL*          - tests containing SDXL")
-                print("  • Video - Jump ?  - Jump 1 through Jump 9\n")
-                
+                # ... info prints ...
                 pattern = prompt_text("Pattern", required=True)
                 if pattern:
-                    run_self_command(f"--test-verbose \"{pattern}\"")
+                    run_self_command(["--test-verbose", pattern])
                     prompt_menu(None, [], allow_back=True)
                 continue
             else:
                 # Run specific test
                 # Always use verbose for single test as requested
-                run_self_command(f"--test-verbose \"{choice}\"")
+                run_self_command(["--test-verbose", choice])
                 
             wait_for_back()
 
@@ -2187,17 +2481,17 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             
             # Inference Server Dynamic Options
             elif choice == "INFERENCE":
-                code = run_self_command("--inference-server")
+                code = run_self_command(["--inference-server"])
             elif choice == "INFERENCE_VERBOSE":
-                code = run_self_command("--inference-server-verbose")
+                code = run_self_command(["--inference-server-verbose"])
             elif choice == "INFERENCE_TORCH":
-                code = run_self_command("--inference-server --ml-framework torch")
+                code = run_self_command(["--inference-server", "--ml-framework", "torch"])
             elif choice == "INFERENCE_VERBOSE_TORCH":
-                code = run_self_command("--inference-server-verbose --ml-framework torch")
+                code = run_self_command(["--inference-server-verbose", "--ml-framework", "torch"])
             elif choice == "INFERENCE_MLX":
-                code = run_self_command("--inference-server --ml-framework mlx")
+                code = run_self_command(["--inference-server", "--ml-framework", "mlx"])
             elif choice == "INFERENCE_VERBOSE_MLX":
-                code = run_self_command("--inference-server-verbose --ml-framework mlx")
+                code = run_self_command(["--inference-server-verbose", "--ml-framework", "mlx"])
                 
             if choice != "BUILD_OPTS" and choice != "VERSION_OPTS":
                 # If code is non-zero (likely interrupted by Ctrl+C or error), 
@@ -2245,7 +2539,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             if choice is None: return
             
             # Run npm version command
-            run_shell_command(f"npm run {choice}", cwd=web_dir)
+            run_shell_command(["npm", "run", choice], cwd=web_dir)
             wait_for_back(None)
 
     def electron_build_menu():
@@ -2271,7 +2565,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
         if choice is None: return
         
         web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-        run_shell_command(f"npm run {choice}", cwd=web_dir)
+        run_shell_command(["npm", "run", choice], cwd=web_dir)
         wait_for_back()
 
 
@@ -2396,7 +2690,7 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             
             # Delete the folder
             folder_path = os.path.join(hub_path, choice)
-            run_self_command(f'--clear-hub-model "{choice}"')
+            run_self_command(["--clear-hub-model", choice])
             wait_for_back(None)
 
     # Main loop
@@ -2419,7 +2713,19 @@ def run_interactive(jump_point=None, ml_framework=None, precision_force=None):
             video_menu(initial_model if first_run or initial_action == 'video' else None)
             initial_model = None
         elif action == "audio":
-            audio_menu(initial_model if first_run or initial_action == 'audio' else None)
+            # Determine if initial_model is a category (music/tts) or a specific model
+            if first_run and initial_action == 'audio':
+                _model = initial_model
+                if _model == 'music':
+                    audio_menu(preset_category='music')
+                elif _model == 'tts':
+                    audio_menu(preset_category='tts')
+                elif _model:
+                    audio_menu(preset_model=_model)
+                else:
+                    audio_menu()
+            else:
+                audio_menu()
             initial_model = None
         elif action == "transform":
             transform_menu(initial_model if first_run or initial_action == 'transform' else None)

@@ -14,6 +14,7 @@ def run_audio_generation(
     force: bool = False,
     bypass_warning: bool = False,
     progress_queue: Queue = None,
+    sampling_rate: str = None,
 ):
     """Background task for audio generation. Runs in child process."""
     from ai_media.generators.audio import generate_audio as gen_audio
@@ -54,7 +55,7 @@ def run_audio_generation(
             prompt=prompt,
             output_path=output_path,
             duration=duration,
-            sampling_rate=44100,  # Default sampling rate
+            sampling_rate=sampling_rate or 44100,
             model_name=model,
             force=force,
             bypass_warning=bypass_warning,

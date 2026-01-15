@@ -20,7 +20,11 @@ Choosing the right precision (data type) for an AI model is a critical balance b
 ### Apple Silicon (MPS & MLX)
 Unified Memory on Mac behaves differently than dedicated VRAM on NVIDIA.
 
-- **MLX (Recommended for Mac)**: 
+- **MLX (Recommended for Mac)**:
+    - **The Ecosystem**:
+        - **`mlx`**: The core framework (like PyTorch/NumPy) for basic array operations on Apple Silicon.
+        - **`mlx-lm`**: Specialized library for Text-to-Text (LLMs) like Llama 3. Optimizes the token generation loop.
+        - **`mlx-vlm`**: Specialized library for Vision-Language Models. **Crucial for modern Video Generation** (like Wan 2.2) which treat video frames as visual tokens in a transformer, rather than using old-school diffusion U-Nets.
     - **Native 4-bit & 8-bit**: Both quantization levels are supported. Use `mlx_lm.convert -q` for 4-bit or `-q 8` for 8-bit.
     - **bfloat16**: Optimized for modern Transformers. Matches the training precision of Llama/Qwen, ensuring no mathematical drift.
     - **float16**: Fast, but has a smaller **Dynamic Range**. If a model was trained in BF16, running it in FP16 on MLX can lead to "NaN" (Not a Number) errors during long reasoning chains.
@@ -30,6 +34,10 @@ Unified Memory on Mac behaves differently than dedicated VRAM on NVIDIA.
     - **bfloat16**: Supported on M1 and later. Highly recommended for stability in transformers to avoid the "NaN" (Not a Number) overflow issues common in FP16.
     - **8-bit**: Limited support via `bitsandbytes` (experimental on MPS). Not as mature as CUDA.
     - **4-bit**: Not natively supported on MPS. Use MLX instead for quantized models on Mac.
+    
+    > [!NOTE]
+    > **Automatic Fallback**: If you select **int4/int6/int8** but MLX is not installed or fails to load, AI-Media will automatically **fallback to PyTorch (MPS)**.
+    > Since MPS does not support 4-bit/6-bit/8-bit, the system will force the precision to **float16** to ensure the generation still succeeds (though it will use more RAM).
 - **NVIDIA (CUDA)**:
     - **float16**: Standard since the 10-series. Highly optimized with Tensor Cores.
     - **bfloat16**: Specifically for 30-series (Ampere) and later. It has the same dynamic range as FP32, making it much easier to use than FP16 without scaling.

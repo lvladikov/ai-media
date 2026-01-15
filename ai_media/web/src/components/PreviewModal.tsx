@@ -150,7 +150,7 @@ export function PreviewModal({ isOpen, onClose, filePath, fileName }: PreviewMod
           <video
             src={fileUrl}
             controls
-            className="max-w-full max-h-full rounded-lg mx-auto"
+            className="w-full h-full object-contain rounded-lg"
             onLoadedData={() => setLoading(false)}
             onError={() => { setLoading(false); setError('Failed to load video'); }}
           />
@@ -456,7 +456,7 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
       >
         <pre
           className={`language-${language} border-none m-0 rounded-none bg-transparent !p-4 text-sm`}
-          style={{ 
+          style={{
             fontFamily: 'JetBrains Mono, monospace',
             whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
             wordBreak: wordWrap ? 'break-all' : 'normal',
@@ -465,8 +465,8 @@ function TextPreview({ fileName, url, onLoad, onError }: { fileName: string; url
             minWidth: wordWrap ? undefined : '100%',
           }}
         >
-          <code 
-            ref={codeRef} 
+          <code
+            ref={codeRef}
             className={`language-${language} block`}
             style={{
               whiteSpace: wordWrap ? 'pre-wrap' : 'pre',

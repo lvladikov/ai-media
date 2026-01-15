@@ -120,7 +120,7 @@ def upscale_video_zeroscope_xl(video_frames, prompt, device=None, dtype=None, st
 
 def generate_video(prompt, output_path, duration, width, height, model_name="default", 
                    image_input=None, audio_prompt=None, audio_model="default", report_json=None,
-                   force=False, bypass_warning=False, progress_callback=None):
+                   force=False, bypass_warning=False, progress_callback=None, use_mlx=None, precision=None):
     """Generate video (Text-to-Video or Image-to-Video) with optional Audio.
     
     For Zeroscope: Implements dynamic upscaling pipeline when target resolution
@@ -140,6 +140,8 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         report_json: Path to write performance stats JSON
         force: Skip confirmation prompts (overwrites and warnings)
         bypass_warning: Specifically skip resource warning prompts
+        use_mlx: Force MLX framework ("mlx") or Torch ("torch") [Mac Only]
+        precision: Force precision ("int4", "float16", etc.)
         
     Returns:
         True on success, False on failure
@@ -152,9 +154,48 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
     from ..models import MODEL_REQUIREMENTS
     if not check_resources_and_warn(model_id, width=width, height=height, duration=duration, 
                                      force=force, bypass_warning=bypass_warning,
-                                     model_requirements=MODEL_REQUIREMENTS):
+                                     model_requirements=MODEL_REQUIREMENTS,
+                                     is_mlx=(use_mlx == "mlx"), precision=precision):
         return False
-    
+
+    # MLX Support Check & Handling
+    # MLX Support Check & Handling
+    if use_mlx == "mlx" or (use_mlx is None and precision in ["int4", "int6", "int8"]):
+        from .input_validation import log_step
+        from .mlx_video import generate_video_mlx, is_mlx_native_available
+
+        # Try Native MLX Generation
+        if is_mlx_native_available():
+            print(f"\n{emoji('🍏', '')} Attempting Native MLX Generation for '{model_name}'...")
+            success_mlx = generate_video_mlx(
+                prompt=prompt,
+                output_path=output_path,
+                model_name=model_name,
+                width=width,
+                height=height,
+                duration=duration,
+                fps=fps,
+                input_image=image_input,
+                precision=precision or "int4", # Default to int4 if auto/None for MLX
+                progress_callback=progress_callback
+            )
+            if success_mlx:
+                return True
+            else:
+                print(f"{emoji('⚠️', '')} Native MLX generation failed or not supported for this model.")
+                print(f"   Falling back to PyTorch (MPS/CPU)...")
+        else:
+             from rich.console import Console
+             console = Console()
+             console.print(f"\n[bold yellow]⚠️  MLX Libraries Not Found:[/bold yellow] To use native MLX, please install 'mlx' and 'mlx-vlm'.")
+             console.print(f"[dim]   Falling back to PyTorch (MPS).[/dim]")
+
+        # Fallback to Torch (will use MPS)
+        use_mlx = "torch" 
+        if precision in ["int4", "int6", "int8"]:
+             print(f"   ⚠️  Note: {precision} quantization is not supported on PyTorch MPS. Using float16/bfloat16.")
+             precision = "float16" # Reset precision to supported type
+
     with capture_tqdm_progress(progress_callback):
         # Pre-calculate Device and Estimate
         try:
@@ -177,7 +218,13 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
             # Ephemeral cleanup
             cleanup_patch()
             
-            device, dtype = get_optimal_device_and_dtype(quiet=True, prefer_bfloat16=True, prefer_mlx=False)
+            device, dtype = get_optimal_device_and_dtype(
+                quiet=True, 
+                prefer_bfloat16=True, 
+                prefer_mlx=False, # Video usually Torch-based for now unless using MLX pipeline (TODO)
+                framework_force=use_mlx,
+                precision_force=precision
+            )
             dtype_name = str(dtype).replace("torch.", "")
             
             # Estimate Performance
@@ -241,7 +288,10 @@ def generate_video(prompt, output_path, duration, width, height, model_name="def
         if "cogvideox" in base_model.lower():
             model_id = "THUDM/CogVideoX-5b-I2V"
         elif "wan2.2" in base_model.lower() or "wan2.2" in model_name.lower():
-            model_id = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
+            if "5b" in base_model.lower() or "5b" in model_name.lower():
+                model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+            else:
+                model_id = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
         elif "hunyuan" in base_model.lower() or "hunyuan" in model_name.lower():
             model_id = "hunyuanvideo-community/HunyuanVideo-I2V"
         elif "stable-video-diffusion" in base_model.lower() or model_name.lower() == "svd":

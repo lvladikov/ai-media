@@ -59,7 +59,7 @@ export function TransformView() {
   const [guidanceScale, setGuidanceScale] = useState(7.5);
   const [imageGuidanceScale, setImageGuidanceScale] = useState(1.5);
   const [showRecipes, setShowRecipes] = useState(false);
-  
+
   const [framework, setFramework] = useState(navigator.userAgent.toLowerCase().includes('mac') ? 'mlx' : 'auto');
   const [precision, setPrecision] = useState("auto");
 
@@ -348,8 +348,8 @@ export function TransformView() {
                 </div>
               </div>
               <div className="text-center w-full px-1">
-                 <p className="font-medium text-primary text-xs truncate" title={file?.name}>{file?.name}</p>
-                 <p className="text-xs text-secondary">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}</p>
+                <p className="font-medium text-primary text-xs truncate" title={file?.name}>{file?.name}</p>
+                <p className="text-xs text-secondary">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}</p>
               </div>
             </div>
           ) : (
@@ -398,7 +398,7 @@ export function TransformView() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-secondary">Instruction</label>
+                    <label className="label">Instruction</label>
                     <div className="relative" ref={recipeRef}>
                       <button
                         onClick={() => setShowRecipes(!showRecipes)}
@@ -415,7 +415,7 @@ export function TransformView() {
                               <BookOpen size={12} /> Edit Recipes
                             </span>
                             <div className="flex items-center gap-1">
-                              <Tooltip content="Random Recipe" align="left">
+                              <Tooltip content="Random Recipe" align="right">
                                 <button
                                   onClick={() => {
                                     const r = TRANSFORM_RECIPES[Math.floor(Math.random() * TRANSFORM_RECIPES.length)];
@@ -454,7 +454,7 @@ export function TransformView() {
                   <textarea
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="E.g. Make it look like a van gogh painting..."
+                    placeholder="Enter instructions or open Recipes (includes Random tool)..."
                     rows={3}
                     className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500 resize-none"
                   />
@@ -463,7 +463,7 @@ export function TransformView() {
                 <div className="space-y-4">
                   {/* Framework Selector matched to ImageGenerator logic */}
                   <div className={`space-y-1 ${!navigator.userAgent.toLowerCase().includes('mac') ? 'hidden' : ''}`}>
-                    <label className="text-sm font-medium text-secondary block">Platform</label>
+                    <label className="label">Platform</label>
                     <select
                       className="select w-auto bg-primary border-border text-sm focus:border-brand-500 max-w-full"
                       value={framework}
@@ -478,8 +478,8 @@ export function TransformView() {
                   {/* Precision Selector */}
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-secondary">Precision</label>
-                       <button
+                      <label className="label">Precision</label>
+                      <button
                         onClick={() => useAppStore.getState().openHelpSection('precision')}
                         className="text-tertiary hover:text-brand-500 transition-colors"
                         title="Learn about precision options"
@@ -510,26 +510,26 @@ export function TransformView() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-secondary">Model</label>
+                    <label className="label">Model</label>
                     <select
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                       className="select w-full bg-primary border-border text-sm focus:border-primary-500"
                     >
-                       {[
-                         {id: 'instruct-pix2pix', label: 'InstructPix2Pix (Creative)'},
-                         {id: 'qwen-image-edit', label: 'Qwen-Image-Edit (Precise)'},
-                         {id: 'qwen-image-edit-lightning', label: 'Qwen-Edit-Lightning (Fast)'},
-                         {id: 'z-image', label: 'Z-Image Turbo (Mac/MLX Fast)'}
-                       ].map(m => {
-                          const vram = getDynamicRam(m.id, precision, framework);
-                          const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
-                          return (
-                            <option key={m.id} value={m.id}>
-                              {`${isHighRam ? '⚠️ ' : ''}${m.label} (${vram})`}
-                            </option>
-                          );
-                       })}
+                      {[
+                        { id: 'instruct-pix2pix', label: 'InstructPix2Pix (Creative)' },
+                        { id: 'qwen-image-edit', label: 'Qwen-Image-Edit (Precise)' },
+                        { id: 'qwen-image-edit-lightning', label: 'Qwen-Edit-Lightning (Fast)' },
+                        { id: 'z-image', label: 'Z-Image Turbo (Mac/MLX Fast)' }
+                      ].map(m => {
+                        const vram = getDynamicRam(m.id, precision, framework);
+                        const isHighRam = parseInt(vram.replace('~', '').replace('GB', '')) > 32;
+                        return (
+                          <option key={m.id} value={m.id}>
+                            {`${isHighRam ? '⚠️ ' : ''}${m.label} (${vram})`}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -538,7 +538,7 @@ export function TransformView() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-secondary">What to remove?</label>
+                    <label className="label">What to remove?</label>
                     <div className="relative" ref={recipeRef}>
                       <button
                         onClick={() => setShowRecipes(!showRecipes)}
@@ -554,9 +554,23 @@ export function TransformView() {
                             <span className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
                               <X size={12} /> Common Removals
                             </span>
-                            <button onClick={() => setShowRecipes(false)} className="p-1 text-tertiary hover:text-primary transition-colors">
-                              <X size={14} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <Tooltip content="Random Removal" align="right">
+                                <button
+                                  onClick={() => {
+                                    const r = REMOVE_RECIPES[Math.floor(Math.random() * REMOVE_RECIPES.length)];
+                                    setInstruction(r.instruction);
+                                    setShowRecipes(false);
+                                  }}
+                                  className="p-1 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded"
+                                >
+                                  <Dices size={14} />
+                                </button>
+                              </Tooltip>
+                              <button onClick={() => setShowRecipes(false)} className="p-1 text-tertiary hover:text-primary transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
                           <div className="p-1">
                             {REMOVE_RECIPES.map((recipe, idx) => (
@@ -580,7 +594,7 @@ export function TransformView() {
                   <textarea
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="E.g. Remove the cup, remove the red car..."
+                    placeholder="Enter instructions or open Removal Presets (includes Random tool)..."
                     rows={2}
                     className="w-full bg-primary border border-border rounded-lg p-3 text-sm focus:outline-none focus:border-red-500/50 resize-none"
                   />
@@ -590,7 +604,7 @@ export function TransformView() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-secondary flex items-center">
+                  <label className="label flex items-center">
                     Model
                     <ModelHelpLink section="transform" />
                   </label>
@@ -607,21 +621,19 @@ export function TransformView() {
             ) : (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-secondary">Remove Background Mode</label>
+                  <label className="label">Remove Background Mode</label>
                   <div className="flex p-1 bg-primary rounded-lg border border-border">
                     <button
                       onClick={() => setSilhouette(false)}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
-                        !silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
-                      }`}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${!silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
+                        }`}
                     >
                       Transparent
                     </button>
                     <button
                       onClick={() => setSilhouette(true)}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
-                        silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
-                      }`}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${silhouette ? 'bg-indigo-100 dark:bg-secondary text-indigo-900 dark:text-primary shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-700 dark:hover:text-slate-200 hover:bg-indigo-50 dark:hover:bg-tertiary'
+                        }`}
                     >
                       Silhouette
                     </button>
@@ -680,7 +692,7 @@ export function TransformView() {
                   />
                 </div>
                 {model === 'z-image' && (
-                   <p className="text-[10px] text-tertiary text-center">Z-Image Turbo uses fixed internal guidance parameters.</p>
+                  <p className="text-[10px] text-tertiary text-center">Z-Image Turbo uses fixed internal guidance parameters.</p>
                 )}
               </div>
             )}
