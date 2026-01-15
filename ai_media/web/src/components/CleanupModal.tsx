@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Trash2, FolderOpen, HardDrive, AlertTriangle, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { X, Trash2, FolderOpen, HardDrive, AlertTriangle, Loader2, CheckCircle, XCircle, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAppStore } from '../store';
 import { API_BASE_URL as API_BASE } from '../config';
 
@@ -52,6 +52,59 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
   const [loadingModels, setLoadingModels] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ action: CleanupAction; folderName?: string } | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matchIndices, setMatchIndices] = useState<number[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+
+  const scrollToModelRow = (index: number) => {
+    setTimeout(() => {
+      document.getElementById(`model-row-${index}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }, 50);
+  };
+
+  // Search Logic
+  useEffect(() => {
+    if (!hubModels || !searchQuery) {
+      setMatchIndices([]);
+      setCurrentMatchIndex(-1);
+      return;
+    }
+
+    const lowerQuery = searchQuery.toLowerCase();
+    const matches = hubModels.models.reduce((acc, model, idx) => {
+      if (model.name.toLowerCase().includes(lowerQuery)) {
+        acc.push(idx);
+      }
+      return acc;
+    }, [] as number[]);
+
+    setMatchIndices(matches);
+
+    // Auto-select first match if available
+    if (matches.length > 0) {
+      setCurrentMatchIndex(0);
+      scrollToModelRow(matches[0]);
+    } else {
+      setCurrentMatchIndex(-1);
+    }
+  }, [searchQuery, hubModels]);
+
+  const traverseMatch = (direction: 'next' | 'prev') => {
+    if (matchIndices.length === 0) return;
+
+    let newIndex = direction === 'next' ? currentMatchIndex + 1 : currentMatchIndex - 1;
+
+    // Cycle
+    if (newIndex >= matchIndices.length) newIndex = 0;
+    if (newIndex < 0) newIndex = matchIndices.length - 1;
+
+    setCurrentMatchIndex(newIndex);
+    scrollToModelRow(matchIndices[newIndex]);
+  };
 
   // Fetch data when modal opens
   useEffect(() => {
@@ -159,7 +212,7 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
                 <AlertTriangle className="text-yellow-500 shrink-0" size={24} />
                 <div className="flex-1">
                   <p className="font-medium text-primary">
-                    {confirmAction.action === 'clear-hub-model' 
+                    {confirmAction.action === 'clear-hub-model'
                       ? `Delete "${confirmAction.folderName}"?`
                       : `${actionLabels[confirmAction.action]}?`}
                   </p>
@@ -167,17 +220,17 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
                     {confirmAction.action === 'clear-hub-model'
                       ? 'This model will be permanently deleted. You will need to redownload it next time.'
                       : confirmAction.action === 'clear-all-outputs'
-                      ? 'This action cannot be undone. All files in both folders will be deleted.'
-                      : 'This action cannot be undone. All files in the folder will be deleted.'}
+                        ? 'This action cannot be undone. All files in both folders will be deleted.'
+                        : 'This action cannot be undone. All files in the folder will be deleted.'}
                   </p>
                   <div className="flex gap-2 mt-3">
-                    <button 
+                    <button
                       onClick={confirmAndExecute}
                       className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium"
                     >
                       Delete
                     </button>
-                    <button 
+                    <button
                       onClick={() => setConfirmAction(null)}
                       className="px-4 py-2 bg-tertiary hover:bg-primary text-secondary rounded-lg text-sm font-medium"
                     >
@@ -191,11 +244,10 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
 
           {/* Job Status */}
           {activeJob && (
-            <div className={`rounded-lg p-4 border ${
-              activeJob.status === 'complete' ? 'bg-green-500/10 border-green-500/30' :
+            <div className={`rounded-lg p-4 border ${activeJob.status === 'complete' ? 'bg-green-500/10 border-green-500/30' :
               activeJob.status === 'failed' ? 'bg-red-500/10 border-red-500/30' :
-              'bg-brand-500/10 border-brand-500/30'
-            }`}>
+                'bg-brand-500/10 border-brand-500/30'
+              }`}>
               <div className="flex items-center gap-2 mb-2">
                 {isJobRunning ? (
                   <Loader2 className="animate-spin text-brand-500" size={20} />
@@ -206,10 +258,10 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
                 )}
                 <span className="font-medium text-primary">
                   {activeJob.status === 'complete' ? 'Completed' :
-                   activeJob.status === 'failed' ? 'Failed' : 'Running...'}
+                    activeJob.status === 'failed' ? 'Failed' : 'Running...'}
                 </span>
               </div>
-              
+
               {/* Logs */}
               {activeJob.logs && activeJob.logs.length > 0 ? (
                 <div className="bg-primary/50 rounded p-2 mt-2 max-h-32 overflow-y-auto font-mono text-xs">
@@ -290,34 +342,98 @@ export function CleanupModal({ isOpen, onClose }: CleanupModalProps) {
               )}
             </div>
 
+            {/* Search Bar */}
+            <div className="flex items-center gap-2 pb-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    // Scroll to first match immediately handled by useEffect
+                    if (e.target.value) {
+                      // Small delay to allow state update then scroll
+                      setTimeout(() => {
+                        const firstIndex = hubModels?.models.findIndex(m => m.name.toLowerCase().includes(e.target.value.toLowerCase()));
+                        if (firstIndex !== undefined && firstIndex >= 0) {
+                          document.getElementById(`model-row-${firstIndex}`)?.scrollIntoView({
+                            behavior: 'auto',
+                            block: 'center'
+                          });
+                        }
+                      }, 10);
+                    }
+                  }}
+                  className="w-full bg-tertiary border border-border rounded-lg pl-9 pr-4 py-2 text-sm text-primary placeholder-secondary focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 bg-tertiary border border-border rounded-lg p-1">
+                <button
+                  onClick={() => traverseMatch('prev')}
+                  disabled={matchIndices.length === 0}
+                  className="p-1 hover:bg-primary/20 rounded disabled:opacity-30 transition-colors"
+                >
+                  <ChevronUp size={18} className="text-secondary" />
+                </button>
+                <span className="text-xs text-secondary font-mono w-12 text-center">
+                  {matchIndices.length > 0 ? `${currentMatchIndex + 1}/${matchIndices.length}` : '0/0'}
+                </span>
+                <button
+                  onClick={() => traverseMatch('next')}
+                  disabled={matchIndices.length === 0}
+                  className="p-1 hover:bg-primary/20 rounded disabled:opacity-30 transition-colors"
+                >
+                  <ChevronDown size={18} className="text-secondary" />
+                </button>
+              </div>
+            </div>
+
             {loadingModels ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="animate-spin text-brand-500" size={24} />
                 <span className="ml-2 text-secondary">Scanning hub folder...</span>
               </div>
             ) : hubModels && hubModels.models.length > 0 ? (
-              <div className="bg-tertiary rounded-lg max-h-64 overflow-y-auto border border-border">
-                {hubModels.models.map((model, index) => (
-                  <div 
-                    key={model.name}
-                    className={`flex items-center justify-between p-3 border-b border-white/10 last:border-b-0 hover:bg-primary/50 ${index % 2 === 1 ? 'bg-primary/20' : ''}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-primary truncate" title={model.name}>
-                        {model.name}
-                      </p>
-                      <p className="text-xs text-secondary">{model.size_formatted}</p>
-                    </div>
-                    <button
-                      onClick={() => handleAction('clear-hub-model', model.name)}
-                      disabled={isJobRunning}
-                      className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                      title="Delete this model"
+              <div className="bg-tertiary rounded-lg max-h-64 overflow-y-auto border border-border scroll-smooth">
+                {hubModels.models.map((model, index) => {
+                  const isMatch = matchIndices.includes(index);
+                  const isCurrent = matchIndices[currentMatchIndex] === index;
+
+                  return (
+                    <div
+                      key={model.name}
+                      id={`model-row-${index}`}
+                      className={`flex items-center justify-between p-3 border-b border-white/10 last:border-b-0 transition-colors
+                      ${isCurrent ? 'bg-brand-500/20 border-l-4 border-l-brand-500' :
+                          isMatch ? 'bg-secondary/50' :
+                            index % 2 === 1 ? 'bg-primary/20' : ''}
+                      hover:bg-primary/50
+                    `}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-primary truncate" title={model.name}>
+                          {model.name.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
+                            part.toLowerCase() === searchQuery.toLowerCase() && searchQuery ? (
+                              <span key={i} className="bg-yellow-500/30 text-yellow-200">{part}</span>
+                            ) : part
+                          )}
+                        </p>
+                        <p className="text-xs text-secondary">{model.size_formatted}</p>
+                      </div>
+                      <button
+                        onClick={() => handleAction('clear-hub-model', model.name)}
+                        disabled={isJobRunning}
+                        className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                        title="Delete this model"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-secondary">
